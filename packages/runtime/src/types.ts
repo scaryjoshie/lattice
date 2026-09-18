@@ -20,6 +20,8 @@ export interface LaunchContext {
   identity: Identity;
   /** The command that starts the `pane` MCP shim, e.g. ["bun", ".../mcp.ts"]. */
   mcpCommand: string[];
+  /** The shim's tool names, for hosts that approve MCP tools one by one. */
+  mcpTools: string[];
   /** Text every coding agent gets: who it is, where it is, what the tools are for. */
   systemPrompt: string;
   /** The command a Claude Code SessionStart hook runs to hand over its inbox token. */
@@ -90,3 +92,31 @@ export interface RuntimeEvents {
   /** Presence changed for an agent. */
   presence(agentId: Id<"agent">): void;
 }
+
+export type LaunchMode =
+  | { kind: "fresh" }
+  | { kind: "resume"; sessionKey: string }
+  | { kind: "fork"; fromSessionKey: string };
+
+/** What the runtime knows about an agent right now: the kernel row plus its process. */
+export interface AgentPresence {
+  agentId: Id<"agent">;
+  lifecycle: Agent["lifecycle"];
+  running: boolean;
+  pid: number | null;
+  status: string | null;
+  cwd: string | null;
+  activeAt: number | null;
+}
+
+/** A live PTY attached to an agent. */
+export interface Terminal {
+  write(data: string | Uint8Array): void;
+  resize(cols: number, rows: number): void;
+  subscribe(sub: TerminalSubscriber): () => void;
+  /** Recent output, for a subscriber that arrives late. */
+  replay(): Uint8Array;
+}
+
+/** What stop and archive leave behind once the process is gone. */
+export type AgentLifecycleIntent = "suspended" | "archived";

@@ -53,7 +53,10 @@ through the CLI's own flags (no global settings are modified). The session id is
 by Pane (`claude --session-id`) or learned from the host (Codex thread id), stored on the
 agent, and used for `--resume`.
 
-`ensureOnline(agent)` spawns or resumes. `send(agent, text)` writes into the session:
+Before a launch the provider records the folder as trusted where its host records it
+(`~/.claude.json`, `~/.codex/config.toml`) and, for Codex, pre-approves the `pane` tools.
+`ensureOnline(agent)` spawns or resumes; a resume that fails at once falls back to a fresh
+session under the same agent identity. `send(agent, text)` writes into the session:
 Claude Code through its inbox socket when the session handed over its token, otherwise
 by typing into the PTY as a bracketed paste. `interrupt` sends Escape, `suspend` ends the
 process and keeps the session, `fork` resumes with a new session id as a new agent.

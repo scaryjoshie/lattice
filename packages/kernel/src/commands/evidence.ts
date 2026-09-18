@@ -217,8 +217,11 @@ export const joinConversation = command(
   z.object({ conversationId: idOf("conversation"), actorId }),
   (ctx, p): Conversation => {
     const c = requireConversation(ctx, p.conversationId);
-    requireActor(ctx, p.actorId);
-    if (c.kind === "dm") throw new KernelError("a DM has exactly two participants", "forbidden");
+    const actor = requireActor(ctx, p.actorId);
+    // A DM is between two agents; a human may sit in to read and post.
+    if (c.kind === "dm" && actor.kind !== "human") {
+      throw new KernelError("a DM has exactly two agents", "forbidden");
+    }
     joinGroup(ctx, c.id, p.actorId);
     return c;
   },
