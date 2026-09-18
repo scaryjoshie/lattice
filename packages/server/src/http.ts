@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { type Id, KernelError, type ProvenanceNode } from "@pane/kernel";
 import type {
   AgentPresence,
+  DirectoryListing,
   OpName,
   OpResponse,
   Provenance,
@@ -74,6 +76,32 @@ export function createHttp(s: Services, ops: Ops, hub: Hub) {
     };
   }
 
+  /** Directories one level down, hidden ones skipped; a `.git` marks a repository. */
+  function listDirectory(raw: string | null): DirectoryListing {
+    const path = resolve(raw || homedir());
+    const isRepo = (p: string) => existsSync(join(p, ".git"));
+    let names: string[] = [];
+    try {
+      names = readdirSync(path);
+    } catch {
+      throw new OperationError(`cannot read ${path}`, "not_found");
+    }
+    const entries = names
+      .filter((n) => !n.startsWith("."))
+      .map((n) => join(path, n))
+      .filter((p) => {
+        try {
+          return statSync(p).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+      .map((p) => ({ name: p.slice(path.length + 1), path: p, isRepository: isRepo(p) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const parent = dirname(path);
+    return { path, parent: parent === path ? null : parent, isRepository: isRepo(path), entries };
+  }
+
   const toProvenance = (n: ProvenanceNode): Provenance => ({
     object: { id: n.object.id, kind: n.object.id.split("_")[0] ?? "", title: titleOf(n.object) },
     created: n.created,
@@ -109,6 +137,7 @@ export function createHttp(s: Services, ops: Ops, hub: Hub) {
     if (path === "/api/needs-you") return json(kernel.query.needsYou(kernel.store));
     if (path === "/api/providers") return json(await providers());
     if (path === "/api/agents/presence") return json(presence());
+    if (path === "/api/fs") return json(listDirectory(url.searchParams.get("path")));
     if (seg[1] === "why" && seg[2]) {
       const node = kernel.query.provenance(kernel.store, seg[2]);
       return node ? json(toProvenance(node)) : json({ error: "not found" }, 404);

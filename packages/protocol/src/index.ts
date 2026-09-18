@@ -35,6 +35,7 @@ import type {
  *   GET  /api/worktrees/:id/git                               -> WorktreeGit
  *   GET  /api/commits/:id/diff                                -> { diff: string }
  *   GET  /api/agents/presence                                 -> AgentPresence[]
+ *   GET  /api/fs?path=                                        -> DirectoryListing (home when omitted)
  *   WS   /ws                                                  <- ServerFrame, -> ClientFrame
  */
 
@@ -307,6 +308,15 @@ export interface Provenance {
   object: { id: string; kind: string; title: string };
   created: Event | null;
   edges: Array<{ type: RelationType; node: Provenance }>;
+}
+
+/** One level of the filesystem, for picking a repository without typing a path. */
+export interface DirectoryListing {
+  path: string;
+  parent: string | null;
+  /** True when `path` itself is a git checkout. */
+  isRepository: boolean;
+  entries: Array<{ name: string; path: string; isRepository: boolean }>;
 }
 
 // ---- websocket ------------------------------------------------------------------

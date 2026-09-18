@@ -3,7 +3,8 @@ import type { Id } from "@pane/kernel/model";
 /** Terminal frames from the one socket, fanned out to the xterm that shows each agent. */
 
 export interface TermListener {
-  data(text: string): void;
+  /** Base64 of the raw bytes, as the socket carries them. */
+  data(b64: string): void;
   exit(code: number | null): void;
 }
 
@@ -18,8 +19,8 @@ export const terminalBus = {
       set.delete(l);
     };
   },
-  data(agentId: Id<"agent">, text: string): void {
-    for (const l of listeners.get(agentId) ?? []) l.data(text);
+  data(agentId: Id<"agent">, b64: string): void {
+    for (const l of listeners.get(agentId) ?? []) l.data(b64);
   },
   exit(agentId: Id<"agent">, code: number | null): void {
     for (const l of listeners.get(agentId) ?? []) l.exit(code);

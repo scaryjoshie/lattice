@@ -41,7 +41,7 @@ export function Term({ agentId }: { agentId: Id<"agent"> }) {
     termRef.current = { term, fit };
     const input = term.onData((data) => connection.send({ type: "terminal.input", agentId, data }));
     const unsub = terminalBus.subscribe(agentId, {
-      data: (text) => term.write(text),
+      data: (b64) => term.write(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))),
       exit: (code) => term.write(`\r\n\x1b[2m[exit ${code ?? "?"}]\x1b[0m\r\n`),
     });
     const ro = new ResizeObserver(() => {

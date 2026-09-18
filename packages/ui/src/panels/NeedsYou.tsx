@@ -1,10 +1,12 @@
 import type { AttentionRequest } from "@pane/kernel/model";
-import { Eye, Hand, HelpCircle, MessageSquare, ShieldCheck, Unlock, X } from "lucide-react";
+import { Eye, Hand, HelpCircle, MessageSquare, ShieldCheck, Unlock } from "lucide-react";
 import { useState } from "react";
-import { api } from "../api/index.ts";
+import { Button } from "../components/ui/button.tsx";
+import { Input } from "../components/ui/input.tsx";
+import { Textarea } from "../components/ui/textarea.tsx";
 import { scopeName } from "../lib/names.ts";
-import { useStore } from "../store.ts";
-import { Button } from "../ui/Button.tsx";
+import { run, useStore } from "../store.ts";
+import { EmptyLine, GroupTitle, Item, PanelBody, PanelHeader, PanelTitle } from "./shell.tsx";
 
 const GLYPH: Record<AttentionRequest["kind"], React.ReactNode> = {
   decision: <HelpCircle size={14} />,
@@ -22,7 +24,7 @@ function Row({ a }: { a: AttentionRequest }) {
   const [title, setTitle] = useState("");
   const resolve = () => {
     if (!resolution.trim()) return;
-    void api.op("resolveAttention", {
+    void run("resolveAttention", {
       attentionId: a.id,
       resolution: resolution.trim(),
       decision:
@@ -32,48 +34,40 @@ function Row({ a }: { a: AttentionRequest }) {
     });
   };
   return (
-    <div className="item">
-      <span style={{ marginTop: 2 }}>{GLYPH[a.kind]}</span>
-      <div className="grow">
+    <Item>
+      <span className="mt-0.5 text-muted">{GLYPH[a.kind]}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <button
           type="button"
-          className="t"
-          style={{
-            background: "none",
-            border: 0,
-            padding: 0,
-            textAlign: "left",
-            width: "100%",
-            cursor: "pointer",
-          }}
+          className="flex w-full cursor-pointer items-center gap-2 text-left"
           onClick={() => setOpen(!open)}
         >
-          <span className="grow">{a.title}</span>
-          <span className="muted small">{scopeName(snapshot, a.scopeId)}</span>
+          <span className="flex-1">{a.title}</span>
+          <span className="text-[12px] text-muted">{scopeName(snapshot, a.scopeId)}</span>
         </button>
         {open && (
-          <div className="inline-form">
-            {a.description && <div className="d">{a.description}</div>}
+          <div className="flex flex-col gap-2">
+            {a.description && <div className="text-[12px] text-muted">{a.description}</div>}
             {a.kind === "decision" && (
-              <input
+              <Input
                 placeholder="Decision"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             )}
-            <textarea
+            <Textarea
               placeholder="Resolution"
               value={resolution}
               onChange={(e) => setResolution(e.target.value)}
             />
-            <div className="form">
+            <div className="flex gap-1.5">
               <Button size="sm" variant="primary" disabled={!resolution.trim()} onClick={resolve}>
                 Resolve
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => void api.op("dismissAttention", { attentionId: a.id })}
+                onClick={() => void run("dismissAttention", { attentionId: a.id })}
               >
                 Dismiss
               </Button>
@@ -81,28 +75,24 @@ function Row({ a }: { a: AttentionRequest }) {
           </div>
         )}
       </div>
-    </div>
+    </Item>
   );
 }
 
 export function NeedsYou() {
   const items = useStore((s) => s.needsYou);
-  const setPanel = useStore((s) => s.setPanel);
   const blocking = items.filter((a) => a.blocking);
   const later = items.filter((a) => !a.blocking);
   return (
     <>
-      <div className="panel-header">
-        <span className="title">Needs you</span>
-        <Button variant="ghost" size="sm" onClick={() => setPanel(null)}>
-          <X size={14} />
-        </Button>
-      </div>
-      <div className="panel-body">
-        {items.length === 0 && <div className="empty">Nothing needs you</div>}
+      <PanelHeader>
+        <PanelTitle>Needs you</PanelTitle>
+      </PanelHeader>
+      <PanelBody>
+        {items.length === 0 && <EmptyLine>Nothing needs you</EmptyLine>}
         {blocking.length > 0 && (
           <div>
-            <div className="group-title">Blocking</div>
+            <GroupTitle>Blocking</GroupTitle>
             {blocking.map((a) => (
               <Row a={a} key={a.id} />
             ))}
@@ -110,13 +100,13 @@ export function NeedsYou() {
         )}
         {later.length > 0 && (
           <div>
-            <div className="group-title">Later</div>
+            <GroupTitle>Later</GroupTitle>
             {later.map((a) => (
               <Row a={a} key={a.id} />
             ))}
           </div>
         )}
-      </div>
+      </PanelBody>
     </>
   );
 }

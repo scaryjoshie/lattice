@@ -1,20 +1,25 @@
 import type { Id } from "@pane/kernel/model";
-import { X } from "lucide-react";
 import { useState } from "react";
-import { api } from "../api/index.ts";
 import { providerIcon } from "../canvas/nodes/AgentNode.tsx";
+import { Badge, statusTone } from "../components/ui/badge.tsx";
+import { Button } from "../components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu.tsx";
+import { Input } from "../components/ui/input.tsx";
 import { agentHome, agentLocation, titleOf } from "../lib/names.ts";
-import { useStore } from "../store.ts";
-import { Button } from "../ui/Button.tsx";
-import { Input } from "../ui/Input.tsx";
-import { Pill, statusTone } from "../ui/Pill.tsx";
+import { run, useStore } from "../store.ts";
+import { Kv, PanelBody, PanelHeader } from "./shell.tsx";
 
 export function AgentCard({ id }: { id: Id<"agent"> }) {
   const snapshot = useStore((s) => s.snapshot);
   const presence = useStore((s) => s.presence[id]);
   const setPanel = useStore((s) => s.setPanel);
   const [editing, setEditing] = useState(false);
-  const [picking, setPicking] = useState(false);
+  const [name, setName] = useState("");
   const a = snapshot?.agents.find((x) => x.id === id);
   if (!snapshot || !a) return null;
   const home = agentHome(snapshot, a.id);
@@ -23,73 +28,65 @@ export function AgentCard({ id }: { id: Id<"agent"> }) {
   const running = a.lifecycle === "online";
 
   const message = async (other: Id<"agent">) => {
-    const c = await api.op("openDm", { projectId: snapshot.project.id, a: a.id, b: other });
-    setPicking(false);
-    setPanel({ kind: "chat", id: c.id });
+    const c = await run("openDm", { projectId: snapshot.project.id, a: a.id, b: other });
+    if (c) setPanel({ kind: "chat", id: c.id });
   };
 
   return (
     <>
-      <div className="panel-header">
-        {providerIcon(a.provider)}
+      <PanelHeader>
+        <span className="text-muted">{providerIcon(a.provider)}</span>
         {editing ? (
           <Input
-            initial={a.name}
-            onSubmit={(name) => {
-              setEditing(false);
-              void api.op("updateAgent", { agentId: a.id, name });
+            autoFocus
+            value={name}
+            className="h-7"
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => setEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(false);
+              if (e.key === "Enter" && name.trim()) {
+                setEditing(false);
+                void run("updateAgent", { agentId: a.id, name: name.trim() });
+              }
             }}
-            onCancel={() => setEditing(false)}
           />
         ) : (
           <button
             type="button"
-            className="title editable"
-            style={{ background: "none", border: 0 }}
-            onClick={() => setEditing(true)}
+            className="-mx-1 flex-1 cursor-text truncate rounded-sm px-1 text-left font-semibold hover:bg-surface-2"
+            onClick={() => {
+              setName(a.name);
+              setEditing(true);
+            }}
           >
             {a.name}
           </button>
         )}
-        <Pill tone={statusTone(a.lifecycle)}>{presence?.status ?? a.lifecycle}</Pill>
-        <Button variant="ghost" size="sm" onClick={() => setPanel(null)}>
-          <X size={14} />
-        </Button>
-      </div>
-      <div className="panel-body">
-        <dl className="kv">
-          <dt>Provider</dt>
-          <dd>{a.provider}</dd>
-          {a.model && (
-            <>
-              <dt>Model</dt>
-              <dd>{a.model}</dd>
-            </>
-          )}
-          <dt>Assigned</dt>
-          <dd>{home ? titleOf(snapshot, home) : "—"}</dd>
-          {loc && loc !== home && (
-            <>
-              <dt>Located</dt>
-              <dd style={{ color: "var(--warn)" }}>{titleOf(snapshot, loc)}</dd>
-            </>
-          )}
-          {presence?.pid && (
-            <>
-              <dt>Pid</dt>
-              <dd>{presence.pid}</dd>
-            </>
-          )}
-          {a.forkedFromId && (
-            <>
-              <dt>Forked from</dt>
-              <dd>{titleOf(snapshot, a.forkedFromId)}</dd>
-            </>
-          )}
-        </dl>
-        <div className="chips">
+        <Badge tone={statusTone(presence?.status ?? a.lifecycle)}>
+          {presence?.status ?? a.lifecycle}
+        </Badge>
+      </PanelHeader>
+      <PanelBody>
+        <Kv
+          rows={[
+            ["Provider", a.provider],
+            a.model !== null && ["Model", a.model],
+            ["Assigned", home ? titleOf(snapshot, home) : "—"],
+            loc !== null &&
+              loc !== home && [
+                "Located",
+                <span key="loc" className="text-warn">
+                  {titleOf(snapshot, loc)}
+                </span>,
+              ],
+            presence?.pid !== null && presence?.pid !== undefined && ["Pid", presence.pid],
+            a.forkedFromId !== null && ["Forked from", titleOf(snapshot, a.forkedFromId)],
+          ]}
+        />
+        <div className="flex flex-wrap gap-1.5">
           {running ? (
-            <Button size="sm" onClick={() => void api.op("stopAgent", { agentId: a.id })}>
+            <Button size="sm" onClick={() => void run("stopAgent", { agentId: a.id })}>
               Stop
             </Button>
           ) : (
@@ -97,7 +94,7 @@ export function AgentCard({ id }: { id: Id<"agent"> }) {
               size="sm"
               variant="primary"
               disabled={a.lifecycle === "archived"}
-              onClick={() => void api.op("startAgent", { agentId: a.id })}
+              onClick={() => void run("startAgent", { agentId: a.id })}
             >
               Start
             </Button>
@@ -105,39 +102,41 @@ export function AgentCard({ id }: { id: Id<"agent"> }) {
           <Button
             size="sm"
             disabled={!running}
-            onClick={() => void api.op("interruptAgent", { agentId: a.id })}
+            onClick={() => void run("interruptAgent", { agentId: a.id })}
           >
             Interrupt
           </Button>
-          <Button size="sm" onClick={() => void api.op("forkAgent", { agentId: a.id })}>
+          <Button size="sm" onClick={() => void run("forkAgent", { agentId: a.id })}>
             Fork
           </Button>
-          <Button size="sm" disabled={!others.length} onClick={() => setPicking(!picking)}>
-            Message
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" disabled={!others.length}>
+                Message
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {others.map((o) => (
+                <DropdownMenuItem key={o.id} onSelect={() => void message(o.id)}>
+                  {providerIcon(o.provider, 14)}
+                  <span className="flex-1">{o.name}</span>
+                  <span className="text-[12px] text-muted">
+                    {titleOf(snapshot, agentHome(snapshot, o.id) ?? "")}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size="sm"
-            variant="danger"
+            variant="destructive"
             disabled={a.lifecycle === "archived"}
-            onClick={() => void api.op("archiveAgent", { agentId: a.id })}
+            onClick={() => void run("archiveAgent", { agentId: a.id })}
           >
             Archive
           </Button>
         </div>
-        {picking && (
-          <div className="list">
-            {others.map((o) => (
-              <button type="button" className="row" key={o.id} onClick={() => void message(o.id)}>
-                {providerIcon(o.provider, 14)}
-                <span className="grow">{o.name}</span>
-                <span className="muted small">
-                  {titleOf(snapshot, agentHome(snapshot, o.id) ?? "")}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      </PanelBody>
     </>
   );
 }

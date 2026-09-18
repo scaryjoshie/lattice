@@ -3,6 +3,7 @@ import type {
   AgentPresence,
   AttentionRequest,
   ClientFrame,
+  DirectoryListing,
   OpName,
   OpParams,
   OpResult,
@@ -33,6 +34,8 @@ export interface Api {
   why(id: string): Promise<Provenance>;
   worktreeGit(worktreeId: Id<"worktree">): Promise<WorktreeGit>;
   commitDiff(commitId: Id<"commit">): Promise<{ diff: string }>;
+  /** Subdirectories of a path (home when omitted), marking git checkouts. */
+  fs(path?: string): Promise<DirectoryListing>;
   connect(onFrame: (frame: ServerFrame) => void): Connection;
 }
 

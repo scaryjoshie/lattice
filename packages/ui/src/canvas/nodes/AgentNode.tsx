@@ -20,15 +20,15 @@ export function AgentNode({ data }: NodeProps<AgentNodeType>) {
         ? "muted"
         : "hollow";
   return (
-    <div className="agent" title={agent.name}>
+    <div className="flex w-14 flex-col items-center gap-[3px]" title={agent.name}>
       <Handle type="target" position={Position.Top} />
       <div className="agent-circle">
         {providerIcon(agent.provider)}
         <span className={`dot ${dot}`} />
       </div>
-      <div className="name">
-        {data.astray && <MapPin size={10} className="pin" />}
-        {agent.name}
+      <div className="flex max-w-14 items-center gap-0.5 truncate text-[11px]">
+        {data.astray && <MapPin size={10} className="shrink-0 text-warn" />}
+        <span className="truncate">{agent.name}</span>
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>

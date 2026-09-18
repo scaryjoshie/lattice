@@ -608,6 +608,17 @@ export const mockApi: Api = {
     },
   }),
   commitDiff: async () => ({ diff: "" }),
+  fs: async (path = "/Users/you") => ({
+    path,
+    parent: path === "/" ? null : path.replace(/\/[^/]*$/, "") || "/",
+    isRepository: path.endsWith("/pane"),
+    entries: path.endsWith("/pane")
+      ? []
+      : [
+          { name: "code", path: `${path}/code`, isRepository: false },
+          { name: "pane", path: `${path}/pane`, isRepository: true },
+        ],
+  }),
   connect(onFrame): Connection {
     listeners.add(onFrame);
     const lines = new Map<string, string>();

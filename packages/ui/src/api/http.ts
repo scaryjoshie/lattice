@@ -12,7 +12,12 @@ const RECONNECT_MS = 1000;
 
 async function getJson<T>(path: string): Promise<T> {
   const r = await fetch(path);
-  if (!r.ok) throw new ApiError(`${path}: ${r.status}`, "http");
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as { error?: { message?: string } | string };
+    const message =
+      typeof body.error === "string" ? body.error : (body.error?.message ?? `${path}: ${r.status}`);
+    throw new ApiError(message, "http");
+  }
   return (await r.json()) as T;
 }
 
@@ -41,6 +46,7 @@ export const httpApi: Api = {
   why: (id) => getJson(`/api/why/${id}`),
   worktreeGit: (id) => getJson(`/api/worktrees/${id}/git`),
   commitDiff: (id) => getJson(`/api/commits/${id}/diff`),
+  fs: (path) => getJson(`/api/fs${path ? `?path=${encodeURIComponent(path)}` : ""}`),
   connect(onFrame): Connection {
     let ws: WebSocket | null = null;
     let closed = false;

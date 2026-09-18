@@ -1,5 +1,14 @@
 import type { AttentionRequest, Id, Project, ProjectSnapshot } from "@pane/kernel/model";
-import type { AgentPresence, AskAnswer, ProviderStatus, ServerFrame } from "@pane/protocol";
+import type {
+  AgentPresence,
+  AskAnswer,
+  OpName,
+  OpParams,
+  OpResult,
+  ProviderStatus,
+  ServerFrame,
+} from "@pane/protocol";
+import { toast } from "sonner";
 import { create } from "zustand";
 import { api, type Connection } from "./api/index.ts";
 import { terminalBus } from "./terminal/bus.ts";
@@ -17,6 +26,13 @@ export type Panel =
   | { kind: "needsYou" }
   | null;
 
+export type DialogState =
+  | { kind: "newProject" }
+  | { kind: "addRepository" }
+  | { kind: "clone" }
+  | { kind: "newWorktree"; repositoryId: Id<"repository"> }
+  | null;
+
 export type Theme = "light" | "dark";
 
 interface State {
@@ -29,6 +45,7 @@ interface State {
   selection: string[];
   view: View;
   panel: Panel;
+  dialog: DialogState;
   mode: "normal" | "ask";
   theme: Theme;
   drawer: { tabs: Id<"agent">[]; active: Id<"agent"> } | null;
@@ -42,6 +59,7 @@ interface State {
   setView(view: View): void;
   select(ids: string[]): void;
   setPanel(panel: Panel): void;
+  openDialog(dialog: DialogState): void;
   setMode(mode: "normal" | "ask"): void;
   toggleTheme(): void;
   openDrawer(tabs: Id<"agent">[], active?: Id<"agent">): void;
@@ -49,10 +67,25 @@ interface State {
   setAskAnswer(a: AskAnswer | null): void;
 }
 
+/** An operation from a surface: failures become a toast, never silence. */
+export async function run<N extends OpName>(
+  name: N,
+  params: OpParams<N>,
+): Promise<OpResult<N> | undefined> {
+  try {
+    return await api.op(name, params);
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e));
+    return undefined;
+  }
+}
+
 const systemTheme = (): Theme =>
   matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+/** Boot runs once, even when StrictMode mounts the app twice. */
+let booted = false;
 
 export const useStore = create<State>((set, get) => ({
   projects: [],
@@ -64,6 +97,7 @@ export const useStore = create<State>((set, get) => ({
   selection: [],
   view: { level: "project" },
   panel: null,
+  dialog: null,
   mode: "normal",
   theme: systemTheme(),
   drawer: null,
@@ -71,16 +105,18 @@ export const useStore = create<State>((set, get) => ({
   connection: null,
 
   async boot() {
+    if (booted) return;
+    booted = true;
     document.documentElement.dataset.theme = get().theme;
     const onFrame = (f: ServerFrame) => {
       switch (f.type) {
         case "event": {
+          if (f.event.kind.startsWith("project."))
+            void api.projects().then((projects) => set({ projects }));
           if (f.event.projectId && f.event.projectId !== get().projectId) return;
           clearTimeout(refreshTimer);
           refreshTimer = setTimeout(() => void get().refresh(), 100);
           if (f.event.kind.startsWith("attention.")) void get().refreshNeedsYou();
-          if (f.event.kind === "project.created")
-            void api.projects().then((projects) => set({ projects }));
           break;
         }
         case "presence":
@@ -130,6 +166,7 @@ export const useStore = create<State>((set, get) => ({
   setView: (view) => set({ view }),
   select: (selection) => set({ selection }),
   setPanel: (panel) => set({ panel }),
+  openDialog: (dialog) => set({ dialog }),
   setMode: (mode) => set(mode === "normal" ? { mode, askAnswer: null } : { mode }),
   toggleTheme() {
     const theme: Theme = get().theme === "dark" ? "light" : "dark";
