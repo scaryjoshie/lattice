@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
   type Agent,
   type Event,
@@ -149,6 +150,10 @@ export class Runtime {
     const provider = this.byName.get(agent.provider);
     if (!provider) throw new Error(`no provider "${agent.provider}"`);
     const worktree = this.worktreeOf(agent);
+    // A missing cwd surfaces from spawn as "no such file" naming the command, which misleads.
+    if (!existsSync(worktree.path)) {
+      throw new Error(`the ${worktree.name} worktree's folder is missing: ${worktree.path}`);
+    }
     const token = crypto.randomUUID();
     this.tokens.set(agent.id, token);
     const launch = await provider.launch(
