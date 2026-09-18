@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
 import { useStore } from "../store.ts";
 import { terminalBus } from "./bus.ts";
+import { editingKey } from "./keys.ts";
 
 const THEME = {
   background: "#0d0d10",
@@ -40,6 +41,14 @@ export function Term({ agentId }: { agentId: Id<"agent"> }) {
     fit.fit();
     termRef.current = { term, fit };
     const input = term.onData((data) => connection.send({ type: "terminal.input", agentId, data }));
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      const data = editingKey(e);
+      if (data === null) return true;
+      e.preventDefault();
+      connection.send({ type: "terminal.input", agentId, data });
+      return false;
+    });
     const unsub = terminalBus.subscribe(agentId, {
       data: (b64) => term.write(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))),
       exit: (code) => term.write(`\r\n\x1b[2m[exit ${code ?? "?"}]\x1b[0m\r\n`),
