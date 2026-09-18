@@ -23,6 +23,29 @@ export interface Config {
   uiDist: string;
 }
 
+/**
+ * The PATH of the user's login shell. The daemon may be started from anywhere (a
+ * terminal app that injects temporary wrapper scripts, a service manager with a bare
+ * PATH); agents and `git` should still resolve as they do in the user's own shell.
+ */
+export function loginShellPath(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const shell = env.SHELL ?? "/bin/zsh";
+  try {
+    const r = Bun.spawnSync([shell, "-lic", 'printf "%s" "$PATH"'], {
+      stdout: "pipe",
+      stderr: "ignore",
+      stdin: "ignore",
+      timeout: 5000,
+    });
+    const path = r.stdout.toString().trim().split("\n").at(-1) ?? "";
+    return r.exitCode === 0 && path.includes("/") ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 export function configFromEnv(env: Record<string, string | undefined> = process.env): Config {
   const home = resolve(env.PANE_HOME ?? join(homedir(), ".pane"));
   const bun = process.execPath;

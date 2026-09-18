@@ -4,7 +4,7 @@ import { openKernel } from "@pane/kernel";
 import { builtinProviders, Runtime } from "@pane/runtime";
 import { agentTools } from "./agentTools.ts";
 import { Ask } from "./ask.ts";
-import { type Config, configFromEnv } from "./config.ts";
+import { type Config, configFromEnv, loginShellPath } from "./config.ts";
 import { createHttp } from "./http.ts";
 import { ensureHuman } from "./human.ts";
 import { createOperations } from "./operations.ts";
@@ -62,6 +62,8 @@ export async function startDaemon(config: Config = configFromEnv()) {
 }
 
 if (import.meta.main) {
+  const path = loginShellPath();
+  if (path) process.env.PATH = path;
   const d = await startDaemon();
   console.log(
     `pane daemon on http://localhost:${d.config.port}  socket ${d.rpc.path}  db ${d.config.dbPath}`,
