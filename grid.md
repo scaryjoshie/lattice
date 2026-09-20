@@ -262,10 +262,41 @@ nested rectangle is ugly *when all three are drawn at once* — which is a rende
 and semantic zoom is exactly its fix. Containment stays real in the layout; the renderer
 just never shows more than about one level of it at a time.
 
-The two candidate shapes then merge rather than compete: **flowed above the tile, fixed at
-the tile.** Repositories and regions are placed by a packing pass, so growth produces buffer
-space without anyone arranging it; a tile's cell inside its region is absolute and stays
-where it was put.
+### Space can always be made, so nothing has to flow
+
+If every region is an axis-aligned rectangle of cells, room can always be found, and the
+construction is one move: **insert a grid line.**
+
+To grow region `R` by a row, insert an empty row at the grid line below `R`'s bottom edge.
+
+- Regions entirely above it: unaffected.
+- Regions entirely below it: shift down by one.
+- Regions straddling it: become one row taller, gaining an empty interior row. Still
+  rectangles.
+- `R`: gains its row.
+
+No overlaps are created, every shape stays a rectangle, and relative order is exactly
+preserved. Columns work the same way. It is how a spreadsheet inserts a row, it is O(n),
+and it is deterministic — no packing, no search, no solver.
+
+**This replaces the idea that regions should flow.** A packing pass recomputes everyone's
+position whenever anything changes, which quietly contradicts the property the grid exists
+for. Line insertion moves things only when asked, and moves them the minimum a guarantee
+allows: absolute coordinates change, relative arrangement does not. What you built stays
+built.
+
+The honest caveat is that it guarantees space *exists*, not that it is found politely. A
+full-line insertion displaces distant things that had nothing to do with the request, and
+the straddling case leaves a blank row inside an unrelated region. So in practice: try
+local displacement first, where the cells immediately adjacent are free or can be nudged
+without cascading, and fall back to line insertion, which always works. Animating the
+insertion makes it legible rather than startling.
+
+**And it takes layout duty away from hierarchy.** Containment stays what it is — a worktree
+contains its agents, because that is true — but it no longer has to carry the job of
+producing room, which is what made every nesting scheme feel like it was straining.
+Hierarchy expresses meaning; rectangles and line insertion handle space. No further levels
+should be invented to make the geometry work, because the geometry already works.
 
 And it decides the renderer question above. Continuous zoom over a plane larger than the
 screen means the pannable canvas, not the single screenful — so the dashboard and docking
