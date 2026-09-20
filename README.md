@@ -29,7 +29,7 @@ Panes use your own `claude` and `codex` logins.
 
 ```
 src/protocol.ts       wire types, COLS x ROWS
-src/server/pty.ts     one process in a PTY, scrollback, fan-out
+src/server/pty.ts     one process in a PTY, its headless mirror, snapshots, fan-out
 src/server/main.ts    the whole daemon: spawn, attach, input, remove
 src/ui/metrics.ts     pane size, and the font size that fits COLS x ROWS in a space
 src/ui/store.ts       socket + view state; the canvas owns position, nothing else does
@@ -42,8 +42,10 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
 
 ## Rules this experiment holds to
 
-- **Fixed geometry.** The PTY is 120x36 and never resizes. No fit addon: the font size is
-  the free variable, sized to whatever space the expanded pane has.
+- **The grid follows the space.** A pane opens into whatever room it has, measures a real
+  rendered cell, and the daemon resizes the process to match. Attach order is resize,
+  snapshot, subscribe, against a server-side `@xterm/headless` mirror — raw scrollback
+  replay is wrong the moment the grid changes. See `../docs/09-decisions.md` D-47.
 - **Opening expands the pane; it never moves the camera.** See `../docs/09-decisions.md`
   D-46. The rect is measured with `getBoundingClientRect()` so the growth starts exactly
   where the pane was, at whatever zoom the canvas happens to be.
@@ -58,6 +60,8 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
 - **xterm's default renderer, bounded scrollback, `lineHeight: 1`.** The WebGL addon
   ignores `lineHeight` and has known long-buffer faults; with one terminal on screen it
   buys nothing.
+- **Measure the cell, wait for the font.** A cell is never `fontSize` tall, and xterm
+  measures one the instant it opens. Both mistakes clip the grid by about a third.
 - **Position is a surface concern.** The daemon has no opinion about layout.
 
 ## Known gaps

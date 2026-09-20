@@ -156,6 +156,11 @@ body {
   line-height: 0;
 }
 
+/* The grid rarely divides the box exactly; the remainder letterboxes evenly. */
+.pane.expanded .xterm {
+  padding: 0;
+}
+
 .offline {
   position: absolute;
   top: 16px;

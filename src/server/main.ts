@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import type { ClientMessage, PaneState, Provider, ServerMessage } from "../protocol.ts";
+import { SPAWN_COLS, SPAWN_ROWS } from "../protocol.ts";
 import { Pty } from "./pty.ts";
 
 /**
@@ -9,7 +10,6 @@ import { Pty } from "./pty.ts";
 
 const PORT = Number(process.env.PANE2_PORT ?? 7778);
 const CWD = process.env.PANE2_CWD ?? homedir();
-const SCROLLBACK = 256 * 1024;
 
 const ARGV: Record<Provider, string[]> = {
   claude: ["claude"],
@@ -52,7 +52,6 @@ function spawn(provider: Provider): void {
   const pty = new Pty({
     argv,
     cwd: CWD,
-    scrollback: SCROLLBACK,
     onData: () => {
       if (paneRef) paneRef.state.lastOutputAt = Date.now();
     },
@@ -63,18 +62,45 @@ function spawn(provider: Provider): void {
   });
   const pane: Pane = {
     pty,
-    state: { id, provider, pid: pty.pid, exit: null, lastOutputAt: Date.now() },
+    state: {
+      id,
+      provider,
+      pid: pty.pid,
+      cols: SPAWN_COLS,
+      rows: SPAWN_ROWS,
+      exit: null,
+      lastOutputAt: Date.now(),
+    },
   };
   paneRef = pane;
   panes.set(id, pane);
   broadcastPanes();
 }
 
-function attach(ws: Bun.ServerWebSocket<SocketData>, id: string): void {
+/**
+ * Resize first, snapshot second, subscribe third. That order matters: a snapshot taken
+ * before the resize would be laid out for the old grid, and live bytes arriving before
+ * the snapshot would be overwritten by it.
+ */
+async function attach(
+  ws: Bun.ServerWebSocket<SocketData>,
+  id: string,
+  cols: number,
+  rows: number,
+): Promise<void> {
   const pane = panes.get(id);
   if (!pane || ws.data.attached.has(id)) return;
   ws.data.attached.add(id);
-  send(ws, { t: "replay", id, b64: b64(pane.pty.replay()) });
+
+  pane.pty.resize(cols, rows);
+  pane.state.cols = pane.pty.cols;
+  pane.state.rows = pane.pty.rows;
+  broadcastPanes();
+
+  const snapshot = await pane.pty.snapshot();
+  if (!ws.data.attached.has(id)) return; // detached while we were flushing
+  send(ws, { t: "snapshot", id, data: snapshot });
+
   const off = pane.pty.subscribe({
     data: (chunk) => send(ws, { t: "data", id, b64: b64(chunk) }),
     exit: (code) => send(ws, { t: "exit", id, code }),
@@ -115,7 +141,7 @@ Bun.serve<SocketData>({
           spawn(msg.provider);
           break;
         case "attach":
-          attach(ws, msg.id);
+          void attach(ws, msg.id, msg.cols, msg.rows);
           break;
         case "detach":
           detach(ws, msg.id);

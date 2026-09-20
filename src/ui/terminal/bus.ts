@@ -3,8 +3,8 @@
 export interface TermListener {
   /** Base64 of the raw bytes, as the socket carries them. */
   data(b64: string): void;
-  /** A replay of everything the process printed before we attached. */
-  replay(b64: string): void;
+  /** The screen as it stands, already laid out for the grid we asked for. */
+  snapshot(data: string): void;
   exit(code: number | null): void;
 }
 

@@ -87,8 +87,8 @@ export function connect(): void {
         place(msg.panes);
         useStore.setState({ panes: msg.panes });
         break;
-      case "replay":
-        terminalBus.emit(msg.id, (l) => l.replay(msg.b64));
+      case "snapshot":
+        terminalBus.emit(msg.id, (l) => l.snapshot(msg.data));
         break;
       case "data":
         terminalBus.emit(msg.id, (l) => l.data(msg.b64));

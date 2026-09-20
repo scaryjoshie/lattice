@@ -1,69 +1,122 @@
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
-import { COLS, ROWS } from "../../protocol.ts";
-import { FONT_FAMILY, fontSizeFor, LINE_HEIGHT } from "../metrics.ts";
+import { SPAWN_COLS, SPAWN_ROWS } from "../../protocol.ts";
+import { FONT_FAMILY, FONT_SIZE, LINE_HEIGHT, TERM_PAD } from "../metrics.ts";
 import { useStore } from "../store.ts";
 import { terminalBus } from "./bus.ts";
 
 const THEME = {
-  background: "#0b0b0e",
+  background: "#0e0e12",
   foreground: "#e4e4e8",
   cursor: "#e4e4e8",
-  cursorAccent: "#0b0b0e",
+  cursorAccent: "#0e0e12",
   selectionBackground: "rgba(255,255,255,0.18)",
 };
 
 /**
- * The live terminal, mounted only once a pane has finished expanding.
+ * Measure a cell from what xterm actually rendered.
  *
- * Geometry is fixed at COLS x ROWS and the font is sized to the space instead, so a TUI
- * never reflows. The default renderer is deliberate: the WebGL addon ignores lineHeight
- * and has known long-buffer faults, and there is only ever one terminal on screen.
+ * Deriving it from the font size instead is where the previous version went wrong: a
+ * cell is never `fontSize` tall. Its height comes from the font's own ascent, descent
+ * and line gap, which for most monospace faces lands nearer 1.3x. A grid computed from
+ * the font size therefore overflows its box by about a third, and because the terminal
+ * is centred, it loses rows off the top and the bottom at the same time.
+ */
+function measureCell(host: HTMLElement, term: Terminal): { w: number; h: number } | null {
+  const box =
+    host.querySelector<HTMLElement>(".xterm-screen") ??
+    host.querySelector<HTMLElement>(".xterm-rows");
+  if (!box) return null;
+  const r = box.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return null;
+  return { w: r.width / term.cols, h: r.height / term.rows };
+}
+
+/**
+ * The live terminal, mounted once a pane has finished expanding.
+ *
+ * The grid is taken from the space available, which is what every terminal emulator
+ * does; the daemon resizes the process to match and hands back a snapshot already laid
+ * out for it. The default renderer is deliberate: the WebGL addon ignores lineHeight and
+ * has known long-buffer faults, and only one terminal is ever on screen.
  */
 export function Term({ id, width, height }: { id: string; width: number; height: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const send = useStore((s) => s.send);
+  const size = useRef({ width, height });
+  size.current = { width, height };
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const term = new Terminal({
-      cols: COLS,
-      rows: ROWS,
-      theme: THEME,
-      fontFamily: FONT_FAMILY,
-      fontSize: fontSizeFor(width, height),
-      lineHeight: LINE_HEIGHT,
-      cursorBlink: true,
-      allowProposedApi: true,
-      scrollback: 5000,
-    });
-    term.open(el);
+    const host = ref.current;
+    if (!host) return;
+    let disposed = false;
+    let stop: (() => void) | null = null;
 
-    // D-45: Cmd belongs to the application. Returning false hands the event back to the
-    // document, where the shortcut layer sees it; every other key reaches the TUI.
-    term.attachCustomKeyEventHandler((e) => !e.metaKey);
+    function start(): () => void {
+      const term = new Terminal({
+        cols: SPAWN_COLS,
+        rows: SPAWN_ROWS,
+        theme: THEME,
+        fontFamily: FONT_FAMILY,
+        fontSize: FONT_SIZE,
+        lineHeight: LINE_HEIGHT,
+        cursorBlink: true,
+        allowProposedApi: true,
+        scrollback: 5000,
+      });
+      term.open(host as HTMLElement);
 
-    const input = term.onData((data) => send({ t: "input", id, data }));
-    const bytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const unsubscribe = terminalBus.subscribe(id, {
-      replay: (b64) => term.write(bytes(b64)),
-      data: (b64) => term.write(bytes(b64)),
-      exit: (code) => term.write(`\r\n\x1b[2m[exit ${code ?? "?"}]\x1b[0m\r\n`),
+      // D-45: Cmd belongs to the application. Returning false hands the event back to
+      // the document, where the shortcut layer sees it; every other key reaches the TUI.
+      term.attachCustomKeyEventHandler((e) => !e.metaKey);
+
+      const input = term.onData((data) => send({ t: "input", id, data }));
+      const bytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const unsubscribe = terminalBus.subscribe(id, {
+        snapshot: (data) => {
+          term.reset();
+          term.write(data);
+        },
+        data: (b64) => term.write(bytes(b64)),
+        exit: (code) => term.write(`\r\n\x1b[2m[exit ${code ?? "?"}]\x1b[0m\r\n`),
+      });
+
+      // One frame, so xterm has rendered something to measure.
+      requestAnimationFrame(() => {
+        if (disposed) return;
+        const cell = measureCell(host as HTMLElement, term);
+        const { width: w, height: h } = size.current;
+        const cols = cell ? Math.max(20, Math.floor((w - TERM_PAD * 2) / cell.w)) : SPAWN_COLS;
+        const rows = cell ? Math.max(6, Math.floor((h - TERM_PAD * 2) / cell.h)) : SPAWN_ROWS;
+        term.resize(cols, rows);
+        // Grid first, snapshot second: the daemon resizes the process, then serializes
+        // the screen for exactly this grid.
+        send({ t: "attach", id, cols, rows });
+        term.focus();
+      });
+
+      return () => {
+        send({ t: "detach", id });
+        unsubscribe();
+        input.dispose();
+        term.dispose();
+      };
+    }
+
+    // Wait for the web font. xterm measures a cell the moment it opens, and measuring
+    // against the fallback face sizes the grid for a font that is about to be replaced.
+    void document.fonts.load(`${FONT_SIZE}px ${FONT_FAMILY}`).then(() => {
+      if (!disposed) stop = start();
     });
-    send({ t: "attach", id });
-    term.focus();
 
     return () => {
-      send({ t: "detach", id });
-      unsubscribe();
-      input.dispose();
-      term.dispose();
+      disposed = true;
+      stop?.();
     };
-    // Font size is read once: resizing the window while inside a pane must not reflow
-    // a running TUI. Leaving and re-entering picks up the new size.
-  }, [id, send]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Size is read once, through a ref. Resizing the window while a pane is open must
+    // not reflow a running TUI; closing and reopening picks up the new size.
+  }, [id, send]);
 
   return <div className="term" ref={ref} />;
 }

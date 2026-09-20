@@ -1,40 +1,18 @@
-import { COLS, ROWS } from "../protocol.ts";
+import { SerializeAddon } from "@xterm/addon-serialize";
+import { Terminal } from "@xterm/headless";
+import { SPAWN_COLS, SPAWN_ROWS } from "../protocol.ts";
 
 /**
- * One process inside a PTY. Output is fanned out to subscribers and kept in a ring
- * buffer, so a terminal that attaches later sees what came before it arrived.
+ * One process inside a PTY, plus a headless terminal emulator mirroring it.
  *
- * Lifted from experiment 1, minus agent identity, sessions and resume: here a pane
- * lives exactly as long as its process.
+ * The mirror is what makes attaching correct. A raw replay of every byte the process
+ * ever wrote was laid out for the grid in force at the time, so replaying it into a
+ * differently sized terminal arrives scrambled. The mirror holds the *screen* instead:
+ * resize it, serialize it, and the client gets the current state already laid out for
+ * the grid it asked for. This is what terminal multiplexers do on reattach.
  */
 
 const TERM_WAIT_MS = 3000;
-
-class Scrollback {
-  private chunks: Uint8Array[] = [];
-  private size = 0;
-
-  constructor(private readonly limit: number) {}
-
-  push(chunk: Uint8Array): void {
-    this.chunks.push(chunk);
-    this.size += chunk.byteLength;
-    while (this.size > this.limit && this.chunks.length > 1) {
-      const dropped = this.chunks.shift();
-      if (dropped) this.size -= dropped.byteLength;
-    }
-  }
-
-  bytes(): Uint8Array {
-    const out = new Uint8Array(this.size);
-    let offset = 0;
-    for (const c of this.chunks) {
-      out.set(c, offset);
-      offset += c.byteLength;
-    }
-    return out;
-  }
-}
 
 export interface Subscriber {
   data(chunk: Uint8Array): void;
@@ -44,7 +22,6 @@ export interface Subscriber {
 export interface SpawnOptions {
   argv: string[];
   cwd: string;
-  scrollback: number;
   onData(): void;
   onExit(code: number | null): void;
 }
@@ -52,14 +29,21 @@ export interface SpawnOptions {
 export class Pty {
   readonly pid: number;
   private readonly proc: Bun.Subprocess;
-  private readonly buffer: Scrollback;
+  private readonly mirror: Terminal;
+  private readonly serializer = new SerializeAddon();
   private readonly subscribers = new Set<Subscriber>();
   private exited = false;
   private readonly done: Promise<void>;
   private settle: () => void = () => undefined;
 
   constructor(opts: SpawnOptions) {
-    this.buffer = new Scrollback(opts.scrollback);
+    this.mirror = new Terminal({
+      cols: SPAWN_COLS,
+      rows: SPAWN_ROWS,
+      allowProposedApi: true,
+      scrollback: 5000,
+    });
+    this.mirror.loadAddon(this.serializer);
     this.done = new Promise((resolve) => {
       this.settle = resolve;
     });
@@ -67,11 +51,11 @@ export class Pty {
       cwd: opts.cwd,
       env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
       terminal: {
-        cols: COLS,
-        rows: ROWS,
+        cols: SPAWN_COLS,
+        rows: SPAWN_ROWS,
         data: (_term, data) => {
           const copy = new Uint8Array(data);
-          this.buffer.push(copy);
+          this.mirror.write(copy);
           for (const s of this.subscribers) s.data(copy);
           opts.onData();
         },
@@ -92,9 +76,36 @@ export class Pty {
     return !this.exited;
   }
 
+  get cols(): number {
+    return this.mirror.cols;
+  }
+
+  get rows(): number {
+    return this.mirror.rows;
+  }
+
   write(data: string | Uint8Array): void {
     if (this.exited) return;
     this.proc.terminal?.write(data);
+  }
+
+  /**
+   * Resize the process and the mirror together. Anything else and the screen we hand out
+   * disagrees with the screen the process believes it is drawing on.
+   */
+  resize(cols: number, rows: number): void {
+    const c = Math.max(2, Math.floor(cols));
+    const r = Math.max(1, Math.floor(rows));
+    if (c === this.mirror.cols && r === this.mirror.rows) return;
+    this.mirror.resize(c, r);
+    if (!this.exited) this.proc.terminal?.resize(c, r);
+  }
+
+  /** The current screen, as escape sequences that reconstruct it at the mirror's grid. */
+  async snapshot(): Promise<string> {
+    // write() parses asynchronously; flush before reading the buffer back out.
+    await new Promise<void>((resolve) => this.mirror.write("", resolve));
+    return this.serializer.serialize({ scrollback: 0 });
   }
 
   subscribe(sub: Subscriber): () => void {
@@ -104,12 +115,9 @@ export class Pty {
     };
   }
 
-  replay(): Uint8Array {
-    return this.buffer.bytes();
-  }
-
   /** SIGTERM, then SIGKILL if the process is still there after a grace period. */
   async stop(): Promise<void> {
+    this.mirror.dispose();
     if (this.exited) return;
     this.proc.kill("SIGTERM");
     const timer = setTimeout(() => {
