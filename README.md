@@ -3,8 +3,8 @@
 One question: **does entering a pane feel good?**
 
 A blank canvas. Right-click to add a Claude Code or Codex pane. Each pane is a real
-process in a real PTY. Click a pane and the camera flies into it at 1:1, where it becomes
-an interactive TUI. `⌘↑` or a click outside flies back out.
+process in a real PTY. Click a pane and it grows out of wherever it sits into the window,
+where it becomes an interactive TUI. `⌘↑` or a click outside settles it back into place.
 
 Nothing else. No kernel, no database, no git, no worktrees, no MCP, no communication
 between panes. A pane lives exactly as long as its process. See `../docs/11-ui-tooling.md`
@@ -31,26 +31,33 @@ Panes use your own `claude` and `codex` logins.
 src/protocol.ts       wire types, COLS x ROWS
 src/server/pty.ts     one process in a PTY, scrollback, fan-out
 src/server/main.ts    the whole daemon: spawn, attach, input, remove
-src/ui/metrics.ts     pane size derived from measured font cells
+src/ui/metrics.ts     pane size, and the font size that fits COLS x ROWS in a space
 src/ui/store.ts       socket + view state; the canvas owns position, nothing else does
-src/ui/canvas/camera.ts   zoom levels, durations, easing curves
-src/ui/canvas/Canvas.tsx  React Flow, context menu, enter/exit, shortcuts
-src/ui/canvas/PaneNode.tsx  the pane: closed is empty on purpose, entered is the TUI
-src/ui/terminal/Term.tsx    xterm at fixed geometry, WebGL, Cmd passed through
+src/ui/canvas/transition.ts  the two springs the whole feel lives in
+src/ui/canvas/Canvas.tsx     React Flow, context menu, open/close, shortcuts
+src/ui/canvas/PaneNode.tsx   the closed pane: a rectangle and its mark
+src/ui/canvas/Expanded.tsx   the pane lifted off the canvas, grown into the window
+src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
 ```
 
 ## Rules this experiment holds to
 
-- **Fixed geometry.** The PTY is 120x36 and never resizes. No fit addon: a TUI must not
-  reflow because the camera moved. Pane size is derived from measured font cells.
+- **Fixed geometry.** The PTY is 120x36 and never resizes. No fit addon: the font size is
+  the free variable, sized to whatever space the expanded pane has.
+- **Opening expands the pane; it never moves the camera.** See `../docs/09-decisions.md`
+  D-46. The rect is measured with `getBoundingClientRect()` so the growth starts exactly
+  where the pane was, at whatever zoom the canvas happens to be.
 - **Cmd is the application layer.** `attachCustomKeyEventHandler` returns `false` for
   `metaKey`, so every other key reaches the TUI untouched. Escape is never taken —
   Claude Code uses it for interrupt and `Esc Esc` for rewind.
-- **Entered, the pane owns the wheel.** Canvas zoom and pan are off while inside, so
-  scrollback cannot move the camera.
+- **Open, the pane owns the wheel.** The scrim sits above the canvas, so scrollback
+  cannot reach the camera.
 - **A closed pane is empty on purpose.** Not a placeholder for a missing feature. What it
   could show later (serialized framebuffer snapshots, hook-driven status) is researched
   in `../docs/11-ui-tooling.md` and deliberately not built here.
+- **xterm's default renderer, bounded scrollback, `lineHeight: 1`.** The WebGL addon
+  ignores `lineHeight` and has known long-buffer faults; with one terminal on screen it
+  buys nothing.
 - **Position is a surface concern.** The daemon has no opinion about layout.
 
 ## Known gaps

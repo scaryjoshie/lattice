@@ -4,28 +4,27 @@ import {
   BackgroundVariant,
   type NodeChange,
   ReactFlow,
-  type Viewport,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Provider } from "../../protocol.ts";
 import { PROVIDER_LABEL, ProviderIcon } from "../icons.tsx";
 import { PANE_H, PANE_W } from "../metrics.ts";
 import { useStore } from "../store.ts";
-import {
-  ENTERED_ZOOM,
-  ENTER_MS,
-  EXIT_MS,
-  easeEnter,
-  easeExit,
-  paneCenter,
-  RESTING_ZOOM,
-} from "./camera.ts";
+import { Expanded } from "./Expanded.tsx";
 import { PaneNode, type PaneNodeData } from "./PaneNode.tsx";
+import type { Rect } from "./transition.ts";
 
 const nodeTypes = { pane: PaneNode };
 const PROVIDERS: Provider[] = ["claude", "codex"];
+
+function rectOf(id: string, fallback?: Element | null): Rect | null {
+  const el = document.querySelector(`.react-flow__node[data-id="${id}"]`) ?? fallback;
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { top: r.top, left: r.left, width: r.width, height: r.height };
+}
 
 export function Canvas() {
   const flow = useReactFlow();
@@ -38,8 +37,8 @@ export function Canvas() {
   const spawn = useStore((s) => s.spawn);
 
   const [menuAt, setMenuAt] = useState({ x: 0, y: 0 });
-  /** Where the camera was before entering, so leaving returns you where you were. */
-  const resting = useRef<Viewport | null>(null);
+  /** The rectangle the open pane grew out of, and will shrink back into. */
+  const [from, setFrom] = useState<Rect | null>(null);
 
   const nodes = useMemo(
     () =>
@@ -48,46 +47,40 @@ export function Canvas() {
         type: "pane",
         position: positions[pane.id] ?? { x: 0, y: 0 },
         draggable: entered === null,
-        data: { pane, entered: entered === pane.id } satisfies PaneNodeData,
+        data: { pane, hidden: entered === pane.id } satisfies PaneNodeData,
         width: PANE_W,
         height: PANE_H,
       })),
     [panes, positions, entered],
   );
 
-  const goInto = useCallback(
-    (id: string) => {
-      const at = useStore.getState().positions[id];
-      if (!at || useStore.getState().entered === id) return;
-      resting.current = flow.getViewport();
-      const c = paneCenter(at);
+  const open = useCallback(
+    (id: string, el?: Element | null) => {
+      if (useStore.getState().entered !== null) return;
+      const rect = rectOf(id, el);
+      if (!rect) return;
+      setFrom(rect);
       enter(id);
-      flow.setCenter(c.x, c.y, { zoom: ENTERED_ZOOM, duration: ENTER_MS, ease: easeEnter });
     },
-    [enter, flow],
+    [enter],
   );
 
-  const goOut = useCallback(() => {
+  const close = useCallback(() => {
     if (useStore.getState().entered === null) return;
     exit();
-    const back = resting.current;
-    if (back) flow.setViewport(back, { duration: EXIT_MS, ease: easeExit });
-    else flow.zoomTo(RESTING_ZOOM, { duration: EXIT_MS, ease: easeExit });
-    resting.current = null;
-  }, [exit, flow]);
+  }, [exit]);
 
-  // D-45: the application lives behind Cmd, so nothing here is taken from the TUI.
+  // D-45: the application lives behind Cmd, so nothing is taken away from the TUI.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey) return;
-      if (e.key === "ArrowUp") {
+      if (e.metaKey && e.key === "ArrowUp") {
         e.preventDefault();
-        goOut();
+        close();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goOut]);
+  }, [close]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -97,6 +90,8 @@ export function Canvas() {
     },
     [move],
   );
+
+  const openPane = panes.find((p) => p.id === entered) ?? null;
 
   return (
     <ContextMenu.Root>
@@ -112,22 +107,18 @@ export function Canvas() {
             edges={[]}
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
-            onNodeClick={(_, node) => goInto(node.id)}
-            onPaneClick={goOut}
-            defaultViewport={{ x: 0, y: 0, zoom: RESTING_ZOOM }}
-            minZoom={0.1}
-            maxZoom={1.5}
-            // Entered, the pane owns the wheel: scrollback must not move the camera.
+            onNodeClick={(e, node) => open(node.id, e.currentTarget)}
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            minZoom={0.2}
+            maxZoom={1.6}
             zoomOnScroll={entered === null}
             panOnDrag={entered === null}
             zoomOnDoubleClick={false}
             panOnScroll={false}
             nodesConnectable={false}
-            proOptions={{ hideAttribution: false }}
           >
             <Background variant={BackgroundVariant.Dots} gap={28} size={1} />
           </ReactFlow>
-          {entered !== null && <div className="hint">⌘↑</div>}
         </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
@@ -146,6 +137,7 @@ export function Canvas() {
           ))}
         </ContextMenu.Content>
       </ContextMenu.Portal>
+      <Expanded pane={openPane} from={from} onClose={close} />
     </ContextMenu.Root>
   );
 }
