@@ -268,16 +268,34 @@ If every region is an axis-aligned rectangle of cells, room can always be found,
 construction is one move: **insert a grid line.**
 
 To grow region `R` by a row, insert an empty row at the grid line below `R`'s bottom edge.
+One rule covers every case:
 
-- Regions entirely above it: unaffected.
-- Regions entirely below it: shift down by one.
-- Regions straddling it: become one row taller, gaining an empty interior row. Still
-  rectangles.
-- `R`: gains its row.
+> **Everything not entirely above the line moves down by one. `R` keeps its new row.**
 
-No overlaps are created, every shape stays a rectangle, and relative order is exactly
-preserved. Columns work the same way. It is how a spreadsheet inserts a row, it is O(n),
-and it is deterministic — no packing, no search, no solver.
+Nothing grows. Regions that straddle the line are *moved*, not stretched — an earlier
+version of this had them gain a blank interior row, which is unnecessary growth inside a
+region that had nothing to do with the request.
+
+It is collision-free, and worth stating why rather than assuming it. Take `P` entirely
+above the line and `Q` straddling or below it, so `P` does not move and `Q` moves down.
+`P`'s bottom edge is above the line; `Q`'s bottom edge is at or below it. So `P` can never
+sit below `Q`, and `Q` moving down can only increase their separation. Regions that both
+move keep their relative positions exactly. No pair can newly overlap.
+
+The inserted row is also genuinely empty. Anything occupying that row before must have had
+its top edge at or above the line and its bottom at or below it, so by the rule it moved
+down, and the row is clear.
+
+Every shape keeps its size, relative order is exactly preserved, and columns work the same
+way. It is how a spreadsheet inserts a row, it is O(n), and it is deterministic — no
+packing, no search, no solver.
+
+A straddler that moves leaves a gap above it. That is not a defect: it is the buffer space
+appearing on its own, which is the behaviour wanted, and it costs nobody any size.
+
+**Dragging an edge is the same operation.** Pulling a region's boundary outward is a
+request for room, so it resolves exactly as above — take adjacent free cells if there are
+any, otherwise insert a line. Resizing needs no separate mechanism, and never fails.
 
 **This replaces the idea that regions should flow.** A packing pass recomputes everyone's
 position whenever anything changes, which quietly contradicts the property the grid exists
@@ -285,12 +303,11 @@ for. Line insertion moves things only when asked, and moves them the minimum a g
 allows: absolute coordinates change, relative arrangement does not. What you built stays
 built.
 
-The honest caveat is that it guarantees space *exists*, not that it is found politely. A
-full-line insertion displaces distant things that had nothing to do with the request, and
-the straddling case leaves a blank row inside an unrelated region. So in practice: try
-local displacement first, where the cells immediately adjacent are free or can be nudged
-without cascading, and fall back to line insertion, which always works. Animating the
-insertion makes it legible rather than startling.
+The honest caveat is that it guarantees space *exists*, not that it is found politely: a
+full-line insertion displaces distant things that had nothing to do with the request. So in
+practice, try local displacement first — where the cells immediately adjacent are free or
+can be nudged without cascading — and fall back to line insertion, which always works.
+Animating the insertion makes it legible rather than startling.
 
 **And it takes layout duty away from hierarchy.** Containment stays what it is — a worktree
 contains its agents, because that is true — but it no longer has to carry the job of
