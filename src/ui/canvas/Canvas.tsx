@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Provider } from "../../protocol.ts";
 import { PROVIDER_LABEL, ProviderIcon } from "../icons.tsx";
 import { PANE_H, PANE_W } from "../metrics.ts";
+import { isAppChord } from "../keys.ts";
 import { useStore } from "../store.ts";
 import { Expanded } from "./Expanded.tsx";
 import { PaneNode, type PaneNodeData } from "./PaneNode.tsx";
@@ -73,10 +74,9 @@ export function Canvas() {
   // D-45: the application lives behind Cmd, so nothing is taken away from the TUI.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey && e.key === "ArrowUp") {
-        e.preventDefault();
-        close();
-      }
+      if (!isAppChord(e)) return;
+      e.preventDefault();
+      close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -49,9 +49,10 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
 - **Opening expands the pane; it never moves the camera.** See `../docs/09-decisions.md`
   D-46. The rect is measured with `getBoundingClientRect()` so the growth starts exactly
   where the pane was, at whatever zoom the canvas happens to be.
-- **Cmd is the application layer.** `attachCustomKeyEventHandler` returns `false` for
-  `metaKey`, so every other key reaches the TUI untouched. Escape is never taken —
-  Claude Code uses it for interrupt and `Esc Esc` for rewind.
+- **The application claims a named few chords; everything else reaches the TUI.** `⌘↑`
+  is ours, the clipboard stays with the browser, and the Mac editing chords are
+  translated into what a line editor understands (`src/ui/keys.ts`). Escape is never
+  taken — Claude Code uses it for interrupt and `Esc Esc` for rewind. See D-48.
 - **Open, the pane owns the wheel.** The scrim sits above the canvas, so scrollback
   cannot reach the camera.
 - **A closed pane is empty on purpose.** Not a placeholder for a missing feature. What it

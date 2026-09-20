@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
 import { SPAWN_COLS, SPAWN_ROWS } from "../../protocol.ts";
+import { route } from "../keys.ts";
 import { FONT_FAMILY, FONT_SIZE, LINE_HEIGHT, TERM_PAD } from "../metrics.ts";
 import { useStore } from "../store.ts";
 import { terminalBus } from "./bus.ts";
@@ -64,12 +65,22 @@ export function Term({ id, width, height }: { id: string; width: number; height:
         cursorBlink: true,
         allowProposedApi: true,
         scrollback: 5000,
+        // Option is Meta, so Option+key produces ESC-prefixed sequences instead of the
+        // composed character macOS would otherwise insert.
+        macOptionIsMeta: true,
       });
       term.open(host as HTMLElement);
 
-      // D-45: Cmd belongs to the application. Returning false hands the event back to
-      // the document, where the shortcut layer sees it; every other key reaches the TUI.
-      term.attachCustomKeyEventHandler((e) => !e.metaKey);
+      // See keys.ts. Returning false stops xterm handling the key; the event still
+      // bubbles, so the application's own shortcuts are seen at the window.
+      term.attachCustomKeyEventHandler((e) => {
+        const r = route(e);
+        if (r.to === "xterm") return true;
+        if (r.to === "app") return false;
+        e.preventDefault();
+        send({ t: "input", id, data: r.bytes });
+        return false;
+      });
 
       const input = term.onData((data) => send({ t: "input", id, data }));
       const bytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
