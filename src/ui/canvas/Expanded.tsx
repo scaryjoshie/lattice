@@ -1,17 +1,23 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import type { PaneState } from "../../protocol.ts";
-import { PROVIDER_LABEL, ProviderIcon } from "../icons.tsx";
+import { useScreen } from "../screen.ts";
 import { Term } from "../terminal/Term.tsx";
-import { CLOSE, expandedRect, OPEN, type Rect, REVEAL } from "./transition.ts";
+import { CLOSE, FADE, OPEN, type Rect } from "./transition.ts";
 
 /**
- * The pane, lifted off the canvas. It grows from the rectangle it occupied on screen
- * into the window, and shrinks back into the same place.
+ * The open pane.
  *
- * The terminal is mounted only after the chrome has arrived. Animating a live terminal's
- * box would reflow it every frame, which is both slow and wrong.
+ * It is laid out at the screen's size and never resized. What animates is the transform:
+ * it starts translated and scaled down so that it sits exactly over the rectangle the
+ * closed pane occupied, and ends at identity. Because the layout never changes, the
+ * terminal inside is built once, at one grid, and simply appears to get closer.
+ *
+ * Animating width and height instead — which is what this did first — relayouts the
+ * terminal every frame, so opening read as two events (a box growing, then a terminal
+ * arriving) rather than one movement.
+ *
+ * The box itself never fades. It begins exactly where the closed pane was, so it is
+ * already in the right place at the right size; only the terminal inside fades up.
  */
 export function Expanded({
   pane,
@@ -22,21 +28,14 @@ export function Expanded({
   from: Rect | null;
   onClose(): void;
 }) {
-  const [target, setTarget] = useState<Rect>(expandedRect);
-  const [arrived, setArrived] = useState(false);
+  const s = useScreen();
 
-  useEffect(() => {
-    const onResize = () => setTarget(expandedRect());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+  // Where the closed pane sat, expressed as a transform of the screen rectangle.
+  const thumbnail = from
+    ? { x: from.left - s.left, y: from.top - s.top, scale: from.width / s.width }
+    : { x: 0, y: 0, scale: s.scale };
 
-  useEffect(() => {
-    if (!pane) setArrived(false);
-    else setTarget(expandedRect());
-  }, [pane]);
-
-  return createPortal(
+  return (
     <AnimatePresence>
       {pane && from && (
         <>
@@ -45,34 +44,34 @@ export function Expanded({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={REVEAL}
+            transition={FADE}
             onClick={onClose}
           />
           <motion.div
             className="pane expanded"
-            initial={{ ...from }}
-            animate={{ ...target }}
-            exit={{ ...from }}
-            transition={pane ? OPEN : CLOSE}
-            onAnimationComplete={() => setArrived(true)}
+            style={{
+              top: s.top,
+              left: s.left,
+              width: s.width,
+              height: s.height,
+              transformOrigin: "0 0",
+            }}
+            initial={thumbnail}
+            animate={{ x: 0, y: 0, scale: 1 }}
+            exit={{ ...thumbnail, transition: CLOSE }}
+            transition={OPEN}
           >
-            {arrived ? (
-              <Term id={pane.id} width={target.width} height={target.height} />
-            ) : (
-              <ProviderIcon provider={pane.provider} className="pane-watermark" />
-            )}
-            <motion.span
-              className="pane-label"
+            <motion.div
+              className="pane-screen"
               initial={{ opacity: 0 }}
-              animate={{ opacity: arrived ? 0 : 1 }}
-              transition={REVEAL}
+              animate={{ opacity: 1 }}
+              transition={FADE}
             >
-              {PROVIDER_LABEL[pane.provider]}
-            </motion.span>
+              <Term id={pane.id} width={s.width} height={s.height} />
+            </motion.div>
           </motion.div>
         </>
       )}
-    </AnimatePresence>,
-    document.body,
+    </AnimatePresence>
   );
 }

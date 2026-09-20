@@ -29,9 +29,11 @@ function measureCell(host: HTMLElement, term: Terminal): { w: number; h: number 
     host.querySelector<HTMLElement>(".xterm-screen") ??
     host.querySelector<HTMLElement>(".xterm-rows");
   if (!box) return null;
-  const r = box.getBoundingClientRect();
-  if (r.width === 0 || r.height === 0) return null;
-  return { w: r.width / term.cols, h: r.height / term.rows };
+  // offsetWidth/Height, not getBoundingClientRect: the pane is under a CSS scale while
+  // it opens, and a bounding rect would report the scaled size and halve the grid.
+  const { offsetWidth: w, offsetHeight: h } = box;
+  if (w === 0 || h === 0) return null;
+  return { w: w / term.cols, h: h / term.rows };
 }
 
 /**

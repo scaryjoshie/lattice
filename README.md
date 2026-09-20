@@ -31,7 +31,8 @@ Panes use your own `claude` and `codex` logins.
 src/protocol.ts       wire types, COLS x ROWS
 src/server/pty.ts     one process in a PTY, its headless mirror, snapshots, fan-out
 src/server/main.ts    the whole daemon: spawn, attach, input, remove
-src/ui/metrics.ts     pane size, and the font size that fits COLS x ROWS in a space
+src/ui/metrics.ts     type and spacing inside a terminal
+src/ui/screen.ts      the one screen size, and the pane size derived from it
 src/ui/store.ts       socket + view state; the canvas owns position, nothing else does
 src/ui/canvas/transition.ts  the two springs the whole feel lives in
 src/ui/canvas/Canvas.tsx     React Flow, context menu, open/close, shortcuts
@@ -47,8 +48,12 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
   snapshot, subscribe, against a server-side `@xterm/headless` mirror — raw scrollback
   replay is wrong the moment the grid changes. See `../docs/09-decisions.md` D-47.
 - **Opening expands the pane; it never moves the camera.** See `../docs/09-decisions.md`
-  D-46. The rect is measured with `getBoundingClientRect()` so the growth starts exactly
-  where the pane was, at whatever zoom the canvas happens to be.
+  D-46. The rect is measured so the growth starts exactly where the pane was, at whatever
+  zoom the canvas happens to be.
+- **Opening scales; it never resizes.** Every terminal is built at the screen's size, and
+  a pane on the canvas is that screen drawn smaller (D-49). One layout, one grid, no
+  reflow. **Known cost:** a pane therefore has the screen's aspect ratio rather than its
+  own, so a differently shaped window gives differently shaped panes (D-50).
 - **The application claims a named few chords; everything else reaches the TUI.** `⌘↑`
   is ours, the clipboard stays with the browser, and the Mac editing chords are
   translated into what a line editor understands (`src/ui/keys.ts`). Escape is never

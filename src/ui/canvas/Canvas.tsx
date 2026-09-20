@@ -10,7 +10,7 @@ import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Provider } from "../../protocol.ts";
 import { PROVIDER_LABEL, ProviderIcon } from "../icons.tsx";
-import { PANE_H, PANE_W } from "../metrics.ts";
+import { useScreen } from "../screen.ts";
 import { isAppChord } from "../keys.ts";
 import { useStore } from "../store.ts";
 import { Expanded } from "./Expanded.tsx";
@@ -29,6 +29,7 @@ function rectOf(id: string, fallback?: Element | null): Rect | null {
 
 export function Canvas() {
   const flow = useReactFlow();
+  const s = useScreen();
   const panes = useStore((s) => s.panes);
   const positions = useStore((s) => s.positions);
   const entered = useStore((s) => s.entered);
@@ -48,11 +49,16 @@ export function Canvas() {
         type: "pane",
         position: positions[pane.id] ?? { x: 0, y: 0 },
         draggable: entered === null,
-        data: { pane, hidden: entered === pane.id } satisfies PaneNodeData,
-        width: PANE_W,
-        height: PANE_H,
+        data: {
+          pane,
+          hidden: entered === pane.id,
+          width: s.paneW,
+          height: s.paneH,
+        } satisfies PaneNodeData,
+        width: s.paneW,
+        height: s.paneH,
       })),
-    [panes, positions, entered],
+    [panes, positions, entered, s.paneW, s.paneH],
   );
 
   const open = useCallback(
@@ -128,7 +134,7 @@ export function Canvas() {
               key={provider}
               className="menu-item"
               onSelect={() =>
-                spawn(provider, { x: menuAt.x - PANE_W / 2, y: menuAt.y - PANE_H / 2 })
+                spawn(provider, { x: menuAt.x - s.paneW / 2, y: menuAt.y - s.paneH / 2 })
               }
             >
               <ProviderIcon provider={provider} className="menu-mark" />

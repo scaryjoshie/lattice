@@ -150,6 +150,15 @@ body {
   border-color: var(--border-hover);
   box-shadow: 0 40px 120px rgb(0 0 0 / 65%);
   cursor: default;
+  /* The whole pane is one composited layer, so scaling it stays cheap. */
+  will-change: transform;
+}
+
+.pane-screen {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
 }
 
 .term {
