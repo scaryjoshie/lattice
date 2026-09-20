@@ -242,5 +242,36 @@ This is semantic zoom applied to containment rather than to detail, and it fits 
 transition already built: opening a tile and entering a chunk would be the same gesture at
 different depths.
 
-The second is the more interesting one, and it is also what makes "one screenful" viable
-above — if depth carries hierarchy, no single view has to hold everything at once.
+**But depth must not be modal.** The objection that settles it: sometimes you genuinely do
+want one view to hold everything, and making the user walk down and back up through levels
+to reach anything is a tax paid on every single interaction. It is worst for voice, where
+the whole appeal is referring to something without first travelling to it.
+
+So distinguish two things that "drilling in" runs together:
+
+| | What entering a chunk does | Cost |
+|---|---|---|
+| **Modal** | Replaces the view; the rest of the project is gone | Forces navigation. Nothing outside the current chunk can be seen, pointed at, or spoken about |
+| **Continuous** | Changes nothing about what exists; only what is drawn | None of that |
+
+**Continuous.** One plane. Everything coexists on it always, at a real position, and zoom
+decides only how much of each thing is rendered. Nothing is ever hidden, only small.
+
+That also rescues nesting from the objection made against it earlier. Three levels of
+nested rectangle is ugly *when all three are drawn at once* — which is a rendering problem,
+and semantic zoom is exactly its fix. Containment stays real in the layout; the renderer
+just never shows more than about one level of it at a time.
+
+The two candidate shapes then merge rather than compete: **flowed above the tile, fixed at
+the tile.** Repositories and regions are placed by a packing pass, so growth produces buffer
+space without anyone arranging it; a tile's cell inside its region is absolute and stays
+where it was put.
+
+And it decides the renderer question above. Continuous zoom over a plane larger than the
+screen means the pannable canvas, not the single screenful — so the dashboard and docking
+families are out, and what is needed is a pan/zoom container plus our own occupancy.
+
+One thing to hold on to: voice and orchestration should not be bound by the camera at all.
+They address by identity, so they can act on anything regardless of where the view happens
+to be. Zoom level is then a useful *default* for what "this one" means when a person points
+— repositories at one depth, agents at another — rather than a limit on what can be reached.
