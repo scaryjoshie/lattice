@@ -182,3 +182,65 @@ looking is two coordinates.
 Nothing needs building for this. It is worth knowing that the layout model chosen for
 single-player reasons is also the one that makes multiplayer tractable, and worth not
 precluding it — principally by keeping layout in the daemon, which is already the plan.
+
+## Open: what renders the grid
+
+Edges are not entirely dead. Inside a focus view — everything else dimmed — a handful of
+lines between the lit cells is legible, because the noise that made a web unreadable has
+been turned off. That is a small, conditional use, and almost certainly not enough on its
+own to justify a node-graph library.
+
+Surveyed September 2026. Two families exist and neither fits, for the same reason.
+
+| Family | Examples | Model | Why it misses |
+|---|---|---|---|
+| Dashboard grids | `react-grid-layout` 2.2.4, `gridstack` 13.3.0, `muuri` 0.9.5 | Cells, spans, collision, drag and resize | Fills a viewport. No pan or zoom |
+| Docking / tiling | `dockview` 8.3.1, `flexlayout-react` 0.11.0, `react-mosaic-component` 7.1.0 | A tree of splits and tab sets | Not coordinates at all. No canvas |
+
+All MIT except react-mosaic (Apache-2.0), so licensing is not the deciding factor the way
+it was for tldraw.
+
+The dashboard family is closer than expected. `react-grid-layout` supports
+`compactType={null}`, `preventCollision` and `allowOverlap`, which is precisely the
+non-compacting occupancy wanted here — nothing drifts, a cell is claimed or it is not. Its
+gap is only that it has no viewport of its own.
+
+**The question underneath is whether the grid needs to be pannable at all.** Two different
+products:
+
+- **Infinite plane.** Pan and zoom over a grid larger than the screen. Needs a pan/zoom
+  container (`react-zoom-pan-pinch` 4.2.0, or `d3-zoom` 3.0.0, which is what React Flow
+  uses underneath) plus our own occupancy, which is a map from cell to tile and a rule for
+  what a drop displaces. Not much code, and all of it ours.
+- **One screenful.** A tiling layout that fills the viewport, with hierarchy reached by
+  drilling in rather than by panning out. No camera at all, and the dashboard or docking
+  families become directly usable.
+
+The second is worth taking seriously rather than assuming the first. It deletes the camera,
+and hierarchy-by-drilling may be the better answer to the nesting problem anyway (below).
+
+## Open: hierarchy is still unsolved
+
+Repository, worktree and tile are three levels, and none of the models tried so far is
+convincing. Nesting rectangles is ugly, workspaces break cross-repository work, and
+repository-as-a-property does not yet say what happens when a project has six repositories
+and forty worktrees.
+
+Two candidate shapes, neither developed:
+
+**Regions flow; tiles are fixed.** Within a region a tile's cell is absolute and stays put.
+*Between* regions, placement is computed rather than manual, so a growing region pushes its
+neighbours apart and buffer space appears without anyone arranging it. This keeps the
+property that matters — what you placed stays where you placed it — while giving up manual
+control at the level where manual control is mostly tedium. It is two layout models
+stacked, which is a real cost.
+
+**Hierarchy as depth, not as rectangles.** A repository is a chunk; zooming into it reveals
+its worktrees; zooming into one reveals its tiles. Containment is expressed by how far in
+you are rather than by boxes drawn inside boxes, so no level pays rent in the level above.
+This is semantic zoom applied to containment rather than to detail, and it fits the scale
+transition already built: opening a tile and entering a chunk would be the same gesture at
+different depths.
+
+The second is the more interesting one, and it is also what makes "one screenful" viable
+above — if depth carries hierarchy, no single view has to hold everything at once.
