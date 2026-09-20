@@ -1,7 +1,7 @@
 # Pane, experiment 1
 
 See `ARCHITECTURE.md` for the layout and `DECISIONS.md` for what was chosen where
-`../docs` left a question open.
+`../../docs` left a question open.
 
 ## Run
 

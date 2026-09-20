@@ -1,6 +1,6 @@
 # Pane, experiment 1
 
-The first implementation of the model in `../docs`. Read `../docs/core.md` first; this
+The first implementation of the model in `../../docs`. Read `../../docs/core.md` first; this
 file only says how that model is laid out in code and what was chosen where the docs left
 a choice open (see `DECISIONS.md`).
 
@@ -76,7 +76,7 @@ Composition root. Owns one kernel, one git adapter, one runtime, and the service
 - **Summaries**: commit explanations by a headless model call, stored as derived.
 
 `pane mcp` is the stdio MCP server each agent gets. Its tools are the coding-agent tools
-from `../docs/03-agents-and-runtime.md` plus `send`, `who` and `context`.
+from `../../docs/03-agents-and-runtime.md` plus `send`, `who` and `context`.
 
 ## UI
 

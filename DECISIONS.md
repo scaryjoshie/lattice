@@ -1,6 +1,6 @@
 # Decisions made for experiment 1
 
-Resolutions of `../docs/10-open-questions.md`, numbered the same way, plus a few forced
+Resolutions of `../../docs/10-open-questions.md`, numbered the same way, plus a few forced
 by implementation. Reopen by adding a note.
 
 | # | Decision | Why |
@@ -24,7 +24,7 @@ by implementation. Reopen by adding a note.
 | 17 | `suspend` ends the process and keeps the session id; `resume` starts it again with the host's resume flag. | Neither host supports a real pause. |
 | 18 | Ask level 3 is a fresh headless `claude -p` call over the evidence. | No API key management; the user's Claude login is the provider auth. |
 | 19 | Imperative Ask actions propose, then execute on confirm. | Low-risk ops are still project edits; one click is cheap. |
-| 20 | Routing weights are the hardcoded table from `../docs/05`. | Deterministic first. |
+| 20 | Routing weights are the hardcoded table from `../../docs/05`. | Deterministic first. |
 | 21 | Default home is the project canvas; Needs You is a badge that opens a panel. | The canvas is the product. |
 | 22 | Ask mode enters with `/`. Escape leaves. | One key. |
 | 24 | No collective noun in the UI. Tabs are Tasks, Problems, Questions, Decisions. | Say what things are. |
