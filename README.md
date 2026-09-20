@@ -7,8 +7,8 @@ process in a real PTY. Click a pane and it grows out of wherever it sits into th
 where it becomes an interactive TUI. `⌘↑` or a click outside settles it back into place.
 
 Nothing else. No kernel, no database, no git, no worktrees, no MCP, no communication
-between panes. A pane lives exactly as long as its process. See `../docs/11-ui-tooling.md`
-for why each tool was chosen and `../docs/09-decisions.md` D-45 for the keyboard model.
+between panes. A pane lives exactly as long as its process. See `../../docs/11-ui-tooling.md`
+for why each tool was chosen and `../../docs/09-decisions.md` D-45 for the keyboard model.
 
 ## Run
 
@@ -46,8 +46,8 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
 - **The grid follows the space.** A pane opens into whatever room it has, measures a real
   rendered cell, and the daemon resizes the process to match. Attach order is resize,
   snapshot, subscribe, against a server-side `@xterm/headless` mirror — raw scrollback
-  replay is wrong the moment the grid changes. See `../docs/09-decisions.md` D-47.
-- **Opening expands the pane; it never moves the camera.** See `../docs/09-decisions.md`
+  replay is wrong the moment the grid changes. See `../../docs/09-decisions.md` D-47.
+- **Opening expands the pane; it never moves the camera.** See `../../docs/09-decisions.md`
   D-46. The rect is measured so the growth starts exactly where the pane was, at whatever
   zoom the canvas happens to be.
 - **Opening scales; it never resizes.** Every terminal is built at the screen's size, and
@@ -62,7 +62,7 @@ src/ui/terminal/Term.tsx     xterm at fixed COLS x ROWS, Cmd passed through
   cannot reach the camera.
 - **A closed pane is empty on purpose.** Not a placeholder for a missing feature. What it
   could show later (serialized framebuffer snapshots, hook-driven status) is researched
-  in `../docs/11-ui-tooling.md` and deliberately not built here.
+  in `../../docs/11-ui-tooling.md` and deliberately not built here.
 - **xterm's default renderer, bounded scrollback, `lineHeight: 1`.** The WebGL addon
   ignores `lineHeight` and has known long-buffer faults; with one terminal on screen it
   buys nothing.

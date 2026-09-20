@@ -8,7 +8,7 @@ import { PROVIDER_LABEL, ProviderIcon } from "../icons.tsx";
  *
  * The status dot and the close button have been taken out on purpose. Both were small
  * enough to be illegible at thumbnail scale, which is the only scale this is ever seen
- * at. How state and actions should be expressed instead is in ../docs/07-ui.md.
+ * at. How state and actions should be expressed instead is in ../../docs/07-ui.md.
  */
 
 export interface PaneNodeData extends Record<string, unknown> {
