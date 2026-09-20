@@ -57,8 +57,8 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
   transition:
-    border-color 180ms ease,
-    box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    border-color 140ms ease,
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .react-flow__node:hover .pane {
@@ -85,53 +85,6 @@ body {
   color: var(--dim);
   letter-spacing: -0.01em;
   pointer-events: none;
-}
-
-.pane-dot {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--idle);
-}
-
-.pane-dot[data-state='busy'] {
-  background: var(--busy);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.pane-dot[data-state='dead'] {
-  background: var(--dead);
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-
-.pane-close {
-  all: unset;
-  position: absolute;
-  top: 10px;
-  right: 14px;
-  padding: 2px 6px;
-  color: var(--dim);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 160ms ease;
-}
-
-.react-flow__node:hover .pane-close {
-  opacity: 1;
-}
-
-.pane-close:hover {
-  color: var(--text);
 }
 
 /* Expanded --------------------------------------------------------------- */

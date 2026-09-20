@@ -122,6 +122,10 @@ export function Canvas() {
             zoomOnDoubleClick={false}
             panOnScroll={false}
             nodesConnectable={false}
+            // Default is 1px, so a trackpad click that drifts a pixel is read as a drag
+            // and never fires a click. That is what made panes feel unresponsive until
+            // the pointer had settled.
+            nodeDragThreshold={5}
           >
             <Background variant={BackgroundVariant.Dots} gap={28} size={1} />
           </ReactFlow>
