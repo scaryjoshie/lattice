@@ -156,3 +156,58 @@ is what "very monitored" has to mean concretely — current state says what is t
 says how it got that way.
 
 Cheap to add now, and close to impossible to reconstruct later.
+
+## Who owns a terminal
+
+The daemon owns the terminal. The browser renders it.
+
+There is a test that settles every case, and it is worth applying rather than arguing:
+
+> **Would this still be true with no browser open?**
+
+If yes, it belongs to the daemon. If it only matters while somebody is looking, it belongs
+to the client.
+
+| Daemon | Client |
+|---|---|
+| The PTY, the process, the shell | Font rasterisation |
+| Scrollback and the screen's current state | Scroll position, selection |
+| The occupant, and the cwd | Which tile is currently open |
+| Lifecycle: open, close, exit | Camera: pan and zoom |
+| Grid position | |
+| The authoritative `cols` x `rows` | |
+
+Everything in the left column survives a closed laptop lid. Everything in the right is
+recreated from scratch on the next page load and nobody notices.
+
+### Why the screen exists in two places
+
+The daemon runs a headless emulator per terminal; the browser runs an xterm. That is not
+duplication, it is the split working correctly: the daemon's emulator is **authoritative
+state**, the browser's is a **projection** that can be thrown away and rebuilt from a
+snapshot at any moment. Attaching already does exactly that.
+
+Input goes the other way and does not blur it either. Keystrokes *originate* at the client
+because that is where the keyboard is; they are *applied* by the daemon, which is where the
+PTY is. Originating is not owning.
+
+### The one place this is currently violated
+
+Size. Today the browser measures its own font, computes the `cols` x `rows` that fit its
+pane, and tells the daemon to resize. The daemon obeys. So a terminal's true dimensions are
+set by whichever view spoke last — which fails the test above, and would fail outright the
+moment two clients with different window sizes attach to the same terminal. It is the
+classic multiplexer problem, imported for no reason.
+
+**Size is the daemon's, derived from things the daemon already owns.** A terminal's grid
+follows from its tile's span in cells, which is layout, which lives in the daemon. The one
+piece the daemon cannot know is how large a character actually renders, since that depends
+on the font and the display.
+
+So: a client reports its cell metric **once, per client, at connect** — not per terminal,
+not per resize. The daemon combines that with the tile span it already owns and decides.
+The client contributes a measurement; the daemon makes the decision. When several clients
+disagree, the daemon arbitrates, exactly as a multiplexer does.
+
+This also removes the attach dance. The daemon does not need to be told a grid and then
+serialise for it, because it already knew the grid.
