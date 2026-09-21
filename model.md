@@ -211,3 +211,28 @@ disagree, the daemon arbitrates, exactly as a multiplexer does.
 
 This also removes the attach dance. The daemon does not need to be told a grid and then
 serialise for it, because it already knew the grid.
+
+## Resizing
+
+Resizing a terminal *is* resizing its tile. One concept, not two.
+
+Dragging a tile's edge changes its span in cells; the daemon recomputes `cols` x `rows`
+from the new span, sets the PTY's window size, and the program is told by `SIGWINCH` and
+redraws. The ordinary path every terminal emulator walks. Because room can always be made
+(see grid.md), a resize never fails and needs no "not enough space" case.
+
+**The grid is kinder to TUIs than a normal emulator.** A conventional terminal resizes by
+pixel drag and fires `SIGWINCH` continuously, which is where TUIs glitch. A grid changes
+only at cell boundaries, and committing on drop rather than during the drag makes it
+exactly one `SIGWINCH` per gesture: preview the span while dragging, apply once when
+released.
+
+**What does not resize anything.** Resizing the browser window does not change a grid — the
+tile's span *is* the grid, and the window only shows it at a different scale. Zooming the
+canvas likewise. Only an explicit tile resize touches the PTY. That is the payoff of the
+daemon owning size and deriving it from layout rather than from a view.
+
+Caveats are real but small and not ours: a program mid-render can flicker on `SIGWINCH`;
+some applications in an alternate screen lose scrollback across a resize; layouts that
+assume about eighty columns break in a very small grid, so a minimum tile span is worth
+enforcing.
