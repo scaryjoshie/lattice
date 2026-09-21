@@ -183,7 +183,7 @@ Nothing needs building for this. It is worth knowing that the layout model chose
 single-player reasons is also the one that makes multiplayer tractable, and worth not
 precluding it — principally by keeping layout in the daemon, which is already the plan.
 
-## Open: what renders the grid
+## What renders the grid
 
 Edges are not entirely dead. Inside a focus view — everything else dimmed — a handful of
 lines between the lit cells is legible, because the noise that made a web unreadable has
@@ -205,19 +205,48 @@ The dashboard family is closer than expected. `react-grid-layout` supports
 non-compacting occupancy wanted here — nothing drifts, a cell is claimed or it is not. Its
 gap is only that it has no viewport of its own.
 
-**The question underneath is whether the grid needs to be pannable at all.** Two different
-products:
+The question underneath was whether the grid needs to be pannable at all — a viewport-filling
+tiling layout would delete the camera and make those libraries usable directly. Continuous
+depth settles it (below): the plane is larger than the screen, so there is a camera, and
+both families are out.
 
-- **Infinite plane.** Pan and zoom over a grid larger than the screen. Needs a pan/zoom
-  container (`react-zoom-pan-pinch` 4.2.0, or `d3-zoom` 3.0.0, which is what React Flow
-  uses underneath) plus our own occupancy, which is a map from cell to tile and a rule for
-  what a drop displaces. Not much code, and all of it ours.
-- **One screenful.** A tiling layout that fills the viewport, with hierarchy reached by
-  drilling in rather than by panning out. No camera at all, and the dashboard or docking
-  families become directly usable.
+### Decided
 
-The second is worth taking seriously rather than assuming the first. It deletes the camera,
-and hierarchy-by-drilling may be the better answer to the nesting problem anyway (below).
+| Concern | Choice | Why |
+|---|---|---|
+| Camera | **`d3-zoom` 3.0.0** (ISC) | See below |
+| Transition | `motion` 13.4.0 (MIT) | Already proven on the scale-open |
+| Occupancy | **ours**, ~100 lines | A map from cell to tile, and a rule for what a drop displaces |
+| Snap dragging | **ours**, ~60 lines | See below |
+| Build | Bun, Vite 8, React 19, TypeScript | Carried over; nothing wants changing |
+| Styling | Plain CSS | The look is bespoke, so utility classes buy nothing |
+
+**The camera is the part of React Flow that was never the problem.** Its viewport is
+`d3-zoom` — verified directly: `@xyflow/system` lists `d3-zoom`, `d3-drag`,
+`d3-selection` and `d3-interpolate` as dependencies. So using `d3-zoom` directly keeps
+exactly the pan and zoom feel that already worked, and drops the node-graph layer that did
+not. This is subtraction, not replacement.
+
+It matters because input normalisation is the genuinely hard part of pan and zoom, not the
+matrix maths. A trackpad pinch arrives as a wheel event with `ctrlKey` set although no key
+was pressed, and the delta magnitudes vary by browser, OS, hardware and sensitivity
+setting with no reliable threshold between "pinch" and "scroll". `d3-zoom` has absorbed a
+decade of that.
+
+The React-native alternatives were considered and rejected on exactly this point:
+`react-zoom-pan-pinch` has an open defect on two-finger panning on macOS, and
+`use-gesture`'s multi-touch handling is for real touch devices rather than trackpads.
+Mac-first makes both disqualifying.
+
+**Dragging is ours, deliberately.** Every drag library computes deltas in screen pixels,
+and a tile lives inside a zoomed transform, so every delta needs dividing by the current
+zoom — something a library cannot do unless it knows about the camera, which is precisely
+what makes React Flow's dragging feel approximate. Snapping to an occupancy grid is our
+model regardless. Pointer events plus a division is less code than configuring something
+to be wrong.
+
+There is no tool for "occupancy grid on a zooming plane". Having checked both families and
+found neither fits, writing the small thing is the honest answer rather than the lazy one.
 
 ## Open: hierarchy is still unsolved
 
