@@ -11,6 +11,7 @@ being written down again on purpose, or it does not re-enter.
 
 | Doc | What it covers |
 |---|---|
+| [model.md](model.md) | The data layer: terminals, programs, agents, and what the first version models |
 | [grid.md](grid.md) | The spatial model: cells, tiles, regions, what has an address |
 
 ## Not yet carried across
