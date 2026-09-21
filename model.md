@@ -65,6 +65,62 @@ Discreteness and monitoring follow from this: an agent is one row with one id an
 append-only history of what it did and where, rather than something inferred from whatever
 is on screen.
 
+## Avoiding the decision tree
+
+The failure mode to design against is not a bug, it is a shape. Left alone, this grows a
+conditional matrix: *if the program is Claude do this, if it is Codex do that, if it is a
+shell do the other, if it was Claude and now is a shell then clean these things up.* Every
+new provider multiplies it, and every transition adds a branch nobody tests.
+
+Two rules remove it. Neither is a tidier decision tree; both mean there is no tree.
+
+### Derived state has no transitions
+
+If the occupant of a terminal is a **pure function of what is observed** — the foreground
+process, plus the sessions we know about — then "what happens when the user Ctrl-Cs out of
+Claude Code" is not a code path at all. It is just the next observation returning something
+different.
+
+There is no exit handler, no teardown sequence, no transition table, because nothing is
+being transitioned. Anything cached from the old occupant was derived, so it is simply
+recomputed.
+
+The bug in experiment 2 is the shape this prevents: the tile had to *handle* its agent
+exiting, and it handled it by dying.
+
+### "Nothing special" is an occupant, not an else-branch
+
+Every terminal always has exactly one occupant. A plain shell is an occupant like any
+other, with its own mark, label and controls — not the absence of one.
+
+```
+Occupant {
+  mark            what the tile shows
+  label           what it is called
+  controls        the actions offered, as data
+  ops             interrupt, resume, fork, ... as the occupant supports them
+}
+```
+
+The tile renders `occupant.mark` and `occupant.controls`. It never asks what kind of
+occupant it has, because that question has no consumer. Adding Codex adds a descriptor;
+adding a shell adds a descriptor; neither adds a branch.
+
+This is also what makes the behaviour the philosophy asks for fall out for free: a terminal
+hosting an agent offers agent controls, and the moment the agent is gone it offers terminal
+controls — not because anything switched, but because the occupant is re-derived and the
+controls are its data.
+
+The general form: **capabilities as data, not types as conditions.** A control exists
+because an occupant declares it, never because the UI recognised a provider.
+
+### Where edge cases are allowed
+
+Some will be real — a provider that cannot be resumed, one that needs a different interrupt
+sequence. Those belong inside that provider's descriptor, where they are one object's
+problem. They must not reach the tile, the grid, or the daemon's core, because that is how
+a local quirk becomes a global conditional.
+
 ## What the first version models
 
 **Terminals only.** Tiles you can start terminal instances in. That is the whole thing.
