@@ -21,7 +21,17 @@ wider than it is tall, so a 1x1 tile on an aspect-correct cell *is* a wide recta
 arithmetic. Larger tiles stay available later but must be square in cell count, or the
 shape stops matching the screen.
 
-Position is `(col, row)`. Not a float pair, not pixels.
+**Position is `(columnId, rowId)`, not `(col, row)`.** The grid is two ordered lists of
+tracks, each track with a stable id; a cell is named by the pair of ids, never by an index.
+
+This matters because line insertion is the core primitive. With integer indices, inserting
+a column renumbers every column to its right, so every stored position, every region span
+and every reference becomes wrong and has to be rewritten. With stable ids, insertion adds
+one entry to an ordered list and changes the identity of nothing. The rule that was O(n)
+on stored data becomes O(1).
+
+It matters twice over because layout lives in the daemon and persists, and index-based
+positions would be unmergeable the moment two clients ever touch the same grid.
 
 **Occupancy, not snapping.** Snapping is visual — a tile lands on round numbers while the
 model still stores pixels. Occupancy is semantic: a tile *is at* a cell, a cell holds one
@@ -216,7 +226,8 @@ both families are out.
 |---|---|---|
 | Camera | **`d3-zoom` 3.0.0** (ISC) | See below |
 | Transition | `motion` 13.4.0 (MIT) | Already proven on the scale-open |
-| Occupancy | **ours**, ~100 lines | A map from cell to tile, and a rule for what a drop displaces |
+| Rendering | **CSS Grid** | The engine emits track sizes, `grid-template-columns` does the geometry. Variable-width tracks later cost nothing |
+| Occupancy | **ours**, ~100 lines | Tracks, regions, insertion, and screen-to-cell conversion |
 | Snap dragging | **ours**, ~60 lines | See below |
 | Build | Bun, Vite 8, React 19, TypeScript | Carried over; nothing wants changing |
 | Styling | Plain CSS | The look is bespoke, so utility classes buy nothing |
@@ -233,10 +244,14 @@ was pressed, and the delta magnitudes vary by browser, OS, hardware and sensitiv
 setting with no reliable threshold between "pinch" and "scroll". `d3-zoom` has absorbed a
 decade of that.
 
-The React-native alternatives were considered and rejected on exactly this point:
-`react-zoom-pan-pinch` has an open defect on two-finger panning on macOS, and
-`use-gesture`'s multi-touch handling is for real touch devices rather than trackpads.
-Mac-first makes both disqualifying.
+The React-native alternatives were considered and rejected on exactly this point.
+`react-zoom-pan-pinch` has an open defect on two-finger panning on macOS.
+`@use-gesture/react` 10.3.1 does handle wheel-based pinch — an earlier note here said it
+was touch-only, which was wrong — but the behaviour diverges by browser: Chrome fires both
+its pinch and wheel handlers for a trackpad pinch, Safari fires only wheel for ctrl+wheel
+and only pinch for its own gesture events, and improving the wheel-based pinch algorithm is
+an open issue upstream. It is usable; it just leaves the cross-browser reconciliation with
+us, which is the exact work `d3-zoom` has already done.
 
 **Dragging is ours, deliberately.** Every drag library computes deltas in screen pixels,
 and a tile lives inside a zoomed transform, so every delta needs dividing by the current
@@ -244,6 +259,18 @@ zoom — something a library cannot do unless it knows about the camera, which i
 what makes React Flow's dragging feel approximate. Snapping to an occupancy grid is our
 model regardless. Pointer events plus a division is less code than configuring something
 to be wrong.
+
+`interactjs` 1.10.28 (MIT) is the closest fit among manipulation libraries, and is worth
+knowing about: it reports draggable, resizable and gesture data and deliberately does not
+move the element for you, which suits "drag an edge, interpret it as an insertion". It is
+maintained slowly — 1.10.27 in March 2024, then nothing until August 2026. `@dnd-kit/core`
+6.3.1 solves a different problem, draggable-to-droppable with collision detection and
+sortable semantics, which is not what moving a tile between cells needs.
+
+The argument against both is the same and is not about their quality: a second gesture
+system on the same objects as the camera means two things interpreting the same pointer,
+and every edge case has to be arbitrated between them. One drag path, ours, converting
+screen delta to cell delta through the camera we already own.
 
 There is no tool for "occupancy grid on a zooming plane". Having checked both families and
 found neither fits, writing the small thing is the honest answer rather than the lazy one.
@@ -321,6 +348,13 @@ packing, no search, no solver.
 
 A straddler that moves leaves a gap above it. That is not a defect: it is the buffer space
 appearing on its own, which is the behaviour wanted, and it costs nobody any size.
+
+With tracks having identity, "moving" needs no rewriting at all. A region owns a contiguous
+run of tracks, so a line that would fall *inside* a region is instead inserted immediately
+before that region's first track. The region keeps exactly the tracks it had, and is later
+in the ordering purely because a track now precedes it. Regions entirely above keep both
+their tracks and their place. Nothing is renumbered, and the new track is genuinely empty
+because the insertion point was chosen not to split anything.
 
 **Dragging an edge is the same operation.** Pulling a region's boundary outward is a
 request for room, so it resolves exactly as above — take adjacent free cells if there are
