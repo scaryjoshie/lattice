@@ -100,8 +100,25 @@ Regions are sized by dragging, not by growing to fit. Auto-growth displaces neig
 which is the same problem in a new place. Adding an agent to a full region grows it
 deliberately.
 
-A tint or a region border helps grouping read at a glance, but cannot be the only carrier,
-for the reason this section starts with.
+**A region is a plate, not an outline.** A region contains empty cells — that is most of
+what a region is — so a border around it is the wrong primitive. A dashed rectangle also
+competes with the texture the gutters already make, carries a conventional meaning
+(marquee, drop target, provisional), and shimmers at low zoom unless the dash length is
+tied to the cell size.
+
+A plate is a rounded rectangle on a slightly different surface, drawn *under* the cells.
+Everything inside it, occupied or empty, visibly sits on that surface, so membership is
+shown by where a cell *is* rather than by a line drawn around it. It stays rectangular, so
+line insertion is untouched. It is drawn behind, so cells inside pick up its tint through
+blending with no per-cell logic. Its edge sits in the gutter, so it costs no cell. The
+label sits in the gutter at its top-left corner and is the region's handle.
+
+**Nesting is a step of lightness per level**, which is the first answer to hierarchy that
+does not strain: a repository plate with a worktree plate one step in from it reads without
+either level paying rent in the other, and without nested outlines stacking up.
+
+Dashes then get a meaning instead of being the default: a region being drawn or resized, or
+one whose bounds are inferred rather than set.
 
 **A labelled region must be a scope.** A region that is not a worktree or a repository is a
 second way of putting things in boxes, which is a second containment hierarchy whatever the
@@ -193,6 +210,27 @@ Nothing needs building for this. It is worth knowing that the layout model chose
 single-player reasons is also the one that makes multiplayer tractable, and worth not
 precluding it — principally by keeping layout in the daemon, which is already the plan.
 
+## What a grid looks like when it is calm
+
+The look is mostly a rendering decision, and it is a short list:
+
+- Page and cell colours sit within a couple of percent of each other. **The grid is felt
+  through the gaps rather than drawn with lines.** The moment edges become real strokes it
+  turns into a spreadsheet.
+- Gap and radius scale with the cell. An **edge stays a fixed screen pixel** and fades out
+  below roughly 16px of cell — the constant-screen-width rule again.
+- Tinted regions get no border. Only the focused cell does.
+- **Hue carries identity, lightness carries state.** Nothing else varies.
+- **Contiguous same-coloured cells merge into one rounded blob** rather than reading as a
+  cluster of separate tiles. That is the difference between territory and a heatmap, and it
+  is the single biggest upgrade over drawing each cell independently. A corner is rounded
+  only where its neighbour is absent, so the blob falls out of per-cell drawing with no
+  region-union geometry.
+- **The camera is the only ambient movement.** Cells respond to change — a scale-in when
+  created, a slow pulse on the active one — and nothing else animates. This is also the
+  structural reason tiles cannot lag behind cells: if nothing animates per element during a
+  pan, nothing can fall behind.
+
 ## What renders the grid
 
 Edges are not entirely dead. Inside a focus view — everything else dimmed — a handful of
@@ -252,6 +290,26 @@ its pinch and wheel handlers for a trackpad pinch, Safari fires only wheel for c
 and only pinch for its own gesture events, and improving the wheel-based pinch algorithm is
 an open issue upstream. It is usable; it just leaves the cross-browser reconciliation with
 us, which is the exact work `d3-zoom` has already done.
+
+**Canvas, not GPU, at this size.** The lattice is painted, never built out of elements —
+but there is a spectrum, and the honest calibration matters:
+
+| Approach | When it wins |
+|---|---|
+| **2D canvas, redrawn from the camera** | Hundreds of visible cells. Ours |
+| Fragment shader on a fullscreen quad | Uniform infinite lattice, thousands of cells |
+| Data texture, one texel per cell, neighbour sampling | Cells must know about each other at scale; mipmaps give density tints far out |
+| SVG `<pattern>` | Never here — expensive on Safari when opacity changes during pan |
+
+The shader routes are better at ten thousand cells and wrong at four hundred. Two
+mismatches beyond size: `fract()` grids and chunked data textures both assume a **uniform
+lattice addressed by integer coordinates**, which a model of ordered tracks with stable ids
+and arbitrary insertion is not; and merging into blobs needs no shader, since a corner's
+radius depends only on whether its neighbours are present.
+
+Text and interactive content stay DOM, over the canvas, sharing one camera — a tile holds a
+terminal eventually. The discipline is the same either way: **React never touches the
+canvas contents; it reads the camera and draws on top.**
 
 **Dragging is ours, deliberately.** Every drag library computes deltas in screen pixels,
 and a tile lives inside a zoomed transform, so every delta needs dividing by the current
