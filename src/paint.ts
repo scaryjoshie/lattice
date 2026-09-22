@@ -41,6 +41,13 @@ export interface Plate {
   r1: number;
 }
 
+/** Occupants as a list. Searching the viewport for them allocated a key per cell. */
+export interface Occupant {
+  ci: number;
+  ri: number;
+  hue: number | null;
+}
+
 export interface Scene {
   camera: Camera;
   width: number;
@@ -48,11 +55,12 @@ export interface Scene {
   dpr: number;
   plates: readonly Plate[];
   cells: ReadonlyMap<string, Cell>;
+  occupied: readonly Occupant[];
   hover: readonly [number, number] | null;
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
-  const { camera, width, height, dpr, plates, cells, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = PAGE;
   ctx.fillRect(0, 0, width, height);
@@ -133,18 +141,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
 
   // Occupied cells last, so the ruling does not cross them.
   const fills = new Map<string, Path2D>();
-  for (let ri = r0; ri <= r1; ri++) {
-    for (let ci = c0; ci <= c1; ci++) {
-      const cell = at(ci, ri);
-      if (!cell?.occupied) continue;
-      const style = hue(cell.hue).fill;
-      let path = fills.get(style);
-      if (!path) {
-        path = new Path2D();
-        fills.set(style, path);
-      }
-      path.rect(sx(ci), sy(ri), size, size);
+  for (const spot of occupied) {
+    if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
+    const style = hue(spot.hue).fill;
+    let path = fills.get(style);
+    if (!path) {
+      path = new Path2D();
+      fills.set(style, path);
     }
+    path.rect(sx(spot.ci), sy(spot.ri), size, size);
   }
   for (const [style, path] of fills) {
     ctx.fillStyle = style;
