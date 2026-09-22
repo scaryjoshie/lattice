@@ -106,19 +106,42 @@ competes with the texture the gutters already make, carries a conventional meani
 (marquee, drop target, provisional), and shimmers at low zoom unless the dash length is
 tied to the cell size.
 
-A plate is a rounded rectangle on a slightly different surface, drawn *under* the cells.
-Everything inside it, occupied or empty, visibly sits on that surface, so membership is
-shown by where a cell *is* rather than by a line drawn around it. It stays rectangular, so
-line insertion is untouched. It is drawn behind, so cells inside pick up its tint through
-blending with no per-cell logic. Its edge sits in the gutter, so it costs no cell. The
-label sits in the gutter at its top-left corner and is the region's handle.
+**And the plate is not drawn — it is the cells themselves, tinted.** A separate rounded
+rectangle underneath would be a second kind of object with its own geometry, its own
+corners and its own relationship to the gutters. Instead: every cell in the region carries
+the region's hue at a light tint, and contiguous cells merge, so the plate's shape *emerges*
+from the cells rather than being drawn around them. One primitive, not two. The label sits
+in the gutter at the top-left corner and is the region's handle.
 
-**Nesting is a step of lightness per level**, which is the first answer to hierarchy that
-does not strain: a repository plate with a worktree plate one step in from it reads without
-either level paying rent in the other, and without nested outlines stacking up.
+The region stays rectangular in the model, so line insertion is untouched, but nothing
+requires the painted shape to look like a rectangle — merging draws whatever the cells
+actually are.
 
 Dashes then get a meaning instead of being the default: a region being drawn or resized, or
 one whose bounds are inferred rather than set.
+
+### Three questions, three channels
+
+| Question | Channel |
+|---|---|
+| Which group is this cell in? | **Hue** |
+| Is it occupied? | **Lightness** — light tint for a member cell, dark for one holding something |
+| What is the occupant doing? | **The mark inside the tile** |
+
+Nothing else varies. An earlier version of this had lightness carrying *state*; occupancy is
+the better job for it, because it is the question every cell answers, and state is a question
+only occupied cells answer.
+
+### Subgroups do not exist yet
+
+Nesting was going to be a step of lightness per level, which this encoding no longer has
+spare. That turns out not to matter: **there is currently only one level of region.**
+Repositories are a property rather than a container, and nested worktrees are deferred. So
+there is no second level to draw, and designing one now would be inventing a problem.
+
+When a real second level appears, the candidates are a hue shift within a family, or a
+child region inset within its parent so a ring of parent tint surrounds it — space carrying
+the nesting rather than a colour channel. Neither is worth choosing in advance.
 
 **A labelled region must be a scope.** A region that is not a worktree or a repository is a
 second way of putting things in boxes, which is a second containment hierarchy whatever the
@@ -306,6 +329,29 @@ mismatches beyond size: `fract()` grids and chunked data textures both assume a 
 lattice addressed by integer coordinates**, which a model of ordered tracks with stable ids
 and arbitrary insertion is not; and merging into blobs needs no shader, since a corner's
 radius depends only on whether its neighbours are present.
+
+### The discipline comes from immediate mode, not from the GPU
+
+The argument for going GPU-first is not really throughput — it is that game-style rendering
+*forces better practices*, while staying in the DOM keeps pulling the design back into web
+habits that have already cost us. That argument is right, and it is worth separating from
+the technology, because the benefit does not come from where the pixels are drawn.
+
+It comes from **immediate mode**: a render that draws the current state every frame, with no
+reconciliation, no retained element per cell, no layout engine holding an opinion, and an
+explicit camera. Every failure so far was the framework acting on our behalf — elements per
+cell re-rendered on pan, the camera routed through component state, a layout library
+measuring screen boxes and springing tiles toward them.
+
+A 2D canvas is immediate mode. It forces all of it. **The GPU is an optimisation of the same
+model, not a different one**, which is why adopting canvas now and swapping draw calls later
+costs nothing architecturally: the world model, the camera and the draw-from-state loop are
+identical either way.
+
+The hybrid is forced regardless, and is not a compromise. A tile holds a terminal, so real
+text and real input have to be DOM. Canvas paints the lattice, the tints and the merged
+regions; DOM holds the tiles, over the top, sharing one camera. Figma and Mapbox are both
+built this way.
 
 Text and interactive content stay DOM, over the canvas, sharing one camera — a tile holds a
 terminal eventually. The discipline is the same either way: **React never touches the
