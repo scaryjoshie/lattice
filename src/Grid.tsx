@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds } from "./model.ts";
-import { type Cell, paint } from "./paint.ts";
+import { type Cell, paint, type Plate } from "./paint.ts";
 import { Mark } from "./marks.tsx";
 import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
@@ -31,8 +31,35 @@ export function Grid() {
   const hover = useRef<[number, number] | null>(null);
 
   const grid = useGrid((s) => s.grid);
-  const model = useRef(grid);
-  model.current = grid;
+
+  /**
+   * Derived from the model, so it is rebuilt when the model changes and never on a camera
+   * event. Recomputing it per wheel event was allocating a map hundreds of times a second
+   * for data that had not moved.
+   */
+  const scene = useMemo(() => {
+    const cells = new Map<string, Cell>();
+    const plates: Plate[] = [];
+    for (const region of grid.regions) {
+      const { c0, c1, r0, r1 } = regionBounds(grid, region);
+      plates.push({ hue: region.hue, c0, c1, r0, r1 });
+      for (let ri = r0; ri <= r1; ri++) {
+        for (let ci = c0; ci <= c1; ci++) {
+          cells.set(`${ci},${ri}`, { hue: region.hue, occupied: false });
+        }
+      }
+    }
+    for (const tile of grid.tiles) {
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const existing = cells.get(`${ci},${ri}`);
+      cells.set(`${ci},${ri}`, { hue: existing?.hue ?? null, occupied: true });
+    }
+    return { cells, plates };
+  }, [grid]);
+
+  const model = useRef(scene);
+  model.current = scene;
 
   const draw = useCallback((camera: Camera) => {
     const el = canvas.current;
@@ -47,23 +74,8 @@ export function Grid() {
     const ctx = el.getContext("2d");
     if (!ctx) return;
 
-    // One flat map from cell to what is true of it. Built per draw because it is small,
-    // and because the paint needs to ask about neighbours, which a range cannot answer.
-    const g = model.current;
-    const cells = new Map<string, Cell>();
-    for (const region of g.regions) {
-      const { c0, c1, r0, r1 } = regionBounds(g, region);
-      for (let ri = r0; ri <= r1; ri++) {
-        for (let ci = c0; ci <= c1; ci++) cells.set(`${ci},${ri}`, { hue: region.hue, occupied: false });
-      }
-    }
-    for (const tile of g.tiles) {
-      const ci = indexOfTrack(g.columns, tile.columnId);
-      const ri = indexOfTrack(g.rows, tile.rowId);
-      const existing = cells.get(`${ci},${ri}`);
-      cells.set(`${ci},${ri}`, { hue: existing?.hue ?? null, occupied: true });
-    }
-    paint(ctx, { camera, width, height, dpr, cells, hover: hover.current });
+    const { cells, plates } = model.current;
+    paint(ctx, { camera, width, height, dpr, plates, cells, hover: hover.current });
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
@@ -72,12 +84,28 @@ export function Grid() {
     }
   }, []);
 
-  const camera = useCamera(viewport, draw);
+  /**
+   * A trackpad emits wheel events faster than the display refreshes, and painting on each
+   * one does work nobody sees. One paint per frame, always the latest camera.
+   */
+  const queued = useRef(0);
+  const schedule = useCallback(
+    (next: Camera) => {
+      if (queued.current) return;
+      queued.current = requestAnimationFrame(() => {
+        queued.current = 0;
+        draw(next);
+      });
+    },
+    [draw],
+  );
+
+  const camera = useCamera(viewport, schedule);
 
   // Redraw on model change and on resize. Both are human-paced.
   useEffect(() => {
     draw(camera.current);
-  }, [draw, camera, grid]);
+  }, [draw, camera, scene]);
 
   useEffect(() => {
     const onResize = () => draw(camera.current);
@@ -94,12 +122,12 @@ export function Grid() {
     if (prev === next) return;
     if (prev && next && prev[0] === next[0] && prev[1] === next[1]) return;
     hover.current = next;
-    draw(camera.current);
+    schedule(camera.current);
   };
 
   const onLeave = () => {
     hover.current = null;
-    draw(camera.current);
+    schedule(camera.current);
   };
 
   return (
