@@ -27,6 +27,8 @@ const RULE = 1;
 const FOCUS_EDGE = 2.5;
 /** Cap height as a fraction of the cell, so text scales with the grid it sits in. */
 const TEXT = 0.3;
+/** Left padding, also as a fraction of the cell, so the inset scales too. */
+const TEXT_INSET = 0.26;
 const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
@@ -174,17 +176,28 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.fill(path);
   }
 
-  // Text, on whatever surface it lands on. It fades with the ruling: below that size it is
-  // unreadable anyway, and a legible bar standing in for it is a later problem.
+  // Text runs. The span is cleared back to the surface it sits on, which takes the ruling
+  // out from under the words, then outlined so the cells it occupies are visible, then
+  // written left-aligned. Clearing rather than skipping keeps the ruling ignorant of text.
   if (rule > 0) {
     ctx.globalAlpha = rule;
-    ctx.textAlign = "center";
+    ctx.lineWidth = RULE;
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.font = `${Math.round(size * TEXT)}px ${FONT}`;
+    const snap = (n: number) => Math.round(n) + 0.5;
     for (const run of texts) {
       if (run.ci + run.span - 1 < c0 || run.ci > c1 || run.ri < r0 || run.ri > r1) continue;
-      ctx.fillStyle = hue(run.hue).ink;
-      ctx.fillText(run.text, sx(run.ci) + (size * run.span) / 2, sy(run.ri) + size / 2);
+      const h = hue(run.hue);
+      const x = sx(run.ci);
+      const y = sy(run.ri);
+      const w = size * run.span;
+      ctx.fillStyle = run.hue === null ? PAGE : h.tint;
+      ctx.fillRect(x, y, w, size);
+      ctx.strokeStyle = h.edge;
+      ctx.strokeRect(snap(x), snap(y), Math.round(w) - 1, Math.round(size) - 1);
+      ctx.fillStyle = h.ink;
+      ctx.fillText(run.text, x + size * TEXT_INSET, y + size / 2);
     }
     ctx.globalAlpha = 1;
   }
