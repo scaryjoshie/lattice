@@ -1,4 +1,4 @@
-import { CELL, type Camera, GUTTER, RADIUS, visible, worldX } from "./geometry.ts";
+import { CELL, type Camera, RADIUS, visible, worldX } from "./geometry.ts";
 import { hue } from "./palette.ts";
 
 /**
@@ -6,10 +6,10 @@ import { hue } from "./palette.ts";
  * the indices on screen — so the cost follows the window rather than the world, and nothing
  * about it exists in the DOM to be reconciled.
  *
- * A region is one rounded rectangle laid *under* the lattice, covering its whole extent
- * including the gutters, so the cells inside it sit on a different surface. Membership is
- * shown by where a cell is rather than by anything drawn per cell, which is both the
- * clearer reading and one draw call instead of one per cell.
+ * A region is one rounded rectangle laid *under* the lattice, spanning from the outer edge
+ * of its first cell to the outer edge of its last, so the cells inside it sit on a
+ * different surface. Membership is shown by where a cell is rather than by anything drawn
+ * per cell, which is both the clearer reading and one draw call instead of one per cell.
  *
  * Everything else follows the table in palette.ts: an outline means the cell is empty, a
  * fill means it holds something, and an outline is always the hue of what it outlines.
@@ -64,20 +64,19 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   const [r0, r1] = visible(camera.y, height, k);
   const size = CELL * k;
   const radius = RADIUS * k;
-  const half = (GUTTER / 2) * k;
   const edge = clamp((size - FADE_FROM) / (FADE_TO - FADE_FROM));
   const at = (ci: number, ri: number) => cells.get(`${ci},${ri}`);
   const sx = (ci: number) => worldX(ci) * k + camera.x;
   const sy = (ri: number) => worldX(ri) * k + camera.y;
 
-  // Plates, under everything. The edge sits in the gutter, so a plate costs no cell.
+  // Plates, under everything, flush with the cells at their edges.
   for (const plate of plates) {
     if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
-    const x = sx(plate.c0) - half;
-    const y = sy(plate.r0) - half;
+    const x = sx(plate.c0);
+    const y = sy(plate.r0);
     ctx.fillStyle = hue(plate.hue).tint;
     ctx.beginPath();
-    ctx.roundRect(x, y, sx(plate.c1) + size + half - x, sy(plate.r1) + size + half - y, radius + half);
+    ctx.roundRect(x, y, sx(plate.c1) + size - x, sy(plate.r1) + size - y, radius);
     ctx.fill();
   }
 

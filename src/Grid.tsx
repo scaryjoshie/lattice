@@ -67,9 +67,13 @@ export function Grid() {
     if (!el || !host) return;
     const dpr = window.devicePixelRatio || 1;
     const { clientWidth: width, clientHeight: height } = host;
-    if (el.width !== width * dpr || el.height !== height * dpr) {
-      el.width = width * dpr;
-      el.height = height * dpr;
+    // Rounded before comparing: canvas.width is an integer, so a fractional dpr would make
+    // this compare unequal forever and reallocate the backing store every single frame.
+    const w = Math.round(width * dpr);
+    const h = Math.round(height * dpr);
+    if (el.width !== w || el.height !== h) {
+      el.width = w;
+      el.height = h;
     }
     const ctx = el.getContext("2d");
     if (!ctx) return;
@@ -89,12 +93,20 @@ export function Grid() {
    * one does work nobody sees. One paint per frame, always the latest camera.
    */
   const queued = useRef(0);
+  /**
+   * The latest camera, not the one that happened to queue the frame. Capturing `next` in
+   * the closure instead paints the *first* event of each batch and discards the rest, so
+   * every frame is stale by a variable amount — which reads as stutter while producing no
+   * slow frames at all, and is why batching the drawing changed nothing.
+   */
+  const latest = useRef<Camera>({ x: 0, y: 0, k: 1 });
   const schedule = useCallback(
     (next: Camera) => {
+      latest.current = next;
       if (queued.current) return;
       queued.current = requestAnimationFrame(() => {
         queued.current = 0;
-        draw(next);
+        draw(latest.current);
       });
     },
     [draw],
@@ -108,10 +120,10 @@ export function Grid() {
   }, [draw, camera, scene]);
 
   useEffect(() => {
-    const onResize = () => draw(camera.current);
+    const onResize = () => schedule(camera.current);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [draw, camera]);
+  }, [schedule, camera]);
 
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
