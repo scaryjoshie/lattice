@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
-import { indexOfTrack } from "./model.ts";
-import { paint } from "./paint.ts";
+import { indexOfTrack, regionBounds } from "./model.ts";
+import { type Cell, paint } from "./paint.ts";
+import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
 
 /**
@@ -36,13 +37,23 @@ export function Grid() {
     const ctx = el.getContext("2d");
     if (!ctx) return;
 
+    // One flat map from cell to what is true of it. Built per draw because it is small,
+    // and because the paint needs to ask about neighbours, which a range cannot answer.
     const g = model.current;
-    const occupied = new Set(
-      g.tiles.map(
-        (t) => `${indexOfTrack(g.columns, t.columnId)},${indexOfTrack(g.rows, t.rowId)}`,
-      ),
-    );
-    paint(ctx, { camera, width, height, dpr, occupied, hover: hover.current });
+    const cells = new Map<string, Cell>();
+    for (const region of g.regions) {
+      const { c0, c1, r0, r1 } = regionBounds(g, region);
+      for (let ri = r0; ri <= r1; ri++) {
+        for (let ci = c0; ci <= c1; ci++) cells.set(`${ci},${ri}`, { hue: region.hue, occupied: false });
+      }
+    }
+    for (const tile of g.tiles) {
+      const ci = indexOfTrack(g.columns, tile.columnId);
+      const ri = indexOfTrack(g.rows, tile.rowId);
+      const existing = cells.get(`${ci},${ri}`);
+      cells.set(`${ci},${ri}`, { hue: existing?.hue ?? null, occupied: true });
+    }
+    paint(ctx, { camera, width, height, dpr, cells, hover: hover.current });
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
@@ -70,7 +81,8 @@ export function Grid() {
     const box = host.getBoundingClientRect();
     const next = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
     const prev = hover.current;
-    if (prev && prev[0] === next[0] && prev[1] === next[1]) return;
+    if (prev === next) return;
+    if (prev && next && prev[0] === next[0] && prev[1] === next[1]) return;
     hover.current = next;
     draw(camera.current);
   };
@@ -84,6 +96,23 @@ export function Grid() {
     <div className="viewport" ref={viewport} onPointerMove={onMove} onPointerLeave={onLeave}>
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
+        {grid.regions.map((region) => {
+          const { c0, r0 } = regionBounds(grid, region);
+          return (
+            <span
+              key={region.id}
+              className="label"
+              style={{
+                left: worldX(c0),
+                top: worldX(r0),
+                color: hue(region.hue).ink,
+                background: hue(region.hue).tint,
+              }}
+            >
+              {region.label}
+            </span>
+          );
+        })}
         {grid.tiles.map((tile) => {
           const ci = indexOfTrack(grid.columns, tile.columnId);
           const ri = indexOfTrack(grid.rows, tile.rowId);

@@ -22,10 +22,28 @@ export interface Tile {
   readonly rowId: string;
 }
 
+/**
+ * A region is rectangular in the model — that is what keeps room always makeable — but
+ * nothing requires its painted shape to look rectangular, because the paint merges cells
+ * rather than drawing a box. Stored as two track ranges, not a cell list, so inserting a
+ * track inside it costs nothing.
+ */
+export interface Region {
+  readonly id: string;
+  readonly label: string;
+  /** Index into the palette. Hue says which group and nothing else does. */
+  readonly hue: number;
+  readonly columnStart: string;
+  readonly columnEnd: string;
+  readonly rowStart: string;
+  readonly rowEnd: string;
+}
+
 export interface Grid {
   readonly columns: readonly Track[];
   readonly rows: readonly Track[];
   readonly tiles: readonly Tile[];
+  readonly regions: readonly Region[];
 }
 
 let counter = 0;
@@ -56,14 +74,14 @@ export function insertColumnsAt(grid: Grid, at: number, ids: readonly string[]):
   if (ids.length === 0) return grid;
   const columns = grid.columns.slice();
   columns.splice(at, 0, ...ids.map((id) => ({ id })));
-  return { columns, rows: grid.rows, tiles: grid.tiles };
+  return { ...grid, columns };
 }
 
 export function insertRowsAt(grid: Grid, at: number, ids: readonly string[]): Grid {
   if (ids.length === 0) return grid;
   const rows = grid.rows.slice();
   rows.splice(at, 0, ...ids.map((id) => ({ id })));
-  return { columns: grid.columns, rows, tiles: grid.tiles };
+  return { ...grid, rows };
 }
 
 export function insertColumnAfter(grid: Grid, columnId: string, id = nextId("c")): Grid {
@@ -104,24 +122,41 @@ export function moveTile(grid: Grid, tileId: string, columnId: string, rowId: st
   return { ...grid, tiles };
 }
 
+/** The index box a region covers. Indices, because membership is an ordering question. */
+export function regionBounds(
+  grid: Grid,
+  region: Region,
+): { c0: number; c1: number; r0: number; r1: number } {
+  return {
+    c0: indexOfTrack(grid.columns, region.columnStart),
+    c1: indexOfTrack(grid.columns, region.columnEnd),
+    r0: indexOfTrack(grid.rows, region.rowStart),
+    r1: indexOfTrack(grid.rows, region.rowEnd),
+  };
+}
+
 /* Seed -------------------------------------------------------------------- */
 
 export function seed(): Grid {
-  const columns = Array.from({ length: 14 }, () => ({ id: nextId("c") }));
-  const rows = Array.from({ length: 9 }, () => ({ id: nextId("r") }));
-  const cells: [number, number][] = [
-    [3, 2],
-    [4, 2],
-    [4, 3],
-    [8, 1],
-    [9, 4],
-    [6, 6],
-    [11, 6],
+  const columns = Array.from({ length: 18 }, () => ({ id: nextId("c") }));
+  const rows = Array.from({ length: 11 }, () => ({ id: nextId("r") }));
+  const col = (i: number) => columns[i]!.id;
+  const row = (i: number) => rows[i]!.id;
+
+  const regions: Region[] = [
+    { id: nextId("g"), label: "auth", hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
+    { id: nextId("g"), label: "infra", hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
+    { id: nextId("g"), label: "research", hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
+    { id: nextId("g"), label: "planner", hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
-  const tiles = cells.flatMap(([c, r]) => {
-    const column = columns[c];
-    const row = rows[r];
-    return column && row ? [{ id: nextId("t"), columnId: column.id, rowId: row.id }] : [];
-  });
-  return { columns, rows, tiles };
+
+  const cells: [number, number][] = [
+    [3, 2], [3, 3], [2, 3],
+    [12, 2], [13, 2],
+    [4, 7], [5, 7], [5, 8],
+    [13, 7],
+    [8, 4],
+  ];
+  const tiles = cells.map(([c, r]) => ({ id: nextId("t"), columnId: col(c), rowId: row(r) }));
+  return { columns, rows, tiles, regions };
 }

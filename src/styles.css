@@ -68,3 +68,18 @@ body {
   border-radius: 50%;
   background: var(--ink);
 }
+
+/*
+ * A region's label sits in the gutter above its first cell, outside the grid, so it costs
+ * no cell and cannot be mistaken for one.
+ */
+.label {
+  position: absolute;
+  transform: translateY(-100%);
+  padding: 2px 7px 4px;
+  border-radius: 6px 6px 0 0;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: auto;
+}

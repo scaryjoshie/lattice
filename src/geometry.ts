@@ -25,11 +25,20 @@ export function visible(offset: number, size: number, k: number): [number, numbe
   return [first, last];
 }
 
-/** Screen point to the cell under it. Fractional parts inside the gutter still round to a
- *  cell, which is what makes the gutter feel like part of the cell it borders. */
-export function cellAt(camera: Camera, sx: number, sy: number): [number, number] {
-  return [
-    Math.floor((sx - camera.x) / camera.k / PITCH),
-    Math.floor((sy - camera.y) / camera.k / PITCH),
-  ];
+/**
+ * The cell under a screen point, or null when the point is in a gutter.
+ *
+ * Rounding the gutter into its neighbouring cell would mean something is always hovered,
+ * which reads as a lingering selection rather than as a pointer. The gaps are part of the
+ * page, not part of the cells they separate.
+ */
+export function cellAt(camera: Camera, sx: number, sy: number): [number, number] | null {
+  const wx = (sx - camera.x) / camera.k;
+  const wy = (sy - camera.y) / camera.k;
+  const ci = Math.floor(wx / PITCH);
+  const ri = Math.floor(wy / PITCH);
+  const withinX = wx - ci * PITCH;
+  const withinY = wy - ri * PITCH;
+  if (withinX > CELL || withinY > CELL) return null;
+  return [ci, ri];
 }
