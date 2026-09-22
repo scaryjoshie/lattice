@@ -62,26 +62,8 @@ body {
   pointer-events: auto;
 }
 
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-
-/*
- * A label sits in the gutter above its cell, outside the lattice, so it costs no cell and
- * cannot be mistaken for one. It carries its owner's hue, like everything else does.
- */
-.label {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 2px 7px 5px;
-  border-radius: 7px 7px 0 0;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
+.mark {
+  display: grid;
+  place-items: center;
+  line-height: 0;
 }

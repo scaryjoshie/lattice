@@ -3,6 +3,7 @@ import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds } from "./model.ts";
 import { type Cell, paint } from "./paint.ts";
+import { Mark } from "./marks.tsx";
 import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
 
@@ -115,10 +116,9 @@ export function Grid() {
               className="tile"
               style={{ left: worldX(ci), top: worldX(ri), width: CELL, height: CELL }}
             >
-              <span className="label" style={{ color: h.ink, background: h.tint }}>
-                {tile.name}
+              <span className="mark" style={{ color: h.ink }}>
+                <Mark kind={tile.kind} />
               </span>
-              <span className="dot" style={{ background: h.ink }} />
             </div>
           );
         })}

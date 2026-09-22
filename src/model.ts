@@ -16,9 +16,12 @@ export interface Track {
   readonly id: string;
 }
 
+/** What is running in a tile. Not a label — it decides which mark is drawn. */
+export type TileKind = "claude" | "codex" | "shell";
+
 export interface Tile {
   readonly id: string;
-  readonly name: string;
+  readonly kind: TileKind;
   readonly columnId: string;
   readonly rowId: string;
 }
@@ -31,7 +34,6 @@ export interface Tile {
  */
 export interface Region {
   readonly id: string;
-  readonly label: string;
   /** Index into the palette. Hue says which group and nothing else does. */
   readonly hue: number;
   readonly columnStart: string;
@@ -101,11 +103,11 @@ export function addTile(
   grid: Grid,
   columnId: string,
   rowId: string,
-  name: string,
+  kind: TileKind,
   id = nextId("t"),
 ): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
-  return { ...grid, tiles: [...grid.tiles, { id, name, columnId, rowId }] };
+  return { ...grid, tiles: [...grid.tiles, { id, kind, columnId, rowId }] };
 }
 
 export function removeTile(grid: Grid, tileId: string): Grid {
@@ -151,22 +153,22 @@ export function seed(): Grid {
   const row = (i: number) => rows[i]!.id;
 
   const regions: Region[] = [
-    { id: nextId("g"), label: "auth", hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
-    { id: nextId("g"), label: "infra", hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
-    { id: nextId("g"), label: "research", hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
-    { id: nextId("g"), label: "planner", hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
+    { id: nextId("g"), hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
+    { id: nextId("g"), hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
+    { id: nextId("g"), hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
+    { id: nextId("g"), hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
 
-  const cells: [number, number, string][] = [
+  const cells: [number, number, TileKind][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
     [4, 7, "claude"], [5, 7, "claude"], [5, 8, "codex"],
     [13, 7, "claude"],
     [8, 4, "shell"],
   ];
-  const tiles = cells.map(([c, r, name]) => ({
+  const tiles = cells.map(([c, r, kind]) => ({
     id: nextId("t"),
-    name,
+    kind,
     columnId: col(c),
     rowId: row(r),
   }));

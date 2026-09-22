@@ -1,4 +1,4 @@
-import { CELL, type Camera, GUTTER, RADIUS, visible, worldX } from "./geometry.ts";
+import { CELL, type Camera, RADIUS, visible, worldX } from "./geometry.ts";
 import { hue, NEUTRAL } from "./palette.ts";
 
 /**
@@ -13,19 +13,8 @@ import { hue, NEUTRAL } from "./palette.ts";
  * get small, so zooming out dissolves the lattice into the page rather than crowding it
  * with hairlines.
  *
- * Contiguous cells of the same colour are drawn as one shape rather than as neighbours,
- * which needs no region geometry — only a membership test. A cell contributes up to four
- * pieces:
- *
- *   its own rectangle, keeping a corner's radius only where both of that corner's edges
- *   face nothing;
- *   a bridge filling the gutter to its right neighbour, and another to the one below;
- *   a patch over the small square where four cells meet, which no bridge covers.
- *
- * An earlier version instead grew each cell's rectangle half a gutter toward every present
- * neighbour. That is simpler and wrong: the growth runs the whole length of the side, so at
- * an inner corner a cell juts out past the neighbour it was reaching for, and the shape
- * gets a step in it. Bridges only ever occupy the gap they belong to.
+ * Every cell is drawn as itself. Contiguous cells of one colour are not merged into a
+ * single shape: the grid is supposed to read as cells.
  */
 
 const PAGE = "#f5f5f6";
@@ -55,39 +44,6 @@ export interface Scene {
 
 const key = (ci: number, ri: number) => `${ci},${ri}`;
 
-/**
- * One member cell of a merged shape. `member` answers whether a neighbour belongs to the
- * same shape. Pieces are opaque and never overlap, so they can be filled as they are built.
- */
-function piece(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  gap: number,
-  radius: number,
-  member: (dc: number, dr: number) => boolean,
-): void {
-  const l = member(-1, 0);
-  const r = member(1, 0);
-  const u = member(0, -1);
-  const d = member(0, 1);
-
-  ctx.beginPath();
-  ctx.roundRect(x, y, size, size, [
-    !l && !u ? radius : 0,
-    !r && !u ? radius : 0,
-    !r && !d ? radius : 0,
-    !l && !d ? radius : 0,
-  ]);
-  ctx.fill();
-
-  if (r) ctx.fillRect(x + size, y, gap, size);
-  if (d) ctx.fillRect(x, y + size, size, gap);
-  // Where four cells meet, the gutters cross and leave a square hole in the middle.
-  if (r && d && member(1, 1)) ctx.fillRect(x + size, y + size, gap, gap);
-}
-
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   const { camera, width, height, dpr, cells, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -98,7 +54,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   const [r0, r1] = visible(camera.y, height, camera.k);
   const size = CELL * camera.k;
   const radius = RADIUS * camera.k;
-  const gap = GUTTER * camera.k;
   const edge = clamp((size - FADE_FROM) / (FADE_TO - FADE_FROM));
   const at = (ci: number, ri: number) => cells.get(key(ci, ri));
   const sx = (ci: number) => worldX(ci) * camera.k + camera.x;
@@ -112,7 +67,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const cell = at(ci, ri);
       if (cell?.hue == null) continue;
       ctx.fillStyle = hue(cell.hue).tint;
-      piece(ctx, sx(ci), sy(ri), size, gap, radius, (dc, dr) => at(ci + dc, ri + dr)?.hue === cell.hue);
+      ctx.beginPath();
+      ctx.roundRect(sx(ci), sy(ri), size, size, radius);
+      ctx.fill();
     }
   }
 
@@ -122,10 +79,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const cell = at(ci, ri);
       if (!cell?.occupied) continue;
       ctx.fillStyle = hue(cell.hue).fill;
-      piece(ctx, sx(ci), sy(ri), size, gap, radius, (dc, dr) => {
-        const n = at(ci + dc, ri + dr);
-        return n?.occupied === true && n.hue === cell.hue;
-      });
+      ctx.beginPath();
+      ctx.roundRect(sx(ci), sy(ri), size, size, radius);
+      ctx.fill();
     }
   }
 
