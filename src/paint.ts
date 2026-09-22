@@ -10,15 +10,24 @@ import { hue, LOOSE } from "./palette.ts";
  * small so that zooming out dissolves the lattice into the page instead of crowding it with
  * hairlines. A cell that belongs to a region is a tint and gets no outline at all.
  *
- * Contiguous cells of the same colour are drawn as one shape rather than as neighbours:
- * each cell's rectangle reaches half a gutter toward every present neighbour so the gaps
- * close, and a corner is rounded only where both of its edges face nothing. Territory
- * rather than a heatmap, and it needs no region geometry — only a membership test.
+ * Contiguous cells of the same colour are drawn as one shape rather than as neighbours,
+ * which needs no region geometry — only a membership test. A cell contributes up to four
+ * pieces:
+ *
+ *   its own rectangle, keeping a corner's radius only where both of that corner's edges
+ *   face nothing;
+ *   a bridge filling the gutter to its right neighbour, and another to the one below;
+ *   a patch over the small square where four cells meet, which no bridge covers.
+ *
+ * An earlier version instead grew each cell's rectangle half a gutter toward every present
+ * neighbour. That is simpler and wrong: the growth runs the whole length of the side, so at
+ * an inner corner a cell juts out past the neighbour it was reaching for, and the shape
+ * gets a step in it. Bridges only ever occupy the gap they belong to.
  */
 
 const PAGE = "#f5f5f6";
-const LINE = "#dcdce2";
-const HOVER_LINE = "#b1b4bf";
+const LINE = "#e4e4e9";
+const HOVER_LINE = "#bcbfc9";
 const HOVER_FILL = "#eceef2";
 
 /** Below roughly this many screen pixels an edge is noise rather than structure. */
@@ -47,34 +56,36 @@ export interface Scene {
 const key = (ci: number, ri: number) => `${ci},${ri}`;
 
 /**
- * One cell of a merged shape. `member` answers whether a neighbour belongs to the same
- * shape; the rectangle grows toward the ones that do and keeps its corner only where it
- * faces nothing.
+ * One member cell of a merged shape. `member` answers whether a neighbour belongs to the
+ * same shape. Pieces are opaque and never overlap, so they can be filled as they are built.
  */
-function blob(
+function piece(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   size: number,
+  gap: number,
   radius: number,
-  reach: number,
   member: (dc: number, dr: number) => boolean,
 ): void {
   const l = member(-1, 0);
   const r = member(1, 0);
   const u = member(0, -1);
   const d = member(0, 1);
-  const x0 = x - (l ? reach : 0);
-  const y0 = y - (u ? reach : 0);
-  const w = size + (l ? reach : 0) + (r ? reach : 0);
-  const h = size + (u ? reach : 0) + (d ? reach : 0);
+
   ctx.beginPath();
-  ctx.roundRect(x0, y0, w, h, [
+  ctx.roundRect(x, y, size, size, [
     !l && !u ? radius : 0,
     !r && !u ? radius : 0,
     !r && !d ? radius : 0,
     !l && !d ? radius : 0,
   ]);
+  ctx.fill();
+
+  if (r) ctx.fillRect(x + size, y, gap, size);
+  if (d) ctx.fillRect(x, y + size, size, gap);
+  // Where four cells meet, the gutters cross and leave a square hole in the middle.
+  if (r && d && member(1, 1)) ctx.fillRect(x + size, y + size, gap, gap);
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
@@ -87,7 +98,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   const [r0, r1] = visible(camera.y, height, camera.k);
   const size = CELL * camera.k;
   const radius = RADIUS * camera.k;
-  const reach = (GUTTER / 2) * camera.k;
+  const gap = GUTTER * camera.k;
   const edge = clamp((size - FADE_FROM) / (FADE_TO - FADE_FROM));
   const at = (ci: number, ri: number) => cells.get(key(ci, ri));
   const sx = (ci: number) => worldX(ci) * camera.k + camera.x;
@@ -101,8 +112,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const cell = at(ci, ri);
       if (cell?.hue == null) continue;
       ctx.fillStyle = hue(cell.hue).tint;
-      blob(ctx, sx(ci), sy(ri), size, radius, reach, (dc, dr) => at(ci + dc, ri + dr)?.hue === cell.hue);
-      ctx.fill();
+      piece(ctx, sx(ci), sy(ri), size, gap, radius, (dc, dr) => at(ci + dc, ri + dr)?.hue === cell.hue);
     }
   }
 
@@ -112,11 +122,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const cell = at(ci, ri);
       if (!cell?.occupied) continue;
       ctx.fillStyle = (cell.hue == null ? LOOSE : hue(cell.hue)).fill;
-      blob(ctx, sx(ci), sy(ri), size, radius, reach, (dc, dr) => {
+      piece(ctx, sx(ci), sy(ri), size, gap, radius, (dc, dr) => {
         const n = at(ci + dc, ri + dr);
         return n?.occupied === true && n.hue === cell.hue;
       });
-      ctx.fill();
     }
   }
 
