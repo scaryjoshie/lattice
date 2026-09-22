@@ -18,7 +18,12 @@ export interface Hue {
   fill: string;
   /** Outline at rest. Only the neutral hue ever shows one; a tint needs no border. */
   line: string;
-  /** Outline when focused. Always the hue of the thing it outlines. */
+  /**
+   * Outline when focused. Always the hue of the thing it outlines, and always dark enough
+   * to read on that hue's `fill` — the darkest surface a ring will ever sit on. Choosing it
+   * against `tint` instead is how the neutral hue ended up with a ring nearly invisible on
+   * its own occupied cells.
+   */
   edge: string;
   /** Label ink and the occupant's mark. */
   ink: string;
@@ -43,7 +48,7 @@ export const NEUTRAL: Hue = {
   tint: "#eeeef1",
   fill: "#c6c9d2",
   line: "#e0e0e5",
-  edge: "#b6b9c3",
+  edge: "#868b9a",
   ink: "#5f6270",
 };
 
