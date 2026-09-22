@@ -25,6 +25,9 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
+/** Cap height as a fraction of the cell, so text scales with the grid it sits in. */
+const TEXT = 0.3;
+const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
@@ -39,6 +42,20 @@ export interface Plate {
   c1: number;
   r0: number;
   r1: number;
+}
+
+/**
+ * Text is canvas content, not a floating tag. It occupies cells like anything else, so it
+ * has to be made room for, and because it is redrawn every frame it stays crisp at every
+ * zoom rather than being a rasterised layer scaled up.
+ */
+export interface TextRun {
+  ci: number;
+  ri: number;
+  /** Columns occupied, starting at `ci`. */
+  span: number;
+  text: string;
+  hue: number | null;
 }
 
 /** Occupants as a list. Searching the viewport for them allocated a key per cell. */
@@ -56,11 +73,12 @@ export interface Scene {
   plates: readonly Plate[];
   cells: ReadonlyMap<string, Cell>;
   occupied: readonly Occupant[];
+  texts: readonly TextRun[];
   hover: readonly [number, number] | null;
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
-  const { camera, width, height, dpr, plates, cells, occupied, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, texts, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = PAGE;
   ctx.fillRect(0, 0, width, height);
@@ -154,6 +172,21 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   for (const [style, path] of fills) {
     ctx.fillStyle = style;
     ctx.fill(path);
+  }
+
+  // Text, on whatever surface it lands on. It fades with the ruling: below that size it is
+  // unreadable anyway, and a legible bar standing in for it is a later problem.
+  if (rule > 0) {
+    ctx.globalAlpha = rule;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${Math.round(size * TEXT)}px ${FONT}`;
+    for (const run of texts) {
+      if (run.ci + run.span - 1 < c0 || run.ci > c1 || run.ri < r0 || run.ri > r1) continue;
+      ctx.fillStyle = hue(run.hue).ink;
+      ctx.fillText(run.text, sx(run.ci) + (size * run.span) / 2, sy(run.ri) + size / 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.

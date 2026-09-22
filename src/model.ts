@@ -16,14 +16,18 @@ export interface Track {
   readonly id: string;
 }
 
-/** What is running in a tile. Not a label — it decides which mark is drawn. */
-export type TileKind = "claude" | "codex" | "shell";
+/** What a tile holds. Not a label — it decides what is drawn. */
+export type TileKind = "claude" | "codex" | "shell" | "text";
 
 export interface Tile {
   readonly id: string;
   readonly kind: TileKind;
   readonly columnId: string;
   readonly rowId: string;
+  /** Text tiles only. */
+  readonly text?: string;
+  /** Columns occupied, starting at `columnId`. Defaults to one. */
+  readonly span?: number;
 }
 
 /**
@@ -159,6 +163,13 @@ export function seed(): Grid {
     { id: nextId("g"), hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
 
+  const texts: [number, number, number, string][] = [
+    [2, 1, 3, "auth"],
+    [11, 1, 4, "infra"],
+    [3, 6, 4, "research"],
+    [12, 6, 3, "planner"],
+  ];
+
   const cells: [number, number, TileKind][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
@@ -166,11 +177,21 @@ export function seed(): Grid {
     [13, 7, "claude"],
     [8, 4, "shell"],
   ];
-  const tiles = cells.map(([c, r, kind]) => ({
-    id: nextId("t"),
-    kind,
-    columnId: col(c),
-    rowId: row(r),
-  }));
+  const tiles: Tile[] = [
+    ...texts.map(([c, r, span, text]) => ({
+      id: nextId("t"),
+      kind: "text" as const,
+      columnId: col(c),
+      rowId: row(r),
+      text,
+      span,
+    })),
+    ...cells.map(([c, r, kind]) => ({
+      id: nextId("t"),
+      kind,
+      columnId: col(c),
+      rowId: row(r),
+    })),
+  ];
   return { columns, rows, tiles, regions };
 }

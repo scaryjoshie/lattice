@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds } from "./model.ts";
-import { type Cell, paint, type Plate } from "./paint.ts";
+import { type Cell, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
 import { Mark } from "./marks.tsx";
 import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
@@ -52,15 +52,21 @@ export function Grid() {
     for (const tile of grid.tiles) {
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
-      const existing = cells.get(`${ci},${ri}`);
-      cells.set(`${ci},${ri}`, { hue: existing?.hue ?? null, occupied: true });
+      for (let n = 0; n < (tile.span ?? 1); n++) {
+        const existing = cells.get(`${ci + n},${ri}`);
+        cells.set(`${ci + n},${ri}`, { hue: existing?.hue ?? null, occupied: true });
+      }
     }
-    const occupied = grid.tiles.map((tile) => {
+    const occupied: Occupant[] = [];
+    const texts: TextRun[] = [];
+    for (const tile of grid.tiles) {
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
-      return { ci, ri, hue: cells.get(`${ci},${ri}`)?.hue ?? null };
-    });
-    return { cells, plates, occupied };
+      const h = cells.get(`${ci},${ri}`)?.hue ?? null;
+      if (tile.kind === "text") texts.push({ ci, ri, span: tile.span ?? 1, text: tile.text ?? "", hue: h });
+      else occupied.push({ ci, ri, hue: h });
+    }
+    return { cells, plates, occupied, texts };
   }, [grid]);
 
   const model = useRef(scene);
@@ -85,8 +91,8 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied } = model.current;
-    paint(ctx, { camera, width, height, dpr, plates, cells, occupied, hover: hover.current });
+    const { cells, plates, occupied, texts } = model.current;
+    paint(ctx, { camera, width, height, dpr, plates, cells, occupied, texts, hover: hover.current });
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
@@ -154,6 +160,7 @@ export function Grid() {
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
         {grid.tiles.map((tile) => {
+          if (tile.kind === "text") return null;
           const ci = indexOfTrack(grid.columns, tile.columnId);
           const ri = indexOfTrack(grid.rows, tile.rowId);
           const h = hue(regionHue(grid, ci, ri));
