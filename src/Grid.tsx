@@ -55,7 +55,12 @@ export function Grid() {
       const existing = cells.get(`${ci},${ri}`);
       cells.set(`${ci},${ri}`, { hue: existing?.hue ?? null, occupied: true });
     }
-    return { cells, plates };
+    const occupied = grid.tiles.map((tile) => {
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      return { ci, ri, hue: cells.get(`${ci},${ri}`)?.hue ?? null };
+    });
+    return { cells, plates, occupied };
   }, [grid]);
 
   const model = useRef(scene);
@@ -75,16 +80,18 @@ export function Grid() {
       el.width = w;
       el.height = h;
     }
-    const ctx = el.getContext("2d");
+    // Opaque: nothing behind the canvas shows through, so the page fill is a copy
+    // rather than a blend and the compositor skips one step.
+    const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates } = model.current;
-    paint(ctx, { camera, width, height, dpr, plates, cells, hover: hover.current });
+    const { cells, plates, occupied } = model.current;
+    paint(ctx, { camera, width, height, dpr, plates, cells, occupied, hover: hover.current });
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
     if (layer.current) {
-      layer.current.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.k})`;
+      layer.current.style.transform = `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.k})`;
     }
   }, []);
 

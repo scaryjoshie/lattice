@@ -43,6 +43,13 @@ export interface Plate {
   r1: number;
 }
 
+/** Occupants as a list. Searching the viewport for them allocated a key per cell. */
+export interface Occupant {
+  ci: number;
+  ri: number;
+  hue: number | null;
+}
+
 export interface Scene {
   camera: Camera;
   width: number;
@@ -50,11 +57,12 @@ export interface Scene {
   dpr: number;
   plates: readonly Plate[];
   cells: ReadonlyMap<string, Cell>;
+  occupied: readonly Occupant[];
   hover: readonly [number, number] | null;
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
-  const { camera, width, height, dpr, plates, cells, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = PAGE;
   ctx.fillRect(0, 0, width, height);
@@ -80,46 +88,62 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.fill();
   }
 
-  // Outlines and fills, each batched into one path per colour. Setting a style is the
-  // expensive part of canvas2d, so this is a handful of state changes rather than one per
-  // cell — which at low zoom is thousands.
-  const strokes = new Map<string, Path2D>();
-  const fills = new Map<string, Path2D>();
-  const into = (map: Map<string, Path2D>, style: string) => {
-    let path = map.get(style);
-    if (!path) {
-      path = new Path2D();
-      map.set(style, path);
-    }
-    return path;
-  };
-
-  for (let ri = r0; ri <= r1; ri++) {
-    const y = sy(ri);
-    for (let ci = c0; ci <= c1; ci++) {
-      const x = sx(ci);
-      const cell = at(ci, ri);
-      const h = hue(cell?.hue ?? null);
-      if (cell?.occupied) {
-        into(fills, h.fill).roundRect(x, y, size, size, radius);
-      } else if (edge > 0) {
-        into(strokes, h.line).roundRect(x, y, size, size, radius);
+  /*
+   * Outlines first, in one neutral path, then each region redraws its own area clipped and
+   * in its own hue. Doing it this way rather than asking every cell which hue it belongs to
+   * keeps the per-cell work down to building the rectangle, and means no map is consulted
+   * during a frame at all.
+   *
+   * Occupied cells are filled afterwards, which covers the outline beneath them for free.
+   */
+  if (edge > 0) {
+    const ring = (a: number, b: number, p: number, q: number): Path2D => {
+      const path = new Path2D();
+      for (let ri = p; ri <= q; ri++) {
+        const y = sy(ri);
+        for (let ci = a; ci <= b; ci++) path.roundRect(sx(ci), y, size, size, radius);
       }
+      return path;
+    };
+    ctx.globalAlpha = edge;
+    ctx.lineWidth = EDGE;
+    ctx.strokeStyle = hue(null).line;
+    ctx.stroke(ring(c0, c1, r0, r1));
+
+    for (const plate of plates) {
+      if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(sx(plate.c0), sy(plate.r0), sx(plate.c1) + size - sx(plate.c0), sy(plate.r1) + size - sy(plate.r0));
+      ctx.clip();
+      ctx.strokeStyle = hue(plate.hue).line;
+      ctx.stroke(
+        ring(
+          Math.max(plate.c0, c0),
+          Math.min(plate.c1, c1),
+          Math.max(plate.r0, r0),
+          Math.min(plate.r1, r1),
+        ),
+      );
+      ctx.restore();
     }
+    ctx.globalAlpha = 1;
   }
 
+  const fills = new Map<string, Path2D>();
+  for (const spot of occupied) {
+    if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
+    const style = hue(spot.hue).fill;
+    let path = fills.get(style);
+    if (!path) {
+      path = new Path2D();
+      fills.set(style, path);
+    }
+    path.rect(sx(spot.ci), sy(spot.ri), size, size);
+  }
   for (const [style, path] of fills) {
     ctx.fillStyle = style;
     ctx.fill(path);
-  }
-  if (edge > 0) {
-    ctx.globalAlpha = edge;
-    ctx.lineWidth = EDGE;
-    for (const [style, path] of strokes) {
-      ctx.strokeStyle = style;
-      ctx.stroke(path);
-    }
-    ctx.globalAlpha = 1;
   }
 
   // Focus: the cell's own hue, so the ring reads as part of what it is on. Inset by half
