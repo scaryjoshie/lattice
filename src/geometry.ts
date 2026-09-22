@@ -5,7 +5,7 @@
  */
 
 export const CELL = 62;
-export const GUTTER = 13;
+export const GUTTER = 10;
 export const PITCH = CELL + GUTTER;
 export const RADIUS = 9;
 

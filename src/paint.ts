@@ -1,5 +1,5 @@
 import { CELL, type Camera, RADIUS, visible, worldX } from "./geometry.ts";
-import { hue, NEUTRAL } from "./palette.ts";
+import { hue } from "./palette.ts";
 
 /**
  * The lattice is painted, never built. One canvas, redrawn from the camera, iterating only
@@ -22,8 +22,9 @@ const PAGE = "#f5f5f6";
 /** Below roughly this many screen pixels an edge is noise rather than structure. */
 const FADE_FROM = 10;
 const FADE_TO = 26;
-/** Screen pixels, independent of zoom. */
+/** Screen pixels, independent of zoom. Focus is a weight, not just a colour. */
 const EDGE = 1.5;
+const FOCUS_EDGE = 2.5;
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
@@ -85,14 +86,14 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     }
   }
 
-  // Outlines at rest belong to the neutral hue only: a tint needs no border.
+  // An outline means empty. Every cell that holds nothing gets one, in its own hue.
   if (edge > 0) {
     ctx.globalAlpha = edge;
-    ctx.strokeStyle = NEUTRAL.line;
     for (let ri = r0; ri <= r1; ri++) {
       for (let ci = c0; ci <= c1; ci++) {
         const cell = at(ci, ri);
-        if (cell?.hue != null || cell?.occupied) continue;
+        if (cell?.occupied) continue;
+        ctx.strokeStyle = hue(cell?.hue ?? null).line;
         ctx.beginPath();
         ctx.roundRect(sx(ci), sy(ri), size, size, radius);
         ctx.stroke();
@@ -108,9 +109,13 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     const h = hue(cell?.hue ?? null);
     ctx.globalAlpha = edge;
     ctx.strokeStyle = h.edge;
+    ctx.lineWidth = FOCUS_EDGE;
+    // Inset by half the stroke, so a thick ring sits inside the cell rather than growing it.
+    const inset = FOCUS_EDGE / 2;
     ctx.beginPath();
-    ctx.roundRect(sx(ci), sy(ri), size, size, radius);
+    ctx.roundRect(sx(ci) + inset, sy(ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE, Math.max(0, radius - inset));
     ctx.stroke();
+    ctx.lineWidth = EDGE;
     ctx.globalAlpha = 1;
   }
 }

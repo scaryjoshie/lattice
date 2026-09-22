@@ -27,25 +27,32 @@ export interface Hue {
 /**
  * Which role is used is a table, not a judgement:
  *
- *   state              surface     outline
- *   empty, unowned     page        line
- *   empty, in region   tint        none
- *   occupied           fill        none
- *   focused            unchanged   edge
+ *   state                surface     outline
+ *   empty, unowned       page        line
+ *   empty, in region     tint        line
+ *   occupied, unowned    fill        none
+ *   occupied, in region  fill        none
+ *   focused              unchanged   edge
+ *
+ * So an outline means the cell is empty and a fill means it holds something, at every hue
+ * and in or out of a region. Belonging to a region changes the colour, never the reading.
+ * An earlier version dropped the outline on a region's empty cells, which left them looking
+ * like weak occupants rather than like empty cells that belong somewhere.
  */
 export const NEUTRAL: Hue = {
   tint: "#eeeef1",
-  fill: "#d9dbe1",
-  line: "#e4e4e9",
+  fill: "#c6c9d2",
+  line: "#ebebef",
   edge: "#b6b9c3",
   ink: "#5f6270",
 };
 
+/** tint < line < fill, so the three are always the same distance apart in every hue. */
 export const HUES: readonly Hue[] = [
-  { tint: "#e2ebfb", fill: "#c6d8f5", line: "#d3e0f8", edge: "#5b87d4", ink: "#3f6096" },
-  { tint: "#dff0e6", fill: "#bfe2cd", line: "#d0e9da", edge: "#4e9c70", ink: "#3c7455" },
-  { tint: "#fbe6d9", fill: "#f5d0b6", line: "#f7ddcb", edge: "#d5813f", ink: "#96603a" },
-  { tint: "#eae2f8", fill: "#d6c7f2", line: "#e0d6f5", edge: "#7d5fc0", ink: "#5f4a8e" },
+  { tint: "#e3ecfb", fill: "#a8c3ee", line: "#cddef8", edge: "#5b87d4", ink: "#3f6096" },
+  { tint: "#e0f1e7", fill: "#9fd3b3", line: "#c7e7d3", edge: "#4e9c70", ink: "#3c7455" },
+  { tint: "#fce7da", fill: "#f0bd97", line: "#f8d9c4", edge: "#d5813f", ink: "#96603a" },
+  { tint: "#ebe3f8", fill: "#c0aceb", line: "#ddd2f6", edge: "#7d5fc0", ink: "#5f4a8e" },
 ];
 
 export const hue = (n: number | null): Hue => (n === null ? NEUTRAL : (HUES[n % HUES.length] ?? NEUTRAL));
