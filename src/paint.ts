@@ -4,11 +4,14 @@ import { hue } from "./palette.ts";
 /**
  * A ruled grid. The lattice is two sets of lines rather than a shape per cell, which is
  * both the look and the reason this is cheap: a viewport holds a few dozen lines where it
- * held a few hundred rounded rectangles, and they are one path each.
+ * held a few hundred rounded rectangles, and each colour is one path stroked once.
  *
- * Lines are drawn over the fills, the way a ruled sheet works — a filled cell is ink on the
- * paper, not a replacement for it. Everything else follows the table in palette.ts: a fill
- * means the cell holds something, and a region is a filled area beneath the ruling.
+ * A rule takes the hue of what it crosses. The neutral ruling is drawn across the page,
+ * then each region redraws the part inside it in its own family — so the grid continues
+ * through a region rather than a foreign grey being laid over it.
+ *
+ * Occupied cells are filled *after* the ruling, which takes it off them for free: an
+ * occupant is an object, not paper, and ruling across one makes it read as four quadrants.
  *
  * Lines are a fixed screen width at every zoom and fade out as cells get small, so zooming
  * out dissolves the ruling into the page rather than crowding it.
@@ -66,13 +69,69 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   // Regions, beneath the ruling.
   for (const plate of plates) {
     if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
-    const x = sx(plate.c0);
-    const y = sy(plate.r0);
     ctx.fillStyle = hue(plate.hue).tint;
-    ctx.fillRect(x, y, sx(plate.c1) + size - x, sy(plate.r1) + size - y);
+    ctx.fillRect(
+      sx(plate.c0),
+      sy(plate.r0),
+      sx(plate.c1) + size - sx(plate.c0),
+      sy(plate.r1) + size - sy(plate.r0),
+    );
   }
 
-  // Occupied cells, batched by colour so a frame is a handful of state changes.
+  if (rule > 0) {
+    // Half a pixel, so a one-pixel line lands on a pixel rather than across two.
+    const snap = (n: number) => Math.round(n) + 0.5;
+    const rules = (a: number, b: number, p: number, q: number): Path2D => {
+      const path = new Path2D();
+      const top = sy(p);
+      const bottom = sy(q) + size;
+      const left = sx(a);
+      const right = sx(b) + size;
+      for (let ci = a; ci <= b + 1; ci++) {
+        const x = snap(sx(ci));
+        path.moveTo(x, top);
+        path.lineTo(x, bottom);
+      }
+      for (let ri = p; ri <= q + 1; ri++) {
+        const y = snap(sy(ri));
+        path.moveTo(left, y);
+        path.lineTo(right, y);
+      }
+      return path;
+    };
+
+    ctx.globalAlpha = rule;
+    ctx.lineWidth = RULE;
+    ctx.strokeStyle = hue(null).line;
+    ctx.stroke(rules(c0, c1, r0, r1));
+
+    // Each region reruns the ruling over its own area, clipped to it, in its own hue.
+    for (const plate of plates) {
+      if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        sx(plate.c0),
+        sy(plate.r0),
+        sx(plate.c1) + size - sx(plate.c0),
+        sy(plate.r1) + size - sy(plate.r0),
+      );
+      ctx.clip();
+      ctx.strokeStyle = hue(plate.hue).line;
+      ctx.stroke(
+        rules(
+          Math.max(plate.c0, c0),
+          Math.min(plate.c1, c1),
+          Math.max(plate.r0, r0),
+          Math.min(plate.r1, r1),
+        ),
+      );
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Occupied cells last, so the ruling does not cross them.
   const fills = new Map<string, Path2D>();
   for (let ri = r0; ri <= r1; ri++) {
     for (let ci = c0; ci <= c1; ci++) {
@@ -90,32 +149,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   for (const [style, path] of fills) {
     ctx.fillStyle = style;
     ctx.fill(path);
-  }
-
-  // The ruling: one path for every line on screen, drawn once.
-  if (rule > 0) {
-    // Half a pixel, so a one-pixel line lands on a pixel rather than across two.
-    const snap = (n: number) => Math.round(n) + 0.5;
-    const path = new Path2D();
-    const top = sy(r0);
-    const bottom = sy(r1) + size;
-    const left = sx(c0);
-    const right = sx(c1) + size;
-    for (let ci = c0; ci <= c1 + 1; ci++) {
-      const x = snap(sx(ci));
-      path.moveTo(x, top);
-      path.lineTo(x, bottom);
-    }
-    for (let ri = r0; ri <= r1 + 1; ri++) {
-      const y = snap(sy(ri));
-      path.moveTo(left, y);
-      path.lineTo(right, y);
-    }
-    ctx.globalAlpha = rule;
-    ctx.lineWidth = RULE;
-    ctx.strokeStyle = hue(null).line;
-    ctx.stroke(path);
-    ctx.globalAlpha = 1;
   }
 
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
