@@ -14,6 +14,15 @@ import { useGrid } from "./store.ts";
  *
  * React renders when the model changes. Panning and zooming call `draw` and nothing else.
  */
+/** Which region owns a cell, by index, so a tile can take the hue it sits in. */
+function regionHue(grid: ReturnType<typeof useGrid.getState>["grid"], ci: number, ri: number) {
+  for (const region of grid.regions) {
+    const { c0, c1, r0, r1 } = regionBounds(grid, region);
+    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region.hue;
+  }
+  return null;
+}
+
 export function Grid() {
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -96,33 +105,20 @@ export function Grid() {
     <div className="viewport" ref={viewport} onPointerMove={onMove} onPointerLeave={onLeave}>
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
-        {grid.regions.map((region) => {
-          const { c0, r0 } = regionBounds(grid, region);
-          return (
-            <span
-              key={region.id}
-              className="label"
-              style={{
-                left: worldX(c0),
-                top: worldX(r0),
-                color: hue(region.hue).ink,
-                background: hue(region.hue).tint,
-              }}
-            >
-              {region.label}
-            </span>
-          );
-        })}
         {grid.tiles.map((tile) => {
           const ci = indexOfTrack(grid.columns, tile.columnId);
           const ri = indexOfTrack(grid.rows, tile.rowId);
+          const h = hue(regionHue(grid, ci, ri));
           return (
             <div
               key={tile.id}
               className="tile"
               style={{ left: worldX(ci), top: worldX(ri), width: CELL, height: CELL }}
             >
-              <span className="dot" />
+              <span className="label" style={{ color: h.ink, background: h.tint }}>
+                {tile.name}
+              </span>
+              <span className="dot" style={{ background: h.ink }} />
             </div>
           );
         })}

@@ -1,14 +1,17 @@
 import { CELL, type Camera, GUTTER, RADIUS, visible, worldX } from "./geometry.ts";
-import { hue, LOOSE } from "./palette.ts";
+import { hue, NEUTRAL } from "./palette.ts";
 
 /**
  * The lattice is painted, never built. One canvas, redrawn from the camera, iterating only
  * the indices on screen — so the cost follows the window rather than the world, and nothing
  * about it exists in the DOM to be reconciled.
  *
- * An empty cell is an outline, one screen pixel at every zoom, fading out as cells get
- * small so that zooming out dissolves the lattice into the page instead of crowding it with
- * hairlines. A cell that belongs to a region is a tint and gets no outline at all.
+ * What a cell is drawn with is the table in palette.ts and nothing else. An outline is
+ * always the hue of the thing it outlines, so a focused cell inside a blue region gets a
+ * blue ring rather than a grey box cutting across it; the lattice's grey is that same rule
+ * at the neutral hue. Outlines are a fixed screen width at every zoom and fade out as cells
+ * get small, so zooming out dissolves the lattice into the page rather than crowding it
+ * with hairlines.
  *
  * Contiguous cells of the same colour are drawn as one shape rather than as neighbours,
  * which needs no region geometry — only a membership test. A cell contributes up to four
@@ -26,9 +29,6 @@ import { hue, LOOSE } from "./palette.ts";
  */
 
 const PAGE = "#f5f5f6";
-const LINE = "#e4e4e9";
-const HOVER_LINE = "#bcbfc9";
-const HOVER_FILL = "#eceef2";
 
 /** Below roughly this many screen pixels an edge is noise rather than structure. */
 const FADE_FROM = 10;
@@ -121,7 +121,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     for (let ci = c0; ci <= c1; ci++) {
       const cell = at(ci, ri);
       if (!cell?.occupied) continue;
-      ctx.fillStyle = (cell.hue == null ? LOOSE : hue(cell.hue)).fill;
+      ctx.fillStyle = hue(cell.hue).fill;
       piece(ctx, sx(ci), sy(ri), size, gap, radius, (dc, dr) => {
         const n = at(ci + dc, ri + dr);
         return n?.occupied === true && n.hue === cell.hue;
@@ -129,10 +129,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     }
   }
 
-  // Outlines, only where there is no tint. A tinted region never gets a border.
+  // Outlines at rest belong to the neutral hue only: a tint needs no border.
   if (edge > 0) {
     ctx.globalAlpha = edge;
-    ctx.strokeStyle = LINE;
+    ctx.strokeStyle = NEUTRAL.line;
     for (let ri = r0; ri <= r1; ri++) {
       for (let ci = c0; ci <= c1; ci++) {
         const cell = at(ci, ri);
@@ -145,21 +145,16 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.globalAlpha = 1;
   }
 
-  // Hover last, so it reads over whatever it lands on.
-  if (hover) {
+  // Focus: the cell's own hue, so the ring reads as part of what it is on.
+  if (hover && edge > 0) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
+    const h = hue(cell?.hue ?? null);
+    ctx.globalAlpha = edge;
+    ctx.strokeStyle = h.edge;
     ctx.beginPath();
     ctx.roundRect(sx(ci), sy(ri), size, size, radius);
-    if (!cell?.hue && !cell?.occupied) {
-      ctx.fillStyle = HOVER_FILL;
-      ctx.fill();
-    }
-    if (edge > 0) {
-      ctx.globalAlpha = edge;
-      ctx.strokeStyle = HOVER_LINE;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 }

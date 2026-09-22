@@ -18,6 +18,7 @@ export interface Track {
 
 export interface Tile {
   readonly id: string;
+  readonly name: string;
   readonly columnId: string;
   readonly rowId: string;
 }
@@ -96,9 +97,15 @@ export function insertRowAfter(grid: Grid, rowId: string, id = nextId("r")): Gri
 
 /* Tiles ------------------------------------------------------------------- */
 
-export function addTile(grid: Grid, columnId: string, rowId: string, id = nextId("t")): Grid {
+export function addTile(
+  grid: Grid,
+  columnId: string,
+  rowId: string,
+  name: string,
+  id = nextId("t"),
+): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
-  return { ...grid, tiles: [...grid.tiles, { id, columnId, rowId }] };
+  return { ...grid, tiles: [...grid.tiles, { id, name, columnId, rowId }] };
 }
 
 export function removeTile(grid: Grid, tileId: string): Grid {
@@ -150,13 +157,18 @@ export function seed(): Grid {
     { id: nextId("g"), label: "planner", hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
 
-  const cells: [number, number][] = [
-    [3, 2], [3, 3], [2, 3],
-    [12, 2], [13, 2],
-    [4, 7], [5, 7], [5, 8],
-    [13, 7],
-    [8, 4],
+  const cells: [number, number, string][] = [
+    [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
+    [12, 2, "codex"], [13, 2, "claude"],
+    [4, 7, "claude"], [5, 7, "claude"], [5, 8, "codex"],
+    [13, 7, "claude"],
+    [8, 4, "shell"],
   ];
-  const tiles = cells.map(([c, r]) => ({ id: nextId("t"), columnId: col(c), rowId: row(r) }));
+  const tiles = cells.map(([c, r, name]) => ({
+    id: nextId("t"),
+    name,
+    columnId: col(c),
+    rowId: row(r),
+  }));
   return { columns, rows, tiles, regions };
 }

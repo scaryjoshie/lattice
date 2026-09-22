@@ -14,6 +14,6 @@ export const useGrid = create<Store>((set, get) => ({
     const column = g.columns[columnIndex];
     const row = g.rows[rowIndex];
     if (!column || !row) return;
-    set({ grid: addTile(g, column.id, row.id, nextId("t")) });
+    set({ grid: addTile(g, column.id, row.id, "shell", nextId("t")) });
   },
 }));
