@@ -139,7 +139,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       path = new Path2D();
       fills.set(style, path);
     }
-    path.rect(sx(spot.ci), sy(spot.ri), size, size);
+    path.roundRect(sx(spot.ci), sy(spot.ri), size, size, radius);
   }
   for (const [style, path] of fills) {
     ctx.fillStyle = style;
