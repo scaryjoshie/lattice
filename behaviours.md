@@ -1,0 +1,197 @@
+# Behaviours
+
+Every specific behaviour of the grid, written as what happens rather than why. Implemented
+unless marked **[proposed]**.
+
+This is raw material. The point of writing it out is that these are projections of a
+smaller system that has not been stated yet, and the system is easier to see from the
+shadows than from an argument about it.
+
+## Pointer over the grid
+
+1. Moving the pointer over a cell marks that cell as hovered.
+2. A hovered empty cell draws a ring in its own hue and a plus in its centre.
+3. A hovered occupied cell draws a ring and no plus.
+4. Pointing anywhere inside a tile that spans several cells rings the whole tile, not the
+   cell under the pointer.
+5. A hovered agent additionally veils everything else back toward the page and draws
+   crawling dashed lines to every agent it is linked to, with a dot at each end.
+6. Every agent does this, whether it has links or not.
+7. Leaving the viewport clears the hover.
+8. Hover is suppressed entirely while: a menu is open, a run is being edited, a name is
+   being typed, or a tile is being dragged.
+9. Closing a menu re-establishes the hover at the pointer's current position, without
+   waiting for it to move.
+10. **[proposed]** The plus appears only while shift is held.
+
+## Click
+
+11. Clicking an empty cell opens the add menu at the pointer.
+12. Clicking an occupied cell currently does nothing.
+13. **[proposed]** Clicking a tile selects it; clicking it again deselects it.
+14. **[proposed]** Clicking an empty cell begins a rectangular selection at that cell.
+15. **[proposed]** Shift-clicking a second cell completes the rectangle.
+16. A press that moves more than 3px is a pan, not a click.
+17. A click that dismisses an open overlay is spent dismissing it: it does not also open a
+    menu, place a tile or select anything.
+18. Whether a press is a dismissal is decided when the press starts, not when it ends.
+
+## Shift-click
+
+19. **[proposed]** Shift-clicking a tile opens it.
+20. **[proposed]** Shift-clicking an empty cell opens the add menu — the same act the plus
+    offers, reached by the modifier that reveals it.
+
+## Right-click
+
+21. Right-clicking an occupied cell opens the tile menu at the pointer.
+22. The tile menu offers rename and delete for an occupant, edit and delete for a run.
+23. Right-clicking any cell of a multi-cell tile finds that tile.
+24. Right-clicking an empty cell does nothing.
+25. The browser's own context menu never appears over the canvas.
+
+## Menus
+
+26. A menu opens at the pointer, not at the cell it is about.
+27. The add menu is grouped: text (title, note), utilities (terminal, browser), agents
+    (claude code, codex).
+28. Typing in the add menu filters it. The input exists from the moment it opens, so no
+    keystroke is lost, and is invisible until it contains something.
+29. Group headings match the query as well as item labels.
+30. The first match is always selected. Enter picks it.
+31. Arrow keys move the selection; escape closes.
+32. Hovering an item moves the selection to it rather than highlighting separately.
+33. The tile menu has no search, being two items.
+34. While a menu is open, the thing it is about stays ringed, and if it is an agent, its
+    veil and links stay lit.
+
+## Placing
+
+35. Picking text from the add menu creates a run at that cell and opens it for typing.
+36. Picking anything else creates that tile at that cell immediately.
+37. A tile can only be placed on an empty cell.
+
+## Dragging
+
+38. Shift and drag moves a tile. The camera does not respond to shift.
+39. Anything in a cell can be dragged, including text runs.
+40. While dragging, the tile is drawn at the cell under the pointer, at full strength, with
+    its own mark.
+41. The cell it came from shows whatever is underneath: the page, or the region's surface.
+42. If the destination holds something, that thing is drawn where the dragged tile came
+    from.
+43. Both regions — the one being left and the one being entered — are lit and outlined in
+    the move colour.
+44. Chevrons flow from one region to the other, and in both directions when something is
+    coming back, in two lanes.
+45. Chevrons run edge to edge, except between adjacent regions where they run centre to
+    centre.
+46. A refused move is drawn identically in the warning colour, and nothing is shown as
+    moved.
+47. Releasing a refused move does nothing.
+48. Nothing changes colour because of a move that has not happened: a tile's hue is the
+    region the model says it is in.
+49. While dragging, the dragged tile's links stay lit and stay anchored where the drag
+    began.
+50. Hover, the plus and the menu are all suppressed while dragging.
+
+## What a move is
+
+51. A move exchanges one region of the grid with another of the same size: the region the
+    tile occupies, and the region it would occupy.
+52. It is legal when every tile touching either region is entirely inside it.
+53. Swapping two tiles of the same size is the case where each region holds one.
+54. Moving into free space is the case where the destination region holds none.
+55. A two-cell run and two separate single tiles may trade places.
+56. A two-cell run dropped half over another two-cell run is refused.
+57. A region overlapping its own destination is a slide, not an exchange, and is allowed
+    only into space nothing else occupies.
+58. A legal move produces every position change the exchange implies, and they are applied
+    together.
+59. **[proposed]** A refusal could instead grow both regions until nothing straddles them,
+    and succeed if they close at the same size.
+
+## Text
+
+60. A title is one row and grows sideways. A note is a block and its words wrap inside it.
+61. A run's span is derived from its text, measured at the cell's own size.
+62. A run grows cell by cell as it is typed.
+63. A run stops growing at the first cell that already holds something; further text is cut
+    off.
+64. The ruling is omitted inside a run rather than painted over.
+65. While a run is being typed, the canvas still owns its surface and its ruling; the input
+    contributes only a caret and glyphs.
+66. Committing an empty run removes it.
+67. Enter commits. Escape abandons, and removes the run if it was new.
+68. Clicking away commits.
+69. Text takes the ink of whatever region it sits in.
+
+## Names
+
+70. An occupant may be named. Right-click, rename.
+71. A name is typed in the place it will sit, at the size it will be.
+72. A name is cut with an ellipsis to the one cell its tile occupies. It never spills.
+73. A named tile's mark does not move to make room.
+74. Names stop being drawn below about 34 screen pixels of cell, fading over the next 14.
+75. A run is not named; it is what it says.
+
+## Regions
+
+76. A region is one rounded rectangle drawn under the lattice, flush with the outer edges
+    of its cells.
+77. A cell inside a region takes the region's tint; an occupied one takes its fill.
+78. The ruling continues through a region in the region's own hue.
+79. A tile inside a region takes that region's hue for its mark, its ring and its links.
+80. **[proposed]** A region is selected by a handle in the top-left corner of its plate.
+81. **[proposed]** A selected region offers an arrow on each edge to drag it larger.
+82. **[proposed]** A selection may not span two regions, or a region and the space outside
+    one.
+
+## The camera
+
+83. The wheel zooms. Dragging the background pans.
+84. Zoom is limited to between 0.25 and 3.
+85. Panning and zooming never change the model.
+86. The canvas repaints at most once per animation frame, always with the latest camera.
+87. Nothing animates during a camera move.
+
+## What scales and what does not
+
+88. Cell size, gutter, corner radius, font size, mark size and name size all scale with the
+    camera.
+89. Rules, focus rings, chevrons, link lines and dots are a fixed number of screen pixels
+    at every zoom.
+90. Rules fade out below about 8 screen pixels of cell.
+91. Names fade out below about 34.
+
+## Colour
+
+92. Hue says which region a thing belongs to. Lightness says whether a cell is occupied.
+    The mark says what occupies it.
+93. An outline means the cell is empty. A fill means it holds something.
+94. An outline is always the hue of what it outlines.
+95. A cell in no region uses the neutral hue.
+96. The move colour belongs to the act, not to anything on the grid, and is not one of the
+    hues.
+97. Refusal has exactly one colour and it is used for nothing else.
+98. The theme follows the system. `t` toggles it, and is ignored while typing.
+
+## Animation
+
+99. The only things that ever animate are the crawling link dashes and the flowing
+    chevrons.
+100. Both move on one shared counter, so everything in flight moves together.
+101. The frame loop runs only while something is focused or a move is being proposed.
+
+## Gaps and contradictions
+
+Noted rather than resolved.
+
+- Clicking an occupied cell does nothing, which will change when selection exists.
+- Shift is the move modifier and would also become the "do it" modifier.
+- A tile can be placed on an empty cell without checking whether a run's span covers it, so
+  the model can still reach a state where two things claim one cell.
+- A note is created at one cell and cannot be resized, so it has almost no room to wrap in.
+- Nothing makes room: a run that needs space stops instead of pushing or inserting.
+- Deleting a tile removes it from the grid and nothing else, which cannot be what deleting
+  an agent means.
