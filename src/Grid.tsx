@@ -282,6 +282,15 @@ export function Grid() {
   const model = useRef(scene);
   model.current = scene;
 
+  /*
+   * What a menu or a rename is about, held in a ref rather than read from state inside
+   * `draw`. `draw` is built once so that panning never rebuilds it, which means anything
+   * it reads from state is frozen at the value it had on the first render — the reason an
+   * earlier attempt at this changed nothing at all.
+   */
+  const subject = useRef<string | null>(null);
+  subject.current = acting?.id ?? naming ?? editing ?? null;
+
   const draw = useCallback((camera: Camera) => {
     const el = canvas.current;
     const host = viewport.current;
@@ -326,13 +335,8 @@ export function Grid() {
      * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
      * the pointer was when the drag began.
      */
-    // Whatever a menu or a rename is about.
-    const subject = acting?.id ?? naming ?? editing ?? null;
-    let selected: Scene["selected"] = null;
-    if (subject) {
-      const tile = model.current.tiles?.get(subject);
-      if (tile) selected = tile;
-    }
+    const about = subject.current;
+    const selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
 
     /*
      * Focus survives a menu and a rename. Opening a menu about an agent is still being
@@ -342,7 +346,7 @@ export function Grid() {
      */
     let focus: Focus | null = null;
     const spot =
-      held?.id ?? subject ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
+      held?.id ?? about ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
@@ -420,6 +424,10 @@ export function Grid() {
   }, [draw, camera, scene]);
 
   useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
+
+  useEffect(() => {
+    schedule(camera.current);
+  }, [schedule, camera, acting, naming, editing]);
 
   useEffect(() => {
     const onResize = () => schedule(camera.current);
