@@ -39,7 +39,7 @@ const CHEVRON_EDGE = 2.25;
 /** How fast the chevrons travel, as a multiple of the shared crawl. */
 const CHEVRON_SPEED = 0.55;
 /** How far each direction of an exchange sits off the centre line. */
-const LANE = 6;
+const LANE = 11;
 /** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
 const NAME_FROM = 34;
 const NAME_FADE = 14;
