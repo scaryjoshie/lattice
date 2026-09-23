@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
-import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
+import { indexOfTrack, proposeMove, regionBounds, type TextStyle, type TileKind } from "./model.ts";
 import {
   type Cell,
   type Scene,
@@ -188,6 +188,7 @@ export function Grid() {
     origin: [number, number];
     to: [number, number];
     swapping: string | null;
+    ok: boolean;
   } | null>(null);
 
   /**
@@ -195,13 +196,16 @@ export function Grid() {
    * event. Recomputing it per wheel event was allocating a map hundreds of times a second
    * for data that had not moved.
    */
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+
   const scene = useMemo(() => {
     /*
      * Where a tile is *while the drag is happening*, which is not where the model says it
      * is. Doing it here rather than in the paint means nothing downstream knows a drag
      * exists: the cell a tile left is empty, and empty cells already know how to look.
      */
-    const carry = held;
+    const carry = held?.ok ? held : null;
     const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
@@ -209,6 +213,16 @@ export function Grid() {
       if (tile.id === carry.id) return carry.to;
       if (carry.swapping === tile.id) return carry.origin;
       return [ci, ri];
+    };
+
+    /*
+     * A tile's colour is the region it belongs to — and while it is being carried, the
+     * region it came *from*. Taking the colour of whatever it is passing over makes the
+     * thing in your hand change identity as it moves.
+     */
+    const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null => {
+      const home = carry?.id === tile.id ? carry.origin : placed(tile);
+      return regionHue(grid, home[0], home[1]);
     };
 
     const cells = new Map<string, Cell>();
@@ -244,7 +258,7 @@ export function Grid() {
     const texts: TextRun[] = [];
     for (const tile of grid.tiles) {
       const [ci, ri] = placed(tile);
-      const h = cells.get(`${ci},${ri}`)?.hue ?? null;
+      const h = hueAt(tile);
       if (tile.kind === "text") {
         if (tile.id === editing) {
           // No glyphs — the input draws those — but the cells it covers stay unruled.
@@ -269,7 +283,14 @@ export function Grid() {
           });
         }
       }
-      else occupied.push({ ci, ri, kind: tile.kind, name: tile.id === naming ? undefined : tile.name, hue: h });
+      else
+        occupied.push({
+          ci,
+          ri,
+          kind: tile.kind,
+          name: tile.id === naming ? undefined : tile.name,
+          hue: h,
+        });
     }
     /** Every tile's extent, so anything being acted on can be ringed whole. */
     const tiles = new Map<string, { ci: number; ri: number; span: number; rows: number; hue: number | null }>();
@@ -280,7 +301,7 @@ export function Grid() {
         ri,
         span: tile.id === editing ? editSpan : (tile.span ?? 1),
         rows: tile.rows ?? 1,
-        hue: cells.get(`${ci},${ri}`)?.hue ?? null,
+        hue: hueAt(tile),
       });
     }
 
@@ -288,12 +309,33 @@ export function Grid() {
     for (const tile of grid.tiles) {
       if (tile.kind === "text") continue;
       const [ci, ri] = placed(tile);
-      spots.set(tile.id, { ci, ri, kind: tile.kind, hue: cells.get(`${ci},${ri}`)?.hue ?? null });
+      spots.set(tile.id, { ci, ri, kind: tile.kind, hue: hueAt(tile) });
     }
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    return { cells, plates, occupied, texts, spots, byCell, tiles, links: grid.links, carried: carry };
+    const refused =
+      held && !held.ok
+        ? {
+            ci: held.to[0],
+            ri: held.to[1],
+            span: tiles.get(held.id)?.span ?? 1,
+            rows: tiles.get(held.id)?.rows ?? 1,
+            hue: null as number | null,
+          }
+        : null;
+    return {
+      cells,
+      plates,
+      occupied,
+      texts,
+      spots,
+      byCell,
+      tiles,
+      links: grid.links,
+      carried: carry,
+      refused,
+    };
   }, [grid, editing, editSpan, naming, held]);
 
   const model = useRef(scene);
@@ -337,7 +379,9 @@ export function Grid() {
      * the pointer was when the drag began.
      */
     const about = subject.current;
-    const selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
+    let selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
+    const refused = model.current.refused;
+    if (refused) selected = { ...refused, warn: true };
 
     /*
      * Focus survives a menu and a rename. Opening a menu about an agent is still being
@@ -447,13 +491,15 @@ export function Grid() {
       const at = cellUnder(event);
       if (at) {
         const carry = dragging.current;
-        const sitting = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
+        // From the model, never from the scene: the scene is built from this answer.
+        const verdict = proposeMove(gridRef.current, carry.id, at[0], at[1]);
         hover.current = null;
         setHeld({
           id: carry.id,
           origin: carry.origin,
           to: at,
-          swapping: sitting && sitting !== carry.id ? sitting : null,
+          swapping: verdict.swapWith?.id ?? null,
+          ok: verdict.ok,
         });
       }
       return;
@@ -492,7 +538,9 @@ export function Grid() {
     pressed.current = null;
     if (dragging.current) {
       const at = cellUnder(event);
-      if (at) moveTile(dragging.current.id, at[0], at[1]);
+      if (at && proposeMove(gridRef.current, dragging.current.id, at[0], at[1]).ok) {
+        moveTile(dragging.current.id, at[0], at[1]);
+      }
       dragging.current = null;
       setHeld(null);
       return;

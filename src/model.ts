@@ -180,6 +180,71 @@ export function regionBounds(
   };
 }
 
+/* Moving ------------------------------------------------------------------ */
+
+export interface Footprint {
+  ci: number;
+  ri: number;
+  span: number;
+  rows: number;
+}
+
+export function footprint(grid: Grid, tile: Tile): Footprint {
+  return {
+    ci: indexOfTrack(grid.columns, tile.columnId),
+    ri: indexOfTrack(grid.rows, tile.rowId),
+    span: tile.span ?? 1,
+    rows: tile.rows ?? 1,
+  };
+}
+
+const overlaps = (a: Footprint, b: Footprint): boolean =>
+  a.ci < b.ci + b.span && b.ci < a.ci + a.span && a.ri < b.ri + b.rows && b.ri < a.ri + a.rows;
+
+/**
+ * Whether a tile may be put down at a cell, and what it would displace.
+ *
+ * Answered from the model alone — the positions tiles actually have, never a view of the
+ * world that already assumes the move. Deriving this from the rendered scene makes it
+ * circular, because the scene is built from the answer, and a circular answer flickers
+ * between values and drags unrelated tiles along with it.
+ *
+ * A move is allowed when the space is free, or when exactly one tile is in the way and it
+ * has the same footprint — that is what makes it a swap rather than two overlapping tiles.
+ * Anything else is refused: a four-cell run cannot trade places with one cell.
+ */
+export function proposeMove(
+  grid: Grid,
+  tileId: string,
+  ci: number,
+  ri: number,
+): { ok: boolean; swapWith: Tile | null } {
+  const tile = grid.tiles.find((t) => t.id === tileId);
+  if (!tile) return { ok: false, swapWith: null };
+  const here = footprint(grid, tile);
+  const target: Footprint = { ci, ri, span: here.span, rows: here.rows };
+
+  const hit = grid.tiles.filter((other) => {
+    if (other.id === tileId) return false;
+    return overlaps(footprint(grid, other), target);
+  });
+
+  if (hit.length === 0) return { ok: true, swapWith: null };
+  if (hit.length > 1) return { ok: false, swapWith: null };
+
+  const other = hit[0] as Tile;
+  const theirs = footprint(grid, other);
+  const sameSize = theirs.span === here.span && theirs.rows === here.rows;
+  // And the swap has to be legal in both directions.
+  const wouldFit =
+    sameSize &&
+    !grid.tiles.some((third) => {
+      if (third.id === tileId || third.id === other.id) return false;
+      return overlaps(footprint(grid, third), { ...here, span: theirs.span, rows: theirs.rows });
+    });
+  return wouldFit ? { ok: true, swapWith: other } : { ok: false, swapWith: null };
+}
+
 /* Seed -------------------------------------------------------------------- */
 
 export function seed(): Grid {

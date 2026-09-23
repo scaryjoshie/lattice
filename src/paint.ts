@@ -108,8 +108,19 @@ export interface Scene {
   occupied: readonly Occupant[];
   texts: readonly TextRun[];
   focus: Focus | null;
-  /** What is being acted on — renamed, or shown a menu. Ringed, but nothing is veiled. */
-  selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
+  /**
+   * What is being acted on — renamed, shown a menu, or proposed as a place to put
+   * something. Ringed, but nothing is veiled. `warn` means the thing it describes would
+   * not be allowed.
+   */
+  selected: {
+    ci: number;
+    ri: number;
+    span: number;
+    rows: number;
+    hue: number | null;
+    warn?: boolean;
+  } | null;
   hover: readonly [number, number] | null;
 }
 
@@ -404,7 +415,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   if (selected && rule > 0) {
     const inset = FOCUS_EDGE / 2;
     ctx.lineWidth = FOCUS_EDGE;
-    ctx.strokeStyle = hue(selected.hue).edge;
+    ctx.strokeStyle = selected.warn ? palette.warn : hue(selected.hue).edge;
     ctx.strokeRect(
       sx(selected.ci) + inset,
       sy(selected.ri) + inset,
