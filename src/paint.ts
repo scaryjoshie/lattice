@@ -445,6 +445,33 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   if (proposal && rule > 0) {
     const centre = (r: Proposal["to"]) =>
       [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
+    /*
+     * Both regions are lit and outlined, always. A proposal is a statement about two
+     * places, so both are shown — rather than leaving one of them to whatever the focus
+     * veil happened to restore, which lit a cell only when it was a link partner of the
+     * dragged agent and so worked or did not depending on something unrelated.
+     */
+    const relight = (r: Proposal["to"]) => {
+      for (let dy = 0; dy < r.rows; dy++) {
+        for (let dx = 0; dx < r.span; dx++) {
+          const ci = r.ci + dx;
+          const ri = r.ri + dy;
+          const cell = at(ci, ri);
+          ctx.fillStyle = cell?.hue == null ? palette.page : hue(cell.hue).tint;
+          ctx.fillRect(sx(ci), sy(ri), size, size);
+        }
+      }
+      for (const spot of occupied) {
+        if (spot.ci < r.ci || spot.ci >= r.ci + r.span) continue;
+        if (spot.ri < r.ri || spot.ri >= r.ri + r.rows) continue;
+        ctx.fillStyle = hue(spot.hue).fill;
+        ctx.fillRect(sx(spot.ci), sy(spot.ri), size, size);
+        mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
+      }
+    };
+    relight(proposal.from);
+    relight(proposal.to);
+
     const [ax, ay] = centre(proposal.from);
     const [bx, by] = centre(proposal.to);
     /** Where a ray from the centre leaves a region's edge, so the path runs edge to edge
@@ -509,12 +536,14 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
 
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = colour;
-    ctx.strokeRect(
-      sx(proposal.to.ci) + inset,
-      sy(proposal.to.ri) + inset,
-      size * proposal.to.span - FOCUS_EDGE,
-      size * proposal.to.rows - FOCUS_EDGE,
-    );
+    for (const r of [proposal.from, proposal.to]) {
+      ctx.strokeRect(
+        sx(r.ci) + inset,
+        sy(r.ri) + inset,
+        size * r.span - FOCUS_EDGE,
+        size * r.rows - FOCUS_EDGE,
+      );
+    }
   }
 
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
