@@ -123,9 +123,14 @@ shadows than from an argument about it.
 63a. **[proposed]** A run also stops at the edge of the worktree it is in. Text may not
     leave its worktree, which makes a worktree a container in fact and not only in
     appearance.
-63b. **[proposed]** When a worktree is expanded, a run that was being cut off against the
-    edge being moved expands with it, up to what it needs. Growing the container gives
-    back exactly the room the container was taking.
+63b. **[proposed]** A run's span is not stored. It is what the text needs, bounded by what
+    is free beside it — so anything that stops blocking a run lets it breathe, whether
+    that is an agent moving away, a worktree expanding, or a tile being deleted, with no
+    rule per case.
+63c. **[proposed]** A note is what a run becomes on shift-enter. That first shift-enter
+    fixes its width at what was typed so far, measured at the run's real cell width.
+    Afterwards height grows by wrapping and stops at whatever is below, exactly as width
+    does for a title.
 64. The ruling is omitted inside a run rather than painted over.
 65. While a run is being typed, the canvas still owns its surface and its ruling; the input
     contributes only a caret and glyphs.

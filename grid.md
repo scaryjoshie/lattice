@@ -592,18 +592,50 @@ grid, and it is where a selection handle conventionally lives. Selecting a workt
 an arrow on each edge to drag it larger, which is already the documented gesture: dragging
 an edge is a request for room, and room can always be made.
 
-## Proposed: text is bounded by its worktree
+## Proposed: a run's span is derived, not stored
 
-A run stops at the first occupied cell. It should also stop at the edge of the worktree it
-is in — text may not leave its worktree, which is what makes a worktree a container in fact
-rather than in appearance, and is the same containment rule that governs moves and
-selections applied to growth.
+A run stops at the first occupied cell, and should also stop at the edge of the worktree it
+is in — text may not leave its worktree, which is the containment rule that governs moves
+and selections applied to growth, and is what makes a worktree a container in fact rather
+than in appearance.
 
-The other half matters as much: **expanding a worktree gives back the room it was taking.**
-A run that was being cut off against the edge being dragged expands with it, up to what it
-needs and no further. Growth is not a separate mechanism from the cut-off; it is the cut-off
-being relieved.
+But cut-off relief is not a worktree feature and should not be written as one. **Do not
+store a span at all.** A run's span is a function of what it says and what is free beside
+it:
 
-This is the first thing that connects text to Room. A run currently has exactly one
-response to having no space, which is to stop. With this, the space it lacks becomes
+```
+span = min(what the text needs, what is free)
+```
+
+Then every case falls out of one rule with nothing to implement per case. Move an agent
+away and the run breathes. Expand the worktree and the run breathes. Delete the thing that
+was blocking it and the run breathes. There is no expansion logic, because there is no
+stored value to expand.
+
+Vertically the same, for a note: its height is the lines its text wraps to, bounded by what
+is free below.
+
+**The one hazard**, which needs deciding before this is built: two runs in the same row can
+each want to grow into the other, so "what is free" is circular between them. The fix is
+that a run is bounded by the *origin* of another tile rather than by that tile's own
+derived span, and where two runs still compete, the earlier one wins. Deterministic, and
+never mutually recursive.
+
+## Proposed: a note is a title that was given a second line
+
+Rather than being created at some arbitrary block size, a note is what a run becomes when
+you press shift and enter while typing it.
+
+The first shift-enter fixes the run's **width** at what had been typed so far — measured at
+the run's real cell width, not at the width the editor happened to be projecting, or the
+line that triggered it gets clipped by its own act.
+
+After that, width is fixed and height behaves exactly as width does for a title: it grows
+by wrapping, it stops at whatever is below it, and while you are still typing, the run
+scrolls so the line you are on stays visible and the earlier lines move out of sight. Which
+is what a title already does horizontally — the editor shows the end of a line that has
+outgrown its span.
+
+So there is one text object, not two. A title is a run that has never been given a second
+line. With this, the space it lacks becomes
 something a person can grant, in one gesture, at the place where it is missing.
