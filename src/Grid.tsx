@@ -7,6 +7,7 @@ import {
   proposeMove,
   columnsFor,
   rowsFor,
+  regionAt,
   regionBounds,
   type TextStyle,
   type TileKind,
@@ -157,15 +158,6 @@ function Namer({ id, onDone }: { id: string; onDone(): void }) {
   );
 }
 
-/** Which region owns a cell, by index, so a tile can take the hue it sits in. */
-function regionHue(grid: ReturnType<typeof useGrid.getState>["grid"], ci: number, ri: number) {
-  for (const region of grid.regions) {
-    const { c0, c1, r0, r1 } = regionBounds(grid, region);
-    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region.hue;
-  }
-  return null;
-}
-
 export function Grid() {
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -247,11 +239,11 @@ export function Grid() {
      * it would displace.
      */
     const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null =>
-      regionHue(
+      regionAt(
         grid,
         indexOfTrack(grid.columns, tile.columnId),
         indexOfTrack(grid.rows, tile.rowId),
-      );
+      )?.hue ?? null;
 
     const cells = new Map<string, Cell>();
     const plates: Plate[] = [];

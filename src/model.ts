@@ -161,11 +161,14 @@ export function regionBounds(
   };
 }
 
-/** Which region owns a cell, by index. Null for open grid. */
-export function regionIdAt(grid: Grid, ci: number, ri: number): string | null {
+/**
+ * Which region owns a cell, by index. Null for open grid. Regions are compared by
+ * identity: within one grid each is one object, so "same region" is `===`.
+ */
+export function regionAt(grid: Grid, ci: number, ri: number): Region | null {
   for (const region of grid.regions) {
     const { c0, c1, r0, r1 } = regionBounds(grid, region);
-    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region.id;
+    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region;
   }
   return null;
 }
@@ -181,11 +184,11 @@ export function regionIdAt(grid: Grid, ci: number, ri: number): string | null {
 export function available(
   grid: Grid,
   tileId: string,
-  home: string | null,
+  home: Region | null,
   ci: number,
   ri: number,
 ): boolean {
-  if (regionIdAt(grid, ci, ri) !== home) return false;
+  if (regionAt(grid, ci, ri) !== home) return false;
   return !grid.tiles.some((other) => {
     if (other.id === tileId) return false;
     const f = footprint(grid, other);
@@ -195,7 +198,7 @@ export function available(
 
 /** How many columns a run may occupy, starting at its own cell. */
 export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, limit = 40): number {
-  const home = regionIdAt(grid, ci, ri);
+  const home = regionAt(grid, ci, ri);
   let n = 1;
   while (n < limit && available(grid, tileId, home, ci + n, ri)) n += 1;
   return n;
@@ -214,7 +217,7 @@ export function rowsFor(
   span: number,
   limit = 40,
 ): number {
-  const home = regionIdAt(grid, ci, ri);
+  const home = regionAt(grid, ci, ri);
   let n = 1;
   while (n < limit) {
     let clear = true;
@@ -304,10 +307,10 @@ export function proposeMove(
    * against worktrees, so a run could be dropped half inside one.
    */
   const inOneRegion = (r: Footprint): boolean => {
-    const home = regionIdAt(grid, r.ci, r.ri);
+    const home = regionAt(grid, r.ci, r.ri);
     for (let dy = 0; dy < r.rows; dy++) {
       for (let dx = 0; dx < r.span; dx++) {
-        if (regionIdAt(grid, r.ci + dx, r.ri + dy) !== home) return false;
+        if (regionAt(grid, r.ci + dx, r.ri + dy) !== home) return false;
       }
     }
     return true;
