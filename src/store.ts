@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { spanFor } from "./measure.ts";
-import { addTile, type Grid, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
+import { addTile, type Grid, moveTile, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
 
 /** The model, and nothing else. Camera state deliberately does not live here. */
 interface Store {
@@ -9,6 +9,7 @@ interface Store {
   addAt(columnIndex: number, rowIndex: number, kind: TileKind, style?: TextStyle): string | null;
   setText(tileId: string, text: string, span: number): void;
   remove(tileId: string): void;
+  move(tileId: string, columnIndex: number, rowIndex: number): void;
 }
 
 /**
@@ -50,5 +51,12 @@ export const useGrid = create<Store>((set, get) => ({
   },
   remove(tileId) {
     set((s) => ({ grid: { ...s.grid, tiles: s.grid.tiles.filter((t) => t.id !== tileId) } }));
+  },
+  move(tileId, columnIndex, rowIndex) {
+    const g = get().grid;
+    const column = g.columns[columnIndex];
+    const row = g.rows[rowIndex];
+    if (!column || !row) return;
+    set({ grid: moveTile(g, tileId, column.id, row.id) });
   },
 }));

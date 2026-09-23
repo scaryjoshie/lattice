@@ -16,6 +16,78 @@ import { onTheme } from "./theme.ts";
  *
  * React renders when the model changes. Panning and zooming call `draw` and nothing else.
  */
+/**
+ * Typing a run.
+ *
+ * The span follows the words, cell by cell, so nothing is cleared before there is
+ * something to put in it. It stops at the first cell that already holds something — the
+ * way a spreadsheet lets text spill into empty neighbours and cuts it off at a full one —
+ * because two things cannot be in one cell, and pushing the neighbour aside needs a notion
+ * of what may be pushed that does not exist yet.
+ */
+function Editor({ id, onDone }: { id: string; onDone(): void }) {
+  const grid = useGrid((s) => s.grid);
+  const setText = useGrid((s) => s.setText);
+  const removeTile = useGrid((s) => s.remove);
+  const tile = grid.tiles.find((x) => x.id === id);
+  const [draft, setDraft] = useState(tile?.text ?? "");
+
+  if (!tile) return null;
+  const ci = indexOfTrack(grid.columns, tile.columnId);
+  const ri = indexOfTrack(grid.rows, tile.rowId);
+  const style = tile.style ?? "title";
+  const m = METRICS[style];
+
+  // How far the row is free, starting here and not counting this run.
+  let room = 1;
+  while (room < 40) {
+    const next = grid.tiles.some((other) => {
+      if (other.id === id) return false;
+      const oc = indexOfTrack(grid.columns, other.columnId);
+      const or_ = indexOfTrack(grid.rows, other.rowId);
+      const w = other.span ?? 1;
+      const h = other.rows ?? 1;
+      return ci + room >= oc && ci + room < oc + w && ri >= or_ && ri < or_ + h;
+    });
+    if (next) break;
+    room += 1;
+  }
+
+  const span = Math.min(spanFor(style, draft || " "), room);
+  const commit = () => {
+    onDone();
+    if (draft.trim() === "") removeTile(id);
+    else setText(id, draft, span);
+  };
+
+  return (
+    <input
+      className="editor"
+      autoFocus
+      spellCheck={false}
+      value={draft}
+      style={{
+        left: worldX(ci),
+        top: worldX(ri),
+        height: CELL,
+        width: CELL * span,
+        paddingLeft: CELL * m.inset,
+        paddingRight: CELL * m.inset,
+        font: fontOf(style, CELL),
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          onDone();
+          if ((tile.text ?? "") === "") removeTile(id);
+        }
+      }}
+    />
+  );
+}
+
 /** Which region owns a cell, by index, so a tile can take the hue it sits in. */
 function regionHue(grid: ReturnType<typeof useGrid.getState>["grid"], ci: number, ri: number) {
   for (const region of grid.regions) {
@@ -34,13 +106,15 @@ export function Grid() {
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
   const setText = useGrid((s) => s.setText);
-  const removeTile = useGrid((s) => s.remove);
+  const moveTile = useGrid((s) => s.move);
 
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
+  /** The tile being moved, while shift is held. */
+  const dragging = useRef<string | null>(null);
 
   /**
    * Derived from the model, so it is rebuilt when the model changes and never on a camera
@@ -60,6 +134,7 @@ export function Grid() {
       }
     }
     for (const tile of grid.tiles) {
+      if (tile.id === editing) continue;
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
       const w = tile.span ?? 1;
@@ -234,13 +309,33 @@ export function Grid() {
     schedule(camera.current);
   };
 
+  const cellUnder = (event: { clientX: number; clientY: number }) => {
+    const host = viewport.current;
+    if (!host) return null;
+    const box = host.getBoundingClientRect();
+    return cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
+  };
+
   const onDown = (event: React.PointerEvent) => {
     pressed.current = { x: event.clientX, y: event.clientY };
+    if (!event.shiftKey) return;
+    const at = cellUnder(event);
+    const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
+    if (id) {
+      dragging.current = id;
+      (event.target as Element).setPointerCapture?.(event.pointerId);
+    }
   };
 
   const onUp = (event: React.PointerEvent) => {
     const start = pressed.current;
     pressed.current = null;
+    if (dragging.current) {
+      const at = cellUnder(event);
+      if (at) moveTile(dragging.current, at[0], at[1]);
+      dragging.current = null;
+      return;
+    }
     const host = viewport.current;
     if (editing) return;
     if (menu) {
@@ -287,43 +382,7 @@ export function Grid() {
     >
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
-        {editing !== null &&
-          (() => {
-            const tile = grid.tiles.find((x) => x.id === editing);
-            if (!tile) return null;
-            const ci = indexOfTrack(grid.columns, tile.columnId);
-            const ri = indexOfTrack(grid.rows, tile.rowId);
-            const style = tile.style ?? "title";
-            const m = METRICS[style];
-            const commit = (value: string) => {
-              setEditing(null);
-              if (value.trim() === "") removeTile(tile.id);
-              else setText(tile.id, value, spanFor(style, value));
-            };
-            return (
-              <input
-                className="editor"
-                autoFocus
-                defaultValue={tile.text ?? ""}
-                style={{
-                  left: worldX(ci),
-                  top: worldX(ri),
-                  height: CELL,
-                  width: CELL * Math.max(tile.span ?? 1, 6),
-                  paddingLeft: CELL * m.inset,
-                  font: fontOf(style, CELL),
-                }}
-                onBlur={(e) => commit(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                  if (e.key === "Escape") {
-                    setEditing(null);
-                    if ((tile.text ?? "") === "") removeTile(tile.id);
-                  }
-                }}
-              />
-            );
-          })()}
+        {editing !== null && <Editor id={editing} onDone={() => setEditing(null)} />}
       </div>
       {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
     </div>

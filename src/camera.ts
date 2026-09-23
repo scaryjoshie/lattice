@@ -31,6 +31,8 @@ export function useCamera(
     if (!el) return;
     const behaviour = d3zoom<HTMLElement, unknown>()
       .scaleExtent([MIN_K, MAX_K])
+      // Shift is the move gesture, so the camera does not also claim it.
+      .filter((event: Event) => !(event as MouseEvent).shiftKey)
       .on("zoom", (event: { transform: ZoomTransform }) => {
         camera.current = { x: event.transform.x, y: event.transform.y, k: event.transform.k };
         handler.current(camera.current);
