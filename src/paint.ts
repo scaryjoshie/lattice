@@ -135,6 +135,9 @@ export interface Scene {
   selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
   proposal: Proposal | null;
   hover: readonly [number, number] | null;
+  /** Shift is held. The plus shows only then, so the affordance appears with the modifier
+   *  that reaches it: shift-click on an empty cell is the add menu. */
+  shift: boolean;
 }
 
 /** One occupant's mark, scaled from its own 24-unit space into the cell. */
@@ -182,7 +185,7 @@ function mark(
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, proposal, hover } =
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, proposal, hover, shift } =
     scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
@@ -541,7 +544,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
-  // An empty cell also gets a plus, because the point of pointing at one is to put
+  // An empty cell also gets a plus while shift is held, because shift-click is what puts
   // something there.
   if (hover && rule > 0 && !focus) {
     const [ci, ri] = hover;
@@ -561,7 +564,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       size * box.rows - FOCUS_EDGE,
     );
 
-    if (!cell?.occupied) {
+    if (!cell?.occupied && shift) {
       const arm = size * PLUS;
       const cx = sx(ci) + size / 2;
       const cy = sy(ri) + size / 2;

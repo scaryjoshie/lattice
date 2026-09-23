@@ -165,6 +165,8 @@ export function Grid() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const hover = useRef<[number, number] | null>(null);
+  /** Shift is held. A ref, like hover: it changes at key speed and only the paint reads it. */
+  const shift = useRef(false);
 
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
@@ -450,6 +452,7 @@ export function Grid() {
         selected,
         proposal,
         hover: hover.current,
+        shift: shift.current,
       },
       dash.current,
     );
@@ -521,6 +524,26 @@ export function Grid() {
     const onResize = () => schedule(camera.current);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, [schedule, camera]);
+
+  // The plus follows shift. Losing the window drops it too, since the keyup that would
+  // have cleared it goes to whatever took focus.
+  useEffect(() => {
+    const set = (held: boolean) => {
+      if (shift.current === held) return;
+      shift.current = held;
+      schedule(camera.current);
+    };
+    const onKey = (e: KeyboardEvent) => set(e.shiftKey);
+    const onBlur = () => set(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [schedule, camera]);
 
   const onMove = (event: React.PointerEvent) => {
