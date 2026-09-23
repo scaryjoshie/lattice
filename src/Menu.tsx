@@ -1,5 +1,5 @@
 import type { TextStyle, TileKind } from "./model.ts";
-import { Mark } from "./marks.tsx";
+import { MARKS } from "./marks.ts";
 
 /**
  * What can go in a cell, grouped by what it is rather than by what it does. The menu is
@@ -65,6 +65,26 @@ export function Menu({
         </div>
       ))}
     </div>
+  );
+}
+
+/** The same path data the canvas draws, rendered as SVG for the menu. */
+function Mark({ kind }: { kind: Exclude<TileKind, "text"> }) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
+      {MARKS[kind].map((stroke) => (
+        <path
+          key={stroke.d}
+          d={stroke.d}
+          fill={stroke.width === undefined ? "currentColor" : "none"}
+          fillRule="evenodd"
+          stroke={stroke.width === undefined ? "none" : "currentColor"}
+          strokeWidth={stroke.width}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
   );
 }
 

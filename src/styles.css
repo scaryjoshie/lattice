@@ -57,19 +57,6 @@ body {
   will-change: transform;
 }
 
-/* Transparent: the canvas already painted this cell. */
-.tile {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  pointer-events: auto;
-}
-
-.mark {
-  display: grid;
-  place-items: center;
-  line-height: 0;
-}
 
 /*
  * Anchored at the pointer rather than at the cell: it answers a question the pointer

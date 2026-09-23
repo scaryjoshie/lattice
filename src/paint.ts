@@ -1,6 +1,7 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
+import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { fontOf, METRICS, wrap } from "./measure.ts";
-import type { TextStyle } from "./model.ts";
+import type { OccupantKind, TextStyle } from "./model.ts";
 import { hue } from "./palette.ts";
 
 /**
@@ -76,6 +77,7 @@ export interface TextRun {
 export interface Occupant {
   ci: number;
   ri: number;
+  kind: OccupantKind;
   hue: number | null;
 }
 
@@ -98,6 +100,35 @@ export interface Scene {
   texts: readonly TextRun[];
   focus: Focus | null;
   hover: readonly [number, number] | null;
+}
+
+/** One occupant's mark, scaled from its own 24-unit space into the cell. */
+function mark(
+  ctx: CanvasRenderingContext2D,
+  spot: Occupant,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const side = size * MARK;
+  const scale = side / MARK_UNITS;
+  ctx.save();
+  ctx.translate(x + (size - side) / 2, y + (size - side) / 2);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = hue(spot.hue).ink;
+  ctx.strokeStyle = hue(spot.hue).ink;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const stroke of MARKS[spot.kind]) {
+    const shape = path(stroke.d);
+    if (stroke.width === undefined) {
+      ctx.fill(shape, "evenodd");
+    } else {
+      ctx.lineWidth = stroke.width;
+      ctx.stroke(shape);
+    }
+  }
+  ctx.restore();
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
@@ -192,9 +223,13 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     }
     path.rect(sx(spot.ci), sy(spot.ri), size, size);
   }
-  for (const [style, path] of fills) {
+  for (const [style, shape] of fills) {
     ctx.fillStyle = style;
-    ctx.fill(path);
+    ctx.fill(shape);
+  }
+  for (const spot of occupied) {
+    if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
+    mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
   }
 
   /*
@@ -263,6 +298,12 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       restore(partner.ci, partner.ri, at(partner.ci, partner.ri)?.hue ?? null);
     }
     restore(focus.ci, focus.ri, focus.hue);
+    for (const spot of occupied) {
+      const lit =
+        (spot.ci === focus.ci && spot.ri === focus.ri) ||
+        focus.partners.some((p) => p.ci === spot.ci && p.ri === spot.ri);
+      if (lit) mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
+    }
 
     /*
      * Lines run over the tiles rather than stopping at their edges, and end in a dot at
@@ -281,10 +322,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.beginPath();
     for (const partner of focus.partners) {
       const [px, py] = centre(partner.ci, partner.ri);
-      ctx.moveTo(fx, fy);
-      const turn = Math.min(size * LINK_TURN, Math.abs(px - fx), Math.abs(py - fy));
-      if (turn > 0.5) ctx.arcTo(px, fy, px, py, turn);
-      else ctx.lineTo(px, fy);
+      // The focused agent is already ringed, so its line leaves from the edge rather than
+      // from under its own mark. Partners are only identified by what arrives at them.
+      const half = size / 2;
+      const out: readonly [number, number] =
+        px === fx ? [fx, fy + Math.sign(py - fy) * half] : [fx + Math.sign(px - fx) * half, fy];
+      ctx.moveTo(out[0], out[1]);
+      const turn = Math.min(size * LINK_TURN, Math.abs(px - out[0]), Math.abs(py - out[1]));
+      if (turn > 0.5) ctx.arcTo(px, out[1], px, py, turn);
+      else ctx.lineTo(px, out[1]);
       ctx.lineTo(px, py);
     }
     ctx.stroke();
@@ -298,7 +344,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.fill();
     };
     for (const partner of focus.partners) stop(...centre(partner.ci, partner.ri));
-    stop(fx, fy);
 
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = h.edge;

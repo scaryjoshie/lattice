@@ -3,10 +3,8 @@ import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
 import { type Cell, type Focus, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
-import { Mark } from "./marks.tsx";
 import { fontOf, METRICS, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
-import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
 
 /**
@@ -96,7 +94,7 @@ export function Grid() {
           });
         }
       }
-      else occupied.push({ ci, ri, hue: h });
+      else occupied.push({ ci, ri, kind: tile.kind, hue: h });
     }
     const spots = new Map<string, { ci: number; ri: number; hue: number | null }>();
     for (const tile of grid.tiles) {
@@ -321,23 +319,6 @@ export function Grid() {
               />
             );
           })()}
-        {grid.tiles.map((tile) => {
-          if (tile.kind === "text") return null;
-          const ci = indexOfTrack(grid.columns, tile.columnId);
-          const ri = indexOfTrack(grid.rows, tile.rowId);
-          const h = hue(regionHue(grid, ci, ri));
-          return (
-            <div
-              key={tile.id}
-              className="tile"
-              style={{ left: worldX(ci), top: worldX(ri), width: CELL, height: CELL }}
-            >
-              <span className="mark" style={{ color: h.ink }}>
-                <Mark kind={tile.kind} />
-              </span>
-            </div>
-          );
-        })}
       </div>
       {menu && <Menu x={menu.x} y={menu.y} onPick={pick} />}
     </div>
