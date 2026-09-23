@@ -309,9 +309,13 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   /*
-   * Text. A title is one line; a note is a block whose words wrap inside the cells it has
-   * been given. Nothing is cleared: the ruling already left these cells unruled, because a
-   * run owns whole cells and which lines fall inside it is known rather than discovered.
+   * Text. One path for every run: wrap to the width it owns, draw the lines that fit in
+   * the height it owns, clipped to both. A title is not a special case of this — it is
+   * this, with a leading of one whole cell, which puts its single line in the middle of
+   * its single cell. The two styles differ only in how big they are.
+   *
+   * Nothing is cleared: the ruling already left these cells unruled, because a run owns
+   * whole cells and which lines fall inside it is known rather than discovered.
    */
   if (rule > 0) {
     ctx.globalAlpha = rule;
@@ -327,25 +331,19 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       const inset = size * m.inset;
       ctx.font = fontOf(run.style, size);
       ctx.fillStyle = h.ink;
-      if (run.style === "title") {
-        // Clipped to the cells the run owns. The span stops at an occupied neighbour but
-        // the string does not, and the input was doing the clipping while typing — so the
-        // glyphs carried straight across the neighbour the moment the text was committed.
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(x, y, size * run.span, size);
-        ctx.clip();
-        ctx.fillText(run.text, x + inset, y + size / 2);
-        ctx.restore();
-        continue;
-      }
+      const box = { w: size * run.span, h: size * run.rows };
       const leading = size * m.leading;
-      const lines = wrap(ctx, run.text, size * run.span - inset * 2);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, box.w, box.h);
+      ctx.clip();
+      const lines = wrap(ctx, run.text, box.w - inset * 2);
       for (let i = 0; i < lines.length; i++) {
-        const ly = y + inset + leading * (i + 0.5);
-        if (ly > y + size * run.rows - inset) break;
+        const ly = y + size * m.pad + leading * (i + 0.5);
+        if (ly - leading / 2 >= y + box.h) break;
         ctx.fillText(lines[i] as string, x + inset, ly);
       }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }

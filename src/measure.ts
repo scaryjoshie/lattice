@@ -13,9 +13,13 @@ export const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospac
 export interface Metrics {
   /** Cap height as a fraction of the cell. */
   size: number;
-  /** Line spacing as a fraction of the cell. */
+  /** Line spacing as a fraction of the cell. A title's is a whole cell, so one line sits
+   *  in the middle of one cell and the same formula centres it. */
   leading: number;
+  /** Space before the text, across the run. */
   inset: number;
+  /** Space above the first line. Zero for a title, which is centred by its leading. */
+  pad: number;
   weight: number;
 }
 
@@ -32,9 +36,13 @@ export function clip(ctx: CanvasRenderingContext2D, text: string, width: number)
   return `${cut}…`;
 }
 
+/**
+ * The only thing that differs between a title and a note is how big it is. Nothing
+ * branches on which one a run is; both are drawn by the same code with these numbers.
+ */
 export const METRICS: Record<TextStyle, Metrics> = {
-  title: { size: 0.32, leading: 1, inset: 0.26, weight: 500 },
-  note: { size: 0.19, leading: 0.34, inset: 0.2, weight: 400 },
+  title: { size: 0.32, leading: 1, inset: 0.26, pad: 0, weight: 500 },
+  note: { size: 0.19, leading: 0.34, inset: 0.2, pad: 0.16, weight: 400 },
 };
 
 /**
