@@ -30,10 +30,14 @@ const FOCUS_EDGE = 2.5;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
-/** Arm length, spacing and weight of a chevron, all in screen pixels. */
-const CHEVRON = 5;
-const CHEVRON_GAP = 15;
-const CHEVRON_EDGE = 2;
+/** A chevron's reach along the path and across it, its spacing and its weight — all in
+ *  screen pixels. Wider than it is long, so it reads as an arrowhead rather than a tick. */
+const CHEVRON_LONG = 4.5;
+const CHEVRON_WIDE = 7.5;
+const CHEVRON_GAP = 17;
+const CHEVRON_EDGE = 2.25;
+/** How fast the chevrons travel, as a multiple of the shared crawl. */
+const CHEVRON_SPEED = 0.55;
 /** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
 const NAME_FROM = 34;
 const NAME_FADE = 14;
@@ -441,6 +445,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
     const [ax, ay] = centre(proposal.from);
     const [bx, by] = centre(proposal.to);
+    /** Where a ray from the centre leaves a region's edge, so the path runs edge to edge
+     *  rather than centre to centre and is not buried under what it connects. */
+    const toEdge = (r: Proposal["to"], ux: number, uy: number) => {
+      const hw = (size * r.span) / 2;
+      const hh = (size * r.rows) / 2;
+      const tx = Math.abs(ux) < 1e-6 ? Number.POSITIVE_INFINITY : hw / Math.abs(ux);
+      const ty = Math.abs(uy) < 1e-6 ? Number.POSITIVE_INFINITY : hh / Math.abs(uy);
+      return Math.min(tx, ty);
+    };
     // The act has its own colour. It is not the hue of the thing being moved, because it
     // is not describing the thing — it is describing what is happening to it.
     const colour = proposal.ok ? palette.flow : palette.warn;
@@ -453,24 +466,25 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
      * by the same counter the links crawl on, so everything in flight moves together.
      */
     const far = Math.hypot(bx - ax, by - ay);
-    if (far > CHEVRON_GAP) {
+    if (far > 1) {
       const ux = (bx - ax) / far;
       const uy = (by - ay) / far;
-      const start = size * 0.36;
-      const end = far - size * 0.36;
+      const start = toEdge(proposal.from, ux, uy) + CHEVRON_LONG;
+      const end = far - toEdge(proposal.to, ux, uy);
+      if (end <= start) return;
       ctx.strokeStyle = colour;
       ctx.lineWidth = CHEVRON_EDGE;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
-      const slide = ((dash * 1.6) % CHEVRON_GAP) + CHEVRON_GAP;
+      const slide = ((dash * CHEVRON_SPEED) % CHEVRON_GAP) + CHEVRON_GAP;
       for (let d = start + (slide % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
         const px = ax + ux * d;
         const py = ay + uy * d;
         // Two strokes meeting at a point, aimed the way the move is going.
-        ctx.moveTo(px - ux * CHEVRON - uy * CHEVRON, py - uy * CHEVRON + ux * CHEVRON);
+        ctx.moveTo(px - ux * CHEVRON_LONG - uy * CHEVRON_WIDE, py - uy * CHEVRON_LONG + ux * CHEVRON_WIDE);
         ctx.lineTo(px, py);
-        ctx.lineTo(px - ux * CHEVRON + uy * CHEVRON, py - uy * CHEVRON - ux * CHEVRON);
+        ctx.lineTo(px - ux * CHEVRON_LONG + uy * CHEVRON_WIDE, py - uy * CHEVRON_LONG - ux * CHEVRON_WIDE);
       }
       ctx.stroke();
       ctx.lineCap = "butt";

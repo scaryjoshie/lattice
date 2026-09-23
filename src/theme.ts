@@ -53,7 +53,7 @@ export const light: Theme = {
   page: "#f5f5f6",
   veil: "rgba(245, 245, 246, 0.82)",
   warn: "#c9524e",
-  flow: "#3f95a6",
+  flow: "#d5751f",
   neutral: { tint: "#eeeef1", fill: "#c6c9d2", line: "#ebebef", edge: "#868b9a", ink: "#5f6270" },
   hues: [
     { tint: "#e3ecfb", fill: "#a8c3ee", line: "#cddef8", edge: "#5b87d4", ink: "#3f6096" },
@@ -76,7 +76,7 @@ export const dark: Theme = {
   page: "#131317",
   veil: "rgba(19, 19, 23, 0.82)",
   warn: "#d76b66",
-  flow: "#5cb6c8",
+  flow: "#e0913f",
   neutral: { tint: "#1c1c22", fill: "#33343d", line: "#232329", edge: "#71747f", ink: "#a4a7b2" },
   hues: [
     { tint: "#17202e", fill: "#2c4368", line: "#1d2838", edge: "#5f8cd8", ink: "#9dbcef" },
