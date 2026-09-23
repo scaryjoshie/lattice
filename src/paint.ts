@@ -141,6 +141,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   const size = CELL * k;
   const rule = clamp((size - FADE_FROM) / (FADE_TO - FADE_FROM));
   const at = (ci: number, ri: number) => cells.get(`${ci},${ri}`);
+  /** Half a pixel, so a one-pixel line lands on a pixel rather than across two. */
+  const snap = (n: number) => Math.round(n) + 0.5;
   const sx = (ci: number) => worldX(ci) * k + camera.x;
   const sy = (ri: number) => worldX(ri) * k + camera.y;
 
@@ -157,8 +159,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   if (rule > 0) {
-    // Half a pixel, so a one-pixel line lands on a pixel rather than across two.
-    const snap = (n: number) => Math.round(n) + 0.5;
     const rules = (a: number, b: number, p: number, q: number): Path2D => {
       const path = new Path2D();
       const top = sy(p);
@@ -248,28 +248,65 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       const y = sy(run.ri);
       const inset = size * m.inset;
       ctx.font = fontOf(run.style, size);
-      ctx.fillStyle = run.hue === null ? palette.page : h.tint;
 
+      /*
+       * Cleared cell by cell, each in its own surface, and then the outside edges are put
+       * back.
+       *
+       * Clearing the whole span in one colour punched a hole through any region the run
+       * reached into, which made a rectangle stop looking like one. And clearing to the
+       * cell boundary ate the rules that sit on it — a rule is centred on the boundary, so
+       * half of it lives inside the cell — which is why the neighbours above and to the
+       * left appeared to lose their edges.
+       */
+      for (let dy = 0; dy < run.rows; dy++) {
+        for (let dx = 0; dx < run.span; dx++) {
+          const cell = at(run.ci + dx, run.ri + dy);
+          const own = hue(cell?.hue ?? null);
+          const cx = sx(run.ci + dx);
+          const cy = sy(run.ri + dy);
+          ctx.fillStyle = cell?.hue == null ? palette.page : own.tint;
+          ctx.fillRect(cx, cy, size + 1, size + 1);
+        }
+      }
+      ctx.lineWidth = RULE;
+      for (let dy = 0; dy < run.rows; dy++) {
+        for (let dx = 0; dx < run.span; dx++) {
+          const cell = at(run.ci + dx, run.ri + dy);
+          ctx.strokeStyle = hue(cell?.hue ?? null).line;
+          const cx = snap(sx(run.ci + dx));
+          const cy = snap(sy(run.ri + dy));
+          ctx.beginPath();
+          if (dy === 0) {
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + size, cy);
+          }
+          if (dy === run.rows - 1) {
+            ctx.moveTo(cx, cy + size);
+            ctx.lineTo(cx + size, cy + size);
+          }
+          if (dx === 0) {
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx, cy + size);
+          }
+          if (dx === run.span - 1) {
+            ctx.moveTo(cx + size, cy);
+            ctx.lineTo(cx + size, cy + size);
+          }
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = h.ink;
       if (run.style === "title") {
-        // The whole span, not just as far as the words reach. A run's span is derived from
-        // its text, so these are the same thing rounded to a cell — and clearing less than
-        // it owns puts the selection ring somewhere the run visibly is not.
-        ctx.fillRect(x, y, size * run.span, size);
-        ctx.fillStyle = h.ink;
         ctx.fillText(run.text, x + inset, y + size / 2);
         continue;
       }
-
-      // A note owns its whole block, so it clears all of it and wraps inside.
-      const w = size * run.span;
-      const height = size * run.rows;
-      ctx.fillRect(x, y, w, height);
-      ctx.fillStyle = h.ink;
       const leading = size * m.leading;
-      const lines = wrap(ctx, run.text, w - inset * 2);
+      const lines = wrap(ctx, run.text, size * run.span - inset * 2);
       for (let i = 0; i < lines.length; i++) {
         const ly = y + inset + leading * (i + 0.5);
-        if (ly > y + height - inset) break;
+        if (ly > y + size * run.rows - inset) break;
         ctx.fillText(lines[i] as string, x + inset, ly);
       }
     }

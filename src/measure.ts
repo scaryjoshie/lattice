@@ -24,9 +24,13 @@ export const METRICS: Record<TextStyle, Metrics> = {
   note: { size: 0.19, leading: 0.34, inset: 0.2, weight: 400 },
 };
 
+/**
+ * Not rounded. A rounded size snaps between integers as the camera scales, so the glyphs
+ * change width in steps while the cell they sit in grows smoothly — which is the jiggle.
+ */
 export const fontOf = (style: TextStyle, cell: number): string => {
   const m = METRICS[style];
-  return `${m.weight} ${Math.round(cell * m.size)}px ${FONT}`;
+  return `${m.weight} ${cell * m.size}px ${FONT}`;
 };
 
 let ctx: CanvasRenderingContext2D | null = null;

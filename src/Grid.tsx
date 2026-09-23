@@ -224,7 +224,7 @@ export function Grid() {
 
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
-    if (!host || menu) return;
+    if (!host || menu || editing) return;
     const box = host.getBoundingClientRect();
     const next = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
     const prev = hover.current;
@@ -242,6 +242,7 @@ export function Grid() {
     const start = pressed.current;
     pressed.current = null;
     const host = viewport.current;
+    if (editing) return;
     if (menu) {
       setMenu(null);
       // Pick the hover back up where the pointer already is, rather than waiting for it
@@ -305,10 +306,11 @@ export function Grid() {
                 autoFocus
                 defaultValue={tile.text ?? ""}
                 style={{
-                  left: worldX(ci) + CELL * m.inset,
+                  left: worldX(ci),
                   top: worldX(ri),
                   height: CELL,
-                  width: CELL * 8,
+                  width: CELL * Math.max(tile.span ?? 1, 6),
+                  paddingLeft: CELL * m.inset,
                   font: fontOf(style, CELL),
                 }}
                 onBlur={(e) => commit(e.currentTarget.value)}

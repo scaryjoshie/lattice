@@ -113,13 +113,15 @@ body {
   height: 15px;
 }
 
-/* Lives in the transformed layer, so typing happens at the size the text will be. */
+/*
+ * Lives in the transformed layer, so typing happens at the size the text will be, and
+ * carries the page's own surface so the cell it is over does not show through the caret.
+ */
 .editor {
   position: absolute;
-  padding: 0;
   border: 0;
   outline: none;
-  background: none;
+  background: var(--page);
   color: var(--ink);
   font-family: var(--font);
   pointer-events: auto;
