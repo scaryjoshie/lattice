@@ -120,9 +120,11 @@ shadows than from an argument about it.
 62. A run grows cell by cell as it is typed.
 63. A run stops growing at the first cell that already holds something; further text is cut
     off, both while typing and once committed.
-63a. **[proposed]** A run also stops at the edge of the worktree it is in. Text may not
-    leave its worktree, which makes a worktree a container in fact and not only in
-    appearance.
+63a. **[proposed]** A run stops at every worktree boundary, in both directions. Text may
+    not leave a worktree, and may not enter one either: crossing from open grid into a
+    worktree is as much a boundary as crossing out of one. Every cell a run occupies
+    belongs to the same worktree, or to none — which is exactly the rule a selection
+    obeys (82).
 63b. **[proposed]** A run's span is not stored. It is what the text needs, bounded by what
     is free beside it — so anything that stops blocking a run lets it breathe, whether
     that is an agent moving away, a worktree expanding, or a tile being deleted, with no
