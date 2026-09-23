@@ -146,7 +146,9 @@ export function Grid() {
           .filter((l) => l.from === spot || l.to === spot)
           .map((l) => spots.get(l.from === spot ? l.to : l.from))
           .filter((s): s is NonNullable<typeof s> => Boolean(s));
-        if (partners.length) focus = { ...here, partners };
+        // Every agent focuses, talking or not. Dimming that depended on whether an agent
+        // happened to have links would make the canvas respond unevenly to the same act.
+        focus = { ...here, partners };
       }
     }
 

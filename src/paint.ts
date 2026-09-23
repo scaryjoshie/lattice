@@ -31,6 +31,9 @@ const FOCUS_EDGE = 2.5;
 const VEIL = "rgba(245, 245, 246, 0.82)";
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
+const LINK_DOT = 3.5;
+/** Corner radius as a fraction of the cell, so the turn scales with the grid. */
+const LINK_TURN = 0.3;
 
 /** Half the plus's width, as a fraction of the cell. Its stroke is screen pixels. */
 const PLUS = 0.16;
@@ -252,20 +255,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.fillRect(0, 0, width, height);
 
     const h = hue(focus.hue);
-    const [fx, fy] = centre(focus.ci, focus.ri);
-    ctx.strokeStyle = h.edge;
-    ctx.lineWidth = LINK_EDGE;
-    ctx.setLineDash(LINK_DASH);
-    ctx.lineDashOffset = -dash;
-    ctx.beginPath();
-    for (const partner of focus.partners) {
-      const [px, py] = centre(partner.ci, partner.ri);
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-
     const restore = (c: number, r: number, tint: number | null) => {
       ctx.fillStyle = hue(tint).fill;
       ctx.fillRect(sx(c), sy(r), size, size);
@@ -274,6 +263,43 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       restore(partner.ci, partner.ri, at(partner.ci, partner.ri)?.hue ?? null);
     }
     restore(focus.ci, focus.ri, focus.hue);
+
+    /*
+     * Lines run over the tiles rather than stopping at their edges, and end in a dot at
+     * each agent's centre. Two agents in neighbouring cells would otherwise have their
+     * connection entirely hidden underneath them.
+     *
+     * The route turns rather than cutting across: a diagonal ignores the grid it is drawn
+     * on, and on a ruled surface that reads as a mistake. One corner, rounded.
+     */
+    const [fx, fy] = centre(focus.ci, focus.ri);
+    ctx.strokeStyle = h.edge;
+    ctx.lineWidth = LINK_EDGE;
+    ctx.lineCap = "round";
+    ctx.setLineDash(LINK_DASH);
+    ctx.lineDashOffset = -dash;
+    ctx.beginPath();
+    for (const partner of focus.partners) {
+      const [px, py] = centre(partner.ci, partner.ri);
+      ctx.moveTo(fx, fy);
+      const turn = Math.min(size * LINK_TURN, Math.abs(px - fx), Math.abs(py - fy));
+      if (turn > 0.5) ctx.arcTo(px, fy, px, py, turn);
+      else ctx.lineTo(px, fy);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap = "butt";
+
+    ctx.fillStyle = h.edge;
+    const stop = (x: number, y: number) => {
+      ctx.beginPath();
+      ctx.arc(x, y, LINK_DOT, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (const partner of focus.partners) stop(...centre(partner.ci, partner.ri));
+    stop(fx, fy);
+
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = h.edge;
     const inset = FOCUS_EDGE / 2;
