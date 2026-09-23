@@ -1,5 +1,6 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
-import { FONT, TEXT, TEXT_INSET } from "./measure.ts";
+import { fontOf, METRICS, wrap } from "./measure.ts";
+import type { TextStyle } from "./model.ts";
 import { hue } from "./palette.ts";
 
 /**
@@ -35,6 +36,8 @@ const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 export interface Cell {
   hue: number | null;
   occupied: boolean;
+  /** For a tile larger than one cell, the whole of it — so focus can cover all of it. */
+  extent?: { ci: number; ri: number; span: number; rows: number };
 }
 
 export interface Plate {
@@ -53,8 +56,10 @@ export interface Plate {
 export interface TextRun {
   ci: number;
   ri: number;
-  /** Columns occupied, starting at `ci`. */
+  /** Cells occupied, starting at (ci, ri). A title is always one row tall. */
   span: number;
+  rows: number;
+  style: TextStyle;
   text: string;
   hue: number | null;
 }
@@ -175,28 +180,46 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.fill(path);
   }
 
-  // Text runs. The span is cleared back to the surface it sits on, which takes the ruling
-  // out from under the words, and then written left-aligned. Clearing rather than skipping
-  // keeps the ruling ignorant of text.
+  /*
+   * Text. A title is one line that clears the ruling only as far as its words reach; a
+   * note is a block whose words wrap inside the cells it has been given. Clearing rather
+   * than teaching the ruling to skip text keeps the two independent.
+   */
   if (rule > 0) {
     ctx.globalAlpha = rule;
-    ctx.lineWidth = RULE;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.font = `${Math.round(size * TEXT)}px ${FONT}`;
     for (const run of texts) {
-      if (run.ci + run.span - 1 < c0 || run.ci > c1 || run.ri < r0 || run.ri > r1) continue;
+      if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
+      if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
+      const m = METRICS[run.style];
       const h = hue(run.hue);
       const x = sx(run.ci);
       const y = sy(run.ri);
-      const inset = size * TEXT_INSET;
-      // Clear only as far as the words reach, not to the end of the span. A run may own
-      // more cells than it currently fills, and the ruling should still show in them.
-      const cleared = Math.min(inset * 2 + ctx.measureText(run.text).width, size * run.span);
+      const inset = size * m.inset;
+      ctx.font = fontOf(run.style, size);
       ctx.fillStyle = run.hue === null ? PAGE : h.tint;
-      ctx.fillRect(x, y, cleared, size);
+
+      if (run.style === "title") {
+        const cleared = Math.min(inset * 2 + ctx.measureText(run.text).width, size * run.span);
+        ctx.fillRect(x, y, cleared, size);
+        ctx.fillStyle = h.ink;
+        ctx.fillText(run.text, x + inset, y + size / 2);
+        continue;
+      }
+
+      // A note owns its whole block, so it clears all of it and wraps inside.
+      const w = size * run.span;
+      const height = size * run.rows;
+      ctx.fillRect(x, y, w, height);
       ctx.fillStyle = h.ink;
-      ctx.fillText(run.text, x + inset, y + size / 2);
+      const leading = size * m.leading;
+      const lines = wrap(ctx, run.text, w - inset * 2);
+      for (let i = 0; i < lines.length; i++) {
+        const ly = y + inset + leading * (i + 0.5);
+        if (ly > y + height - inset) break;
+        ctx.fillText(lines[i] as string, x + inset, ly);
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -209,16 +232,23 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;
     const inset = FOCUS_EDGE / 2;
-    const x = sx(ci);
-    const y = sy(ri);
+    // Whatever is under the pointer is selected whole, not by the cell it was touched on.
+    const box = cell?.extent ?? { ci, ri, span: 1, rows: 1 };
+    const x = sx(box.ci);
+    const y = sy(box.ri);
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = colour;
-    ctx.strokeRect(x + inset, y + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+    ctx.strokeRect(
+      x + inset,
+      y + inset,
+      size * box.span - FOCUS_EDGE,
+      size * box.rows - FOCUS_EDGE,
+    );
 
     if (!cell?.occupied) {
       const arm = size * PLUS;
-      const cx = x + size / 2;
-      const cy = y + size / 2;
+      const cx = sx(ci) + size / 2;
+      const cy = sy(ri) + size / 2;
       ctx.lineWidth = PLUS_EDGE;
       ctx.lineCap = "round";
       ctx.beginPath();

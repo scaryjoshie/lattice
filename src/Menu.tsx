@@ -1,15 +1,27 @@
-import type { TileKind } from "./model.ts";
+import type { TextStyle, TileKind } from "./model.ts";
 import { Mark } from "./marks.tsx";
 
 /**
  * What can go in a cell, grouped by what it is rather than by what it does. The menu is
  * the only place the two families are named, so adding a kind is one row here.
  */
-const GROUPS: readonly { heading: string; items: readonly { kind: TileKind; label: string }[] }[] = [
+interface Item {
+  kind: TileKind;
+  label: string;
+  style?: TextStyle;
+}
+
+const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
+  {
+    heading: "text",
+    items: [
+      { kind: "text", label: "title", style: "title" },
+      { kind: "text", label: "note", style: "note" },
+    ],
+  },
   {
     heading: "utilities",
     items: [
-      { kind: "text", label: "text" },
       { kind: "shell", label: "terminal" },
       { kind: "browser", label: "browser" },
     ],
@@ -30,7 +42,7 @@ export function Menu({
 }: {
   x: number;
   y: number;
-  onPick(kind: TileKind): void;
+  onPick(kind: TileKind, style?: TextStyle): void;
 }) {
   return (
     <div className="menu" style={{ left: x, top: y }}>
@@ -41,11 +53,11 @@ export function Menu({
             <button
               className="menu-item"
               type="button"
-              key={item.kind}
-              onClick={() => onPick(item.kind)}
+              key={item.label}
+              onClick={() => onPick(item.kind, item.style)}
             >
               <span className="menu-mark">
-                {item.kind === "text" ? <TextMark /> : <Mark kind={item.kind} />}
+                {item.kind === "text" ? <TextMark style={item.style} /> : <Mark kind={item.kind} />}
               </span>
               {item.label}
             </button>
@@ -56,16 +68,27 @@ export function Menu({
   );
 }
 
-function TextMark() {
+/** A serif T for a title; stacked lines for a note. The shapes say which is which. */
+function TextMark({ style }: { style?: TextStyle }) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M5.5 6.4h13M12 6.4v11.2M9.2 17.6h5.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.1"
-        strokeLinecap="round"
-      />
+      {style === "note" ? (
+        <path
+          d="M4.5 7h15M4.5 12h15M4.5 17h9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : (
+        <path
+          d="M5.5 6.4h13M12 6.4v11.2M9.2 17.6h5.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+      )}
     </svg>
   );
 }

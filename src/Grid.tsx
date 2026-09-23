@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
-import { indexOfTrack, regionBounds, type TileKind } from "./model.ts";
+import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
 import { type Cell, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
 import { Mark } from "./marks.tsx";
-import { spanFor, TEXT, TEXT_INSET } from "./measure.ts";
+import { fontOf, METRICS, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
 import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
@@ -63,9 +63,18 @@ export function Grid() {
     for (const tile of grid.tiles) {
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
-      for (let n = 0; n < (tile.span ?? 1); n++) {
-        const existing = cells.get(`${ci + n},${ri}`);
-        cells.set(`${ci + n},${ri}`, { hue: existing?.hue ?? null, occupied: true });
+      const w = tile.span ?? 1;
+      const h = tile.rows ?? 1;
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          const existing = cells.get(`${ci + dx},${ri + dy}`);
+          cells.set(`${ci + dx},${ri + dy}`, {
+            hue: existing?.hue ?? null,
+            occupied: true,
+            // Selecting a run selects all of it, not the one cell under the pointer.
+            extent: { ci, ri, span: w, rows: h },
+          });
+        }
       }
     }
     const occupied: Occupant[] = [];
@@ -76,7 +85,15 @@ export function Grid() {
       const h = cells.get(`${ci},${ri}`)?.hue ?? null;
       if (tile.kind === "text") {
         if (tile.id !== editing) {
-          texts.push({ ci, ri, span: tile.span ?? 1, text: tile.text ?? "", hue: h });
+          texts.push({
+            ci,
+            ri,
+            span: tile.span ?? 1,
+            rows: tile.rows ?? 1,
+            style: tile.style ?? "title",
+            text: tile.text ?? "",
+            hue: h,
+          });
         }
       }
       else occupied.push({ ci, ri, hue: h });
@@ -155,7 +172,7 @@ export function Grid() {
 
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
-    if (!host) return;
+    if (!host || menu) return;
     const box = host.getBoundingClientRect();
     const next = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
     const prev = hover.current;
@@ -183,12 +200,13 @@ export function Grid() {
     const box = host.getBoundingClientRect();
     const [ci, ri] = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
     if (model.current.cells.get(`${ci},${ri}`)?.occupied) return;
+    hover.current = null;
     setMenu({ x: event.clientX, y: event.clientY, ci, ri });
   };
 
-  const pick = (kind: TileKind) => {
+  const pick = (kind: TileKind, style?: TextStyle) => {
     if (!menu) return;
-    const id = addAt(menu.ci, menu.ri, kind);
+    const id = addAt(menu.ci, menu.ri, kind, style);
     setMenu(null);
     if (id && kind === "text") setEditing(id);
   };
@@ -215,10 +233,12 @@ export function Grid() {
             if (!tile) return null;
             const ci = indexOfTrack(grid.columns, tile.columnId);
             const ri = indexOfTrack(grid.rows, tile.rowId);
+            const style = tile.style ?? "title";
+            const m = METRICS[style];
             const commit = (value: string) => {
               setEditing(null);
               if (value.trim() === "") removeTile(tile.id);
-              else setText(tile.id, value, spanFor(value));
+              else setText(tile.id, value, spanFor(style, value));
             };
             return (
               <input
@@ -226,11 +246,11 @@ export function Grid() {
                 autoFocus
                 defaultValue={tile.text ?? ""}
                 style={{
-                  left: worldX(ci) + CELL * TEXT_INSET,
+                  left: worldX(ci) + CELL * m.inset,
                   top: worldX(ri),
                   height: CELL,
                   width: CELL * 8,
-                  fontSize: Math.round(CELL * TEXT),
+                  font: fontOf(style, CELL),
                 }}
                 onBlur={(e) => commit(e.currentTarget.value)}
                 onKeyDown={(e) => {

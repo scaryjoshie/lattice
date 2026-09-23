@@ -1,24 +1,67 @@
 import { CELL } from "./geometry.ts";
+import type { TextStyle } from "./model.ts";
 
 /**
- * How many cells a word needs. Measured at the cell's own size so the answer does not
- * depend on the zoom it happened to be typed at, and shared with the paint so the two
- * cannot disagree about how wide a run is.
+ * Type metrics, shared between the paint and the editor so the two cannot disagree about
+ * how much room a run needs. Everything is a fraction of the cell, and everything is
+ * measured at the cell's own size, so an answer does not depend on the zoom it was asked
+ * at.
  */
 
-export const TEXT = 0.3;
-export const TEXT_INSET = 0.26;
 export const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
+
+export interface Metrics {
+  /** Cap height as a fraction of the cell. */
+  size: number;
+  /** Line spacing as a fraction of the cell. */
+  leading: number;
+  inset: number;
+  weight: number;
+}
+
+export const METRICS: Record<TextStyle, Metrics> = {
+  title: { size: 0.32, leading: 1, inset: 0.26, weight: 500 },
+  note: { size: 0.19, leading: 0.34, inset: 0.2, weight: 400 },
+};
+
+export const fontOf = (style: TextStyle, cell: number): string => {
+  const m = METRICS[style];
+  return `${m.weight} ${Math.round(cell * m.size)}px ${FONT}`;
+};
 
 let ctx: CanvasRenderingContext2D | null = null;
 
-export function spanFor(text: string): number {
-  if (!ctx) {
-    const canvas = document.createElement("canvas");
-    ctx = canvas.getContext("2d");
-    if (!ctx) return 1;
-  }
-  ctx.font = `${Math.round(CELL * TEXT)}px ${FONT}`;
-  const width = CELL * TEXT_INSET * 2 + ctx.measureText(text).width;
+function measurer(): CanvasRenderingContext2D | null {
+  if (!ctx) ctx = document.createElement("canvas").getContext("2d");
+  return ctx;
+}
+
+/** How many columns a title needs to sit on one line. */
+export function spanFor(style: TextStyle, text: string): number {
+  const c = measurer();
+  if (!c) return 1;
+  c.font = fontOf(style, CELL);
+  const width = CELL * METRICS[style].inset * 2 + c.measureText(text).width;
   return Math.max(1, Math.ceil(width / CELL));
+}
+
+/** Break a note into lines that fit the width it has been given. */
+export function wrap(
+  measure: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && measure.measureText(next).width > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }

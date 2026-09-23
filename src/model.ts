@@ -16,18 +16,32 @@ export interface Track {
   readonly id: string;
 }
 
-/** What a tile holds. Not a label — it decides what is drawn. */
-export type TileKind = "claude" | "codex" | "shell" | "browser" | "text";
+/**
+ * Two families, and they are not variants of each other.
+ *
+ * An *occupant* is something running: it fills a cell, and one cell is all it ever wants.
+ * *Text* is content written on the canvas: it has no process, and its size is decided by
+ * what it says rather than by the grid. A title grows sideways as it gets longer; a note
+ * is a block you size and the words wrap inside it. Those are different geometries, which
+ * is the real reason text cannot just be another kind of occupant.
+ */
+export type OccupantKind = "claude" | "codex" | "shell" | "browser";
+export type TextStyle = "title" | "note";
+export type TileKind = OccupantKind | "text";
+
+export const isText = (kind: TileKind): boolean => kind === "text";
 
 export interface Tile {
   readonly id: string;
   readonly kind: TileKind;
   readonly columnId: string;
   readonly rowId: string;
-  /** Text tiles only. */
+  /** Text only. */
+  readonly style?: TextStyle;
   readonly text?: string;
-  /** Columns occupied, starting at `columnId`. Defaults to one. */
+  /** Cells occupied, starting at (columnId, rowId). A title is always one row tall. */
   readonly span?: number;
+  readonly rows?: number;
 }
 
 /**
@@ -109,9 +123,13 @@ export function addTile(
   rowId: string,
   kind: TileKind,
   id = nextId("t"),
+  style?: TextStyle,
 ): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
-  const tile: Tile = kind === "text" ? { id, kind, columnId, rowId, text: "", span: 1 } : { id, kind, columnId, rowId };
+  const tile: Tile =
+    kind === "text"
+      ? { id, kind, columnId, rowId, style: style ?? "title", text: "", span: 1, rows: 1 }
+      : { id, kind, columnId, rowId };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
 
@@ -171,6 +189,7 @@ export function seed(): Grid {
     [12, 6, 3, "planner"],
   ];
 
+
   const cells: [number, number, TileKind][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
@@ -182,10 +201,12 @@ export function seed(): Grid {
     ...texts.map(([c, r, span, text]) => ({
       id: nextId("t"),
       kind: "text" as const,
+      style: "title" as const,
       columnId: col(c),
       rowId: row(r),
       text,
       span,
+      rows: 1,
     })),
     ...cells.map(([c, r, kind]) => ({
       id: nextId("t"),
