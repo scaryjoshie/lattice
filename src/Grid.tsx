@@ -6,6 +6,7 @@ import {
   type Move,
   proposeMove,
   columnsFor,
+  rowsFor,
   regionBounds,
   type TextStyle,
   type TileKind,
@@ -19,8 +20,9 @@ import {
   type Plate,
   type TextRun,
 } from "./paint.ts";
-import { fontOf, METRICS, nameFont, spanFor } from "./measure.ts";
+import { fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
 import { Menu, TileMenu } from "./Menu.tsx";
+import { claimed } from "./pointer.ts";
 import { useGrid } from "./store.ts";
 import { onTheme } from "./theme.ts";
 
@@ -41,7 +43,15 @@ import { onTheme } from "./theme.ts";
  * because two things cannot be in one cell, and pushing the neighbour aside needs a notion
  * of what may be pushed that does not exist yet.
  */
-function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: number): void }) {
+function Editor({
+  id,
+  onDone,
+  onShape,
+}: {
+  id: string;
+  onDone(): void;
+  onShape(span: number, rows: number): void;
+}) {
   const grid = useGrid((s) => s.grid);
   const setText = useGrid((s) => s.setText);
   const removeTile = useGrid((s) => s.remove);
@@ -57,13 +67,21 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
   const room = columnsFor(grid, id, ci, ri);
 
   const span = Math.min(spanFor(style, draft || " "), room);
+  /*
+   * Wrapping is what running out of room means. If the words need more width than there
+   * is, they go down instead — as far as there is room below at that width, and no
+   * further, at which point the paint cuts them with an ellipsis.
+   */
+  const rows = Math.min(linesFor(style, draft, span), rowsFor(grid, id, ci, ri, span));
   // The canvas owns the surface and the ruling even while typing; the input contributes
   // only a caret and glyphs, so it has to say how far it currently reaches.
-  onSpan(span);
+  // Both, not just the width: the canvas leaves a run's cells unruled while it is being
+  // typed, and it can only do that for cells it has been told about.
+  onShape(span, rows);
   const commit = () => {
     onDone();
     if (draft.trim() === "") removeTile(id);
-    else setText(id, draft, span);
+    else setText(id, draft, span, rows);
   };
 
   return (
@@ -75,8 +93,8 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
       rows={1}
       style={{
         left: worldX(ci),
-        top: worldX(ri),
-        height: CELL,
+        top: worldX(ri) + CELL * m.pad,
+        height: CELL * m.leading * rows,
         width: CELL * span,
         paddingLeft: CELL * m.inset,
         paddingRight: CELL * m.inset,
@@ -84,7 +102,7 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
         // After `font`, not before: the shorthand resets line-height to normal, so setting
         // it first is silently undone. An input centres its own text; a textarea needs the
         // line box to be the cell for one line to sit where the input's did.
-        lineHeight: `${CELL}px`,
+        lineHeight: `${CELL * m.leading}px`,
       }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -163,7 +181,7 @@ export function Grid() {
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [editSpan, setEditSpan] = useState(1);
+  const [editShape, setEditShape] = useState({ span: 1, rows: 1 });
   /** The tile being renamed, if any. */
   const [naming, setNaming] = useState<string | null>(null);
   /** Right-click on something that is already there. */
@@ -181,7 +199,16 @@ export function Grid() {
    */
   const dismissing = useRef(false);
   /** The move in progress, while shift is held. */
-  const dragging = useRef<{ id: string; origin: [number, number] } | null>(null);
+  /**
+   * `grab` is where inside the tile it was picked up, as an offset from its own corner. A
+   * multi-cell run grabbed by its far end would otherwise be placed as though the pointer
+   * were on its corner, jumping sideways the moment the drag began.
+   */
+  const dragging = useRef<{
+    id: string;
+    origin: [number, number];
+    grab: [number, number];
+  } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
   const [held, setHeld] = useState<{
     id: string;
@@ -267,8 +294,8 @@ export function Grid() {
           texts.push({
             ci,
             ri,
-            span: editSpan,
-            rows: tile.rows ?? 1,
+            span: editShape.span,
+            rows: editShape.rows,
             style: tile.style ?? "title",
             text: "",
             hue: h,
@@ -301,8 +328,8 @@ export function Grid() {
       tiles.set(tile.id, {
         ci,
         ri,
-        span: tile.id === editing ? editSpan : (tile.span ?? 1),
-        rows: tile.rows ?? 1,
+        span: tile.id === editing ? editShape.span : (tile.span ?? 1),
+        rows: tile.id === editing ? editShape.rows : (tile.rows ?? 1),
         hue: hueAt(tile),
       });
     }
@@ -339,7 +366,7 @@ export function Grid() {
       carried: carry,
       proposal,
     };
-  }, [grid, editing, editSpan, naming, held]);
+  }, [grid, editing, editShape, naming, held]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -500,16 +527,18 @@ export function Grid() {
   }, [schedule, camera]);
 
   const onMove = (event: React.PointerEvent) => {
+    if (claimed(event.target)) return;
     const host = viewport.current;
     if (!host || menu || editing || naming || acting) return;
     if (dragging.current) {
       const at = cellUnder(event);
       if (at) {
         const carry = dragging.current;
+        const to: [number, number] = [at[0] - carry.grab[0], at[1] - carry.grab[1]];
         // From the model, never from the scene: the scene is built from this answer.
-        const verdict = proposeMove(gridRef.current, carry.id, at[0], at[1]);
+        const verdict = proposeMove(gridRef.current, carry.id, to[0], to[1]);
         hover.current = null;
-        setHeld({ id: carry.id, origin: carry.origin, to: at, moves: verdict.moves, ok: verdict.ok });
+        setHeld({ id: carry.id, origin: carry.origin, to, moves: verdict.moves, ok: verdict.ok });
       }
       return;
     }
@@ -530,25 +559,38 @@ export function Grid() {
   };
 
   const onDown = (event: React.PointerEvent) => {
+    if (claimed(event.target)) return;
     pressed.current = { x: event.clientX, y: event.clientY };
     dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
     if (!event.shiftKey) return;
     const at = cellUnder(event);
     // Anything in a cell can be picked up, text included.
     const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-    if (id && at) {
-      dragging.current = { id, origin: at };
+    const shape = id ? model.current.tiles.get(id) : undefined;
+    if (id && at && shape) {
+      dragging.current = {
+        id,
+        origin: [shape.ci, shape.ri],
+        grab: [at[0] - shape.ci, at[1] - shape.ri],
+      };
       (event.target as Element).setPointerCapture?.(event.pointerId);
     }
   };
 
   const onUp = (event: React.PointerEvent) => {
+    if (claimed(event.target)) return;
     const start = pressed.current;
     pressed.current = null;
     if (dragging.current) {
       const at = cellUnder(event);
+      const carry = dragging.current;
       if (at) {
-        const verdict = proposeMove(gridRef.current, dragging.current.id, at[0], at[1]);
+        const verdict = proposeMove(
+          gridRef.current,
+          carry.id,
+          at[0] - carry.grab[0],
+          at[1] - carry.grab[1],
+        );
         if (verdict.ok) applyMoves(verdict.moves);
       }
       dragging.current = null;
@@ -580,6 +622,7 @@ export function Grid() {
   };
 
   const onContextMenu = (event: React.MouseEvent) => {
+    if (claimed(event.target)) return;
     event.preventDefault();
     const at = cellUnder(event);
     const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
@@ -597,7 +640,10 @@ export function Grid() {
     if (!menu) return;
     const id = addAt(menu.ci, menu.ri, kind, style);
     setMenu(null);
-    if (id && kind === "text") setEditing(id);
+    if (id && kind === "text") {
+      hover.current = null;
+      setEditing(id);
+    }
   };
 
   const onLeave = () => {
@@ -618,7 +664,16 @@ export function Grid() {
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
         {editing !== null && (
-          <Editor id={editing} onDone={() => setEditing(null)} onSpan={setEditSpan} />
+          <Editor
+            id={editing}
+            onDone={() => setEditing(null)}
+            // Only when it actually changes: this is called during the editor's render,
+            // and a fresh object would never compare equal, so the two would render each
+            // other forever.
+            onShape={(span, rows) =>
+              setEditShape((was) => (was.span === span && was.rows === rows ? was : { span, rows }))
+            }
+          />
         )}
         {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
       </div>
@@ -633,7 +688,10 @@ export function Grid() {
             const id = acting.id;
             setActing(null);
             if (action === "delete") removeTile(id);
-            else if (grid.tiles.find((x) => x.id === id)?.kind === "text") setEditing(id);
+            else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {
+              hover.current = null;
+              setEditing(id);
+            }
             else setNaming(id);
           }}
         />

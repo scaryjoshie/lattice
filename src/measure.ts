@@ -90,3 +90,15 @@ export function wrap(
   if (line) lines.push(line);
   return lines;
 }
+
+/**
+ * How many lines a run's text takes at a given width in cells. Measured at the cell's own
+ * size and with the same `wrap` the paint uses, so the two cannot disagree about where the
+ * lines fall — which they would if each counted them its own way.
+ */
+export function linesFor(style: TextStyle, text: string, span: number): number {
+  const c = measurer();
+  if (!c) return 1;
+  c.font = fontOf(style, CELL);
+  return Math.max(1, wrap(c, text, CELL * span - CELL * METRICS[style].inset * 2).length);
+}

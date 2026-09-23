@@ -1,6 +1,7 @@
 import { select } from "d3-selection";
 import { zoom as d3zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { type RefObject, useEffect, useRef } from "react";
+import { claimed } from "./pointer.ts";
 import type { Camera } from "./geometry.ts";
 
 /**
@@ -32,7 +33,9 @@ export function useCamera(
     const behaviour = d3zoom<HTMLElement, unknown>()
       .scaleExtent([MIN_K, MAX_K])
       // Shift is the move gesture, so the camera does not also claim it.
-      .filter((event: Event) => !(event as MouseEvent).shiftKey)
+      // The camera only gets input nothing else has claimed. Shift belongs to moving a
+      // tile; everything else is in pointer.ts.
+      .filter((event: Event) => !(event as MouseEvent).shiftKey && !claimed(event.target))
       .on("zoom", (event: { transform: ZoomTransform }) => {
         camera.current = { x: event.transform.x, y: event.transform.y, k: event.transform.k };
         handler.current(camera.current);

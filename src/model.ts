@@ -317,6 +317,22 @@ export function proposeMove(
 
   // A region that overlaps its own destination cannot be exchanged with itself, so the
   // move is only a slide, and only into space nothing else is in.
+  /*
+   * A region may not straddle a worktree edge — the same rule a selection obeys, and one
+   * moving was not applying at all. Containment was checked against tiles and never
+   * against worktrees, so a run could be dropped half inside one.
+   */
+  const inOneRegion = (r: Footprint): boolean => {
+    const home = regionIdAt(grid, r.ci, r.ri);
+    for (let dy = 0; dy < r.rows; dy++) {
+      for (let dx = 0; dx < r.span; dx++) {
+        if (regionIdAt(grid, r.ci + dx, r.ri + dy) !== home) return false;
+      }
+    }
+    return true;
+  };
+  if (!inOneRegion(to)) return { ok: false, moves: [] };
+
   if (overlaps(from, to)) {
     return touching(to).length === 0
       ? { ok: true, moves: [{ tileId, ci: to.ci, ri: to.ri }] }

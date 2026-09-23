@@ -128,7 +128,7 @@ body {
   pointer-events: auto;
   resize: none;
   overflow: hidden;
-  white-space: pre;
+  white-space: pre-wrap;
 }
 
 /*

@@ -60,8 +60,6 @@ export function Popup({
     <div
       className="menu"
       style={{ left: x, top: y }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerUp={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
       <input
