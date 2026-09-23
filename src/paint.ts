@@ -249,9 +249,16 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   // Occupied cells last, so the ruling does not cross them.
+  // While a move is in progress the two tiles involved are drawn where they would end up,
+  // not where they are. Leaving them in place as well makes a swap look like a duplication.
+  const lifted = (ci: number, ri: number) =>
+    drag !== null &&
+    ((ci === drag.from.ci && ri === drag.from.ri) || (ci === drag.to.ci && ri === drag.to.ri));
+
   const fills = new Map<string, Path2D>();
   for (const spot of occupied) {
     if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
+    if (lifted(spot.ci, spot.ri)) continue;
     const style = hue(spot.hue).fill;
     let path = fills.get(style);
     if (!path) {
@@ -266,6 +273,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
   for (const spot of occupied) {
     if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
+    if (lifted(spot.ci, spot.ri)) continue;
     mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
   }
 

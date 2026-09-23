@@ -250,8 +250,14 @@ export function Grid() {
       }
     }
 
+    /*
+     * While moving an agent its connections stay lit: that is the one thing still worth
+     * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
+     * the pointer was when the drag began.
+     */
     let focus: Focus | null = null;
-    const spot = hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`);
+    const spot =
+      held?.id ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
@@ -343,6 +349,8 @@ export function Grid() {
       const at = cellUnder(event);
       if (at) {
         dragging.current = { ...dragging.current, to: at };
+        // Nothing is being pointed at during a move; it is being carried.
+        hover.current = null;
         schedule(camera.current);
       }
       return;
