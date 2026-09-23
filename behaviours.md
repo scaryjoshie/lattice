@@ -39,9 +39,16 @@ shadows than from an argument about it.
     selection out to that cell. It is valid on the same terms as a move: one scope or
     none, and nothing half in and half out. An invalid one is drawn in the warning
     colour and cannot be moved.
-15. While shift is held over a selection, the rectangle a shift-click would select is
-    previewed as a crawling dashed outline carrying the corner brackets, and no plus or
-    hover ring is drawn.
+15. While shift is held over a cell outside the selection, the rectangle a shift-click
+    would select is previewed as a crawling dashed outline carrying the corner brackets,
+    and no plus or hover ring is drawn. Inside the selection shift means what it always
+    means: the plus, the add menu, a move.
+15a. The rectangle is closed before it is offered: grown to the bounding box of every tile
+    it touches, again until nothing straddles it. So it is invalid only for crossing a
+    scope edge, which growing cannot fix.
+15b. A press inside an invalid selection is the grid's and goes nowhere. The camera does
+    not pan, nothing is carried, and the red ring is the only answer. A click there still
+    selects the cell.
 16. A press that moves more than 3px is a pan, not a click.
 17. A click that dismisses an open overlay is spent dismissing it: it does not also open a
     menu, place a tile or select anything.
@@ -88,7 +95,8 @@ shadows than from an argument about it.
 
 ## Placing
 
-35. Picking text from the add menu creates a run at that cell and opens it for typing.
+35. Picking text from the add menu creates a run at that cell, selects it, and opens it
+    for typing, so the selection ring grows with the run.
 36. Picking anything else creates that tile at that cell immediately.
 37. A tile can only be placed on an empty cell.
 
@@ -140,7 +148,8 @@ shadows than from an argument about it.
 
 ## Text
 
-60. A title is one row and grows sideways. A note is a block and its words wrap inside it.
+60. A run's height is its lines times its leading, rounded up to whole cells: a title
+    takes a cell per line, a note fits several lines in a cell.
 61. A run's span is derived from its text, measured at the cell's own size.
 62. A run grows cell by cell as it is typed.
 63. A run stops growing at the first cell that already holds something; further text is cut
@@ -169,7 +178,8 @@ shadows than from an argument about it.
 65. While a run is being typed, the canvas still owns its surface and its ruling; the input
     contributes only a caret and glyphs.
 66. Committing an empty run removes it.
-67. Enter commits. Escape abandons, and removes the run if it was new.
+67. Enter commits. Shift-enter is a line break, kept when the run is drawn. Escape
+    abandons, and removes the run if it was new.
 68. Clicking away commits.
 69. Text takes the ink of whatever region it sits in.
 
