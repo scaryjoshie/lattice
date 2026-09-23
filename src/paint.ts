@@ -38,6 +38,8 @@ const CHEVRON_GAP = 17;
 const CHEVRON_EDGE = 2.25;
 /** How fast the chevrons travel, as a multiple of the shared crawl. */
 const CHEVRON_SPEED = 0.55;
+/** How far each direction of an exchange sits off the centre line. */
+const LANE = 6;
 /** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
 const NAME_FROM = 34;
 const NAME_FADE = 14;
@@ -498,9 +500,19 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     if (far > 1) {
       const ux = (bx - ax) / far;
       const uy = (by - ay) / far;
-      const start = toEdge(proposal.from, ux, uy) + CHEVRON_LONG;
-      const end = far - toEdge(proposal.to, ux, uy);
-      if (end <= start) return;
+      /*
+       * Normally the path runs edge to edge, so none of it is buried under what it
+       * connects. Adjacent regions share an edge and have no gap to run through, so it
+       * runs centre to centre instead — over the tiles, which is the only place left to
+       * say anything.
+       */
+      let start = toEdge(proposal.from, ux, uy) + CHEVRON_LONG;
+      let end = far - toEdge(proposal.to, ux, uy);
+      if (end - start < CHEVRON_GAP) {
+        start = CHEVRON_WIDE;
+        end = far - CHEVRON_WIDE;
+      }
+
       ctx.strokeStyle = colour;
       ctx.lineWidth = CHEVRON_EDGE;
       ctx.lineCap = "round";
@@ -508,15 +520,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.beginPath();
       const slide = ((dash * CHEVRON_SPEED) % CHEVRON_GAP) + CHEVRON_GAP;
       /*
-       * A stream of arrowheads, and a second one the other way when something comes back.
-       * Two identical tiles trading places is otherwise invisible — both cells still hold
-       * the same mark afterwards — so the exchange has to be said by the arrows rather
-       * than left to be noticed in what moved.
+       * Two lanes rather than two streams on one line: an exchange has traffic both ways,
+       * and arrowheads pointing opposite directions through each other read as neither.
        */
-      const stream = (dx: number, dy: number, from: readonly [number, number], offset: number) => {
-        for (let d = start + ((slide + offset) % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
-          const px = from[0] + dx * d;
-          const py = from[1] + dy * d;
+      const stream = (dx: number, dy: number, from: readonly [number, number], lane: number) => {
+        const ox = -dy * lane;
+        const oy = dx * lane;
+        for (let d = start + ((slide + lane) % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
+          const px = from[0] + dx * d + ox;
+          const py = from[1] + dy * d + oy;
           ctx.moveTo(
             px - dx * CHEVRON_LONG - dy * CHEVRON_WIDE,
             py - dy * CHEVRON_LONG + dx * CHEVRON_WIDE,
@@ -528,8 +540,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
           );
         }
       };
-      stream(ux, uy, [ax, ay], 0);
-      if (proposal.swaps) stream(-ux, -uy, [bx, by], CHEVRON_GAP / 2);
+      stream(ux, uy, [ax, ay], proposal.swaps ? LANE : 0);
+      if (proposal.swaps) stream(-ux, -uy, [bx, by], LANE);
       ctx.stroke();
       ctx.lineCap = "butt";
     }
