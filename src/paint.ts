@@ -1,6 +1,6 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
-import { clip, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
+import { clip as clip_, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
 import { cells as cellsOf, type Region } from "./region.ts";
 import { hue, theme } from "./theme.ts";
@@ -28,6 +28,8 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
+/** The arm of a selection's corner bracket, in screen pixels. */
+const CORNER = 10;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
@@ -127,17 +129,22 @@ export interface Scene {
   occupied: readonly Occupant[];
   texts: readonly TextRun[];
   focus: Focus | null;
+  /** What a menu, a rename or an edit is about: a tile, or the cell the add menu was
+   *  asked on. Ringed for as long as it is being acted on. */
+  about: (Region & { hue: number | null }) | null;
   /**
-   * What is being acted on — renamed, shown a menu, or proposed as a place to put
-   * something. Ringed, but nothing is veiled. `warn` means the thing it describes would
-   * not be allowed.
+   * The selection. Ringed with corner brackets; `invalid` means it is not one the grid
+   * can use, and it is drawn in the one colour that says so.
    */
-  selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
+  selected: (Region & { hue: number | null; invalid: boolean; corners: boolean }) | null;
   proposal: Proposal | null;
   hover: readonly [number, number] | null;
   /** Shift is held. The plus shows only then, so the affordance appears with the modifier
    *  that reaches it: shift-click on an empty cell is the add menu. */
   shift: boolean;
+  /** The rectangle a shift-click would select right now, while shift is held over a
+   *  selection. Dashed and crawling: proposed, not yet held. */
+  extending: (Region & { hue: number | null; invalid: boolean }) | null;
 }
 
 /** One occupant's mark, scaled from its own 24-unit space into the cell. */
@@ -180,13 +187,14 @@ function mark(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = hue(spot.hue).ink;
-  ctx.fillText(clip(ctx, spot.name, size * 0.86), x + size / 2, y + size * 0.79);
+  ctx.fillText(clip_(ctx, spot.name, size * 0.86), x + size / 2, y + size * 0.79);
   ctx.restore();
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, proposal, hover, shift } =
-    scene;
+  const {
+    camera, width, height, dpr, plates, cells, occupied, texts, focus, about, selected, proposal, hover, shift, extending,
+  } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
   ctx.fillStyle = palette.page;
@@ -208,13 +216,58 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    * the ordinary pass and again for any cell that must show through the veil, so the two
    * cannot disagree about what a cell looks like.
    */
+  /*
+   * A run's words, clipped to a region: the whole run in the ordinary pass, one cell of it
+   * when that cell is repainted. One path for every run: wrap to the width it owns, draw
+   * the lines that fit in the height it owns. A title is not a special case of this — it
+   * is this, with a leading of one whole cell, which centres its single line. The two
+   * styles differ only in how big they are. Cut with an ellipsis rather than at the glyph,
+   * on both axes: a word sheared through the middle reads as a fault; an ellipsis reads as
+   * "there is more", which is what is true.
+   */
+  const drawRun = (run: TextRun, clip: Region) => {
+    if (rule <= 0) return;
+    const m = METRICS[run.style];
+    const x = sx(run.ci);
+    const y = sy(run.ri);
+    const inset = size * m.inset;
+    const box = { w: size * run.span, h: size * run.rows };
+    const leading = size * m.leading;
+    ctx.save();
+    ctx.globalAlpha = rule;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = fontOf(run.style, size);
+    ctx.fillStyle = hue(run.hue).ink;
+    ctx.beginPath();
+    ctx.rect(sx(clip.ci), sy(clip.ri), size * clip.span, size * clip.rows);
+    ctx.clip();
+    const room = box.w - inset * 2;
+    const lines = wrap(ctx, run.text, room);
+    const fits = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
+    for (let i = 0; i < Math.min(lines.length, fits); i++) {
+      const last = i === fits - 1 && lines.length > fits;
+      const line = lines[i] as string;
+      ctx.fillText(
+        clip_(ctx, last ? `${line} ${lines[i + 1] ?? ""}` : line, room),
+        x + inset,
+        y + size * m.pad + leading * (i + 0.5),
+      );
+    }
+    ctx.restore();
+  };
+
   const spotAt = new Map(occupied.map((s) => [`${s.ci},${s.ri}`, s]));
+  const runAt = new Map<string, TextRun>();
+  for (const run of texts) for (const [ci, ri] of cellsOf(run)) runAt.set(`${ci},${ri}`, run);
   const paintCell = (ci: number, ri: number) => {
     const spot = spotAt.get(`${ci},${ri}`);
     const cell = at(ci, ri);
     ctx.fillStyle = spot ? hue(spot.hue).fill : cell?.hue == null ? palette.page : hue(cell.hue).tint;
     ctx.fillRect(sx(ci), sy(ri), size, size);
     if (spot) mark(ctx, spot, sx(ci), sy(ri), size);
+    const run = runAt.get(`${ci},${ri}`);
+    if (run) drawRun(run, { ci, ri, span: 1, rows: 1 });
   };
 
   // Scopes, beneath the ruling.
@@ -309,51 +362,12 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     paintCell(spot.ci, spot.ri);
   }
 
-  /*
-   * Text. One path for every run: wrap to the width it owns, draw the lines that fit in
-   * the height it owns, clipped to both. A title is not a special case of this — it is
-   * this, with a leading of one whole cell, which puts its single line in the middle of
-   * its single cell. The two styles differ only in how big they are.
-   *
-   * Nothing is cleared: the ruling already left these cells unruled, because a run owns
-   * whole cells and which lines fall inside it is known rather than discovered.
-   */
-  if (rule > 0) {
-    ctx.globalAlpha = rule;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    for (const run of texts) {
-      if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
-      if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
-      const m = METRICS[run.style];
-      const h = hue(run.hue);
-      const x = sx(run.ci);
-      const y = sy(run.ri);
-      const inset = size * m.inset;
-      ctx.font = fontOf(run.style, size);
-      ctx.fillStyle = h.ink;
-      const box = { w: size * run.span, h: size * run.rows };
-      const leading = size * m.leading;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, box.w, box.h);
-      ctx.clip();
-      /*
-       * Cut with an ellipsis rather than at the glyph, on both axes. A word sheared
-       * through the middle reads as a rendering fault; an ellipsis reads as "there is
-       * more", which is what is true. Names already do this — runs did not.
-       */
-      const room = box.w - inset * 2;
-      const lines = wrap(ctx, run.text, room);
-      const fits = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
-      for (let i = 0; i < Math.min(lines.length, fits); i++) {
-        const last = i === fits - 1 && lines.length > fits;
-        const line = lines[i] as string;
-        ctx.fillText(clip(ctx, last ? `${line} ${lines[i + 1] ?? ""}` : line, room), x + inset, y + size * m.pad + leading * (i + 0.5));
-      }
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
+  // Text, each run whole. A run under a veil or inside a proposal is redrawn per cell by
+  // paintCell, clipped to that cell, so it composes with whatever is repainted around it.
+  for (const run of texts) {
+    if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
+    if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
+    drawRun(run, run);
   }
 
   /*
@@ -429,15 +443,51 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
 
   // What is being acted on stays ringed for as long as it is being acted on, so a menu or
   // a rename does not make the thing it is about stop being pointed at.
-  if (selected && rule > 0) {
+  /*
+   * A ring around a region, inset by half its stroke so it sits inside the cells. Corner
+   * brackets say "held": a selection has them, and while shift previews a larger
+   * selection they move out to the preview, which is the thing about to be held.
+   */
+  const ring = (r: Region, colour: string, dashed: boolean, corners: boolean) => {
     const inset = FOCUS_EDGE / 2;
+    const x0 = sx(r.ci) + inset;
+    const y0 = sy(r.ri) + inset;
+    const x1 = x0 + size * r.span - FOCUS_EDGE;
+    const y1 = y0 + size * r.rows - FOCUS_EDGE;
     ctx.lineWidth = FOCUS_EDGE;
-    ctx.strokeStyle = hue(selected.hue).edge;
-    ctx.strokeRect(
-      sx(selected.ci) + inset,
-      sy(selected.ri) + inset,
-      size * selected.span - FOCUS_EDGE,
-      size * selected.rows - FOCUS_EDGE,
+    ctx.strokeStyle = colour;
+    if (dashed) {
+      ctx.setLineDash(LINK_DASH);
+      ctx.lineDashOffset = -dash;
+    }
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.setLineDash([]);
+    if (!corners) return;
+    const arm = Math.min(CORNER, (x1 - x0) / 3, (y1 - y0) / 3);
+    ctx.lineWidth = FOCUS_EDGE * 2;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    for (const [x, y, dx, dy] of [
+      [x0, y0, 1, 1],
+      [x1, y0, -1, 1],
+      [x0, y1, 1, -1],
+      [x1, y1, -1, -1],
+    ] as const) {
+      ctx.moveTo(x + dx * arm, y);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x, y + dy * arm);
+    }
+    ctx.stroke();
+  };
+
+  if (about && rule > 0) ring(about, hue(about.hue).edge, false, false);
+
+  if (selected && rule > 0) {
+    ring(
+      selected,
+      selected.invalid ? palette.warn : hue(selected.hue).edge,
+      false,
+      selected.corners && !extending,
     );
   }
 
@@ -543,10 +593,13 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     }
   }
 
-  // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
-  // An empty cell also gets a plus while shift is held, because shift-click is what puts
-  // something there.
-  if (hover && rule > 0 && !focus) {
+  if (extending && rule > 0) {
+    ring(extending, extending.invalid ? palette.warn : hue(extending.hue).edge, true, true);
+  }
+
+  // Hover stays live while something else is focused, except on the focused cell itself,
+  // which already has its ring — and gives way entirely to the extension preview.
+  if (hover && rule > 0 && !extending && !(focus && focus.ci === hover[0] && focus.ri === hover[1])) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;
@@ -564,7 +617,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       size * box.rows - FOCUS_EDGE,
     );
 
-    if (!cell?.occupied && shift) {
+    if (!cell?.occupied && shift && !selected) {
       const arm = size * PLUS;
       const cx = sx(ci) + size / 2;
       const cy = sy(ri) + size / 2;

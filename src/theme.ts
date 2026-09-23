@@ -107,6 +107,7 @@ function write(theme: Theme): void {
   root.setProperty("--divider", theme.chrome.divider);
   root.setProperty("--muted", theme.chrome.muted);
   root.setProperty("--hover", theme.chrome.hover);
+  root.setProperty("--flow", theme.flow);
   document.documentElement.dataset.theme = theme.name;
 }
 

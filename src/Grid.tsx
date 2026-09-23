@@ -9,11 +9,12 @@ import {
   rowsFor,
   bounds,
   footprint,
+  homogeneous,
   scopeAt,
   type TextStyle,
   type TileKind,
 } from "./model.ts";
-import { cells as cellsOf, type Region } from "./region.ts";
+import { cells as cellsOf, contains, covers, overlaps, type Region } from "./region.ts";
 import {
   type Cell,
   type Scene,
@@ -24,6 +25,7 @@ import {
   type TextRun,
 } from "./paint.ts";
 import { fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
+import { Keys, type Mode } from "./Keys.tsx";
 import { Menu, TileMenu } from "./Menu.tsx";
 import { claimed } from "./pointer.ts";
 import { useGrid } from "./store.ts";
@@ -160,6 +162,18 @@ function Namer({ id, onDone }: { id: string; onDone(): void }) {
   );
 }
 
+/** The smallest region holding both a region and a cell: what shift-click extends to. */
+function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
+  const c0 = Math.min(r.ci, ci);
+  const r0 = Math.min(r.ri, ri);
+  return {
+    ci: c0,
+    ri: r0,
+    span: Math.max(r.ci + r.span - 1, ci) - c0 + 1,
+    rows: Math.max(r.ri + r.rows - 1, ri) - r0 + 1,
+  };
+}
+
 export function Grid() {
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -167,6 +181,8 @@ export function Grid() {
   const hover = useRef<[number, number] | null>(null);
   /** Shift is held. A ref, like hover: it changes at key speed and only the paint reads it. */
   const shift = useRef(false);
+  /** Where the pointer last was, so hover can be picked back up when a menu closes. */
+  const pointer = useRef<{ x: number; y: number } | null>(null);
 
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
@@ -181,6 +197,12 @@ export function Grid() {
   const [naming, setNaming] = useState<string | null>(null);
   /** Right-click on something that is already there. */
   const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
+  /**
+   * What is selected: a tile, or a region of cells. Always a region underneath — selecting
+   * a tile is shorthand for selecting the region it owns — but a tile is remembered by id
+   * so the selection follows it rather than the cells it happened to be on.
+   */
+  const [selection, setSelection] = useState<{ tile: string } | { region: Region } | null>(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
   /**
@@ -200,13 +222,14 @@ export function Grid() {
    * were on its corner, jumping sideways the moment the drag began.
    */
   const dragging = useRef<{
-    id: string;
+    /** The one tile being carried, if it is one tile: its links stay lit as it goes. */
+    id: string | null;
     from: Region;
     grab: [number, number];
   } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
   const [held, setHeld] = useState<{
-    id: string;
+    id: string | null;
     from: Region;
     to: Region;
     /** Everywhere the proposal would put something. Empty when it is refused. */
@@ -331,11 +354,53 @@ export function Grid() {
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    const heldTile = held && grid.tiles.find((x) => x.id === held.id);
-    const proposal =
-      held && heldTile
-        ? { from: held.from, to: held.to, hue: hueAt(heldTile), ok: held.ok, swaps: held.swaps }
+    /*
+     * What is being acted on: shown a menu, renamed, edited, or selected. One thing at a
+     * time, and the ring around it. A region selection is valid on the same terms as a
+     * move — one scope or none, and nothing half in and half out.
+     */
+    const subject =
+      acting?.id ?? naming ?? editing ?? (selection && "tile" in selection ? selection.tile : null);
+    const region = selection && "region" in selection ? selection.region : null;
+    const usable = (r: Region): boolean =>
+      homogeneous(grid, r) &&
+      grid.tiles.every((tile) => {
+        const f = footprint(grid, tile);
+        return !overlaps(f, r) || covers(r, f);
+      });
+    /*
+     * Two rings, for two questions. `about` is what a menu, a rename or an edit is about:
+     * a tile, or for the add menu the cell it was asked on. `selected` is the selection.
+     * They are separate so a selection stays ringed while a menu is open about something
+     * else. Brackets say "held"; while a move is proposed the proposal says it instead.
+     */
+    const acted = acting?.id ?? naming ?? editing;
+    const about: Scene["about"] = acted
+      ? (tiles.get(acted) ?? null)
+      : menu
+        ? { ci: menu.ci, ri: menu.ri, span: 1, rows: 1, hue: scopeAt(grid, menu.ci, menu.ri)?.hue ?? null }
         : null;
+    const corners = held === null;
+    const selected: Scene["selected"] =
+      selection && "tile" in selection
+        ? (() => {
+            const shape = tiles.get(selection.tile);
+            return shape ? { ...shape, invalid: false, corners } : null;
+          })()
+        : region
+          ? { ...region, hue: scopeAt(grid, region.ci, region.ri)?.hue ?? null, invalid: !usable(region), corners }
+          : null;
+
+    const heldTile = held?.id ? grid.tiles.find((x) => x.id === held.id) : undefined;
+    const proposal = held
+      ? {
+          from: held.from,
+          to: held.to,
+          hue: heldTile ? hueAt(heldTile) : (scopeAt(grid, held.from.ci, held.from.ri)?.hue ?? null),
+          ok: held.ok,
+          swaps: held.swaps,
+        }
+      : null;
     return {
       cells,
       plates,
@@ -347,20 +412,15 @@ export function Grid() {
       links: grid.links,
       carried: carry,
       proposal,
+      subject,
+      about,
+      selected,
+      usable,
     };
-  }, [grid, editing, editShape, naming, held]);
+  }, [grid, editing, editShape, naming, acting, menu, selection, held]);
 
   const model = useRef(scene);
   model.current = scene;
-
-  /*
-   * What a menu or a rename is about, held in a ref rather than read from state inside
-   * `draw`. `draw` is built once so that panning never rebuilds it, which means anything
-   * it reads from state is frozen at the value it had on the first render — the reason an
-   * earlier attempt at this changed nothing at all.
-   */
-  const subject = useRef<string | null>(null);
-  subject.current = acting?.id ?? naming ?? editing ?? null;
 
   const draw = useCallback((camera: Camera) => {
     const el = canvas.current;
@@ -381,8 +441,17 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts, spots, byCell, tiles, links, carried, proposal } =
+    const { cells, plates, occupied, texts, spots, byCell, links, carried, proposal, subject, about, selected, usable } =
       model.current;
+
+    // With something selected, shift previews the rectangle a shift-click would select.
+    const extending: Scene["extending"] =
+      shift.current && selected && hover.current && !proposal
+        ? (() => {
+            const r = reach(selected, hover.current);
+            return { ...r, hue: selected.hue, invalid: !usable(r) };
+          })()
+        : null;
 
     // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
     // question "who is this one talking to", and the answer is a read of the model.
@@ -391,9 +460,6 @@ export function Grid() {
      * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
      * the pointer was when the drag began.
      */
-    const about = subject.current;
-    const selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
-
     /*
      * Focus survives a menu and a rename. Opening a menu about an agent is still being
      * about that agent, so its connections stay lit and everything else stays back — the
@@ -402,7 +468,7 @@ export function Grid() {
      */
     let focus: Focus | null = null;
     const spot =
-      carried?.id ?? about ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
+      carried?.id ?? subject ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
@@ -430,14 +496,16 @@ export function Grid() {
         occupied,
         texts,
         focus,
+        about,
         selected,
         proposal,
         hover: hover.current,
         shift: shift.current,
+        extending,
       },
       dash.current,
     );
-    running.current = focus !== null || proposal !== null;
+    running.current = focus !== null || proposal !== null || extending !== null;
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
@@ -473,7 +541,24 @@ export function Grid() {
     [draw],
   );
 
-  const camera = useCamera(viewport, schedule);
+  /** Whether a press lands inside the selection, which makes it a move rather than a pan. */
+  const inSelection = (event: { clientX: number; clientY: number }): boolean => {
+    const host = viewport.current;
+    const r = model.current.selected;
+    if (!host || !r) return false;
+    const box = host.getBoundingClientRect();
+    const [ci, ri] = cellAt(latest.current, event.clientX - box.left, event.clientY - box.top);
+    return contains(r, ci, ri);
+  };
+
+  // While a menu, a rename or an edit is open the camera is still: the press that closes
+  // it is spent closing it, and the wheel would slide the cell out from under the menu.
+  const overlay = menu !== null || acting !== null || editing !== null || naming !== null;
+  const camera = useCamera(
+    viewport,
+    schedule,
+    (event) => overlay || (event.type === "mousedown" && !event.shiftKey && inSelection(event)),
+  );
 
   // The dashes crawl, which is what makes a live connection look live. The loop exists
   // only while a focus does; with nothing focused the canvas is still and costs nothing.
@@ -498,10 +583,6 @@ export function Grid() {
   useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
 
   useEffect(() => {
-    schedule(camera.current);
-  }, [schedule, camera, acting, naming, editing]);
-
-  useEffect(() => {
     const onResize = () => schedule(camera.current);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -515,7 +596,17 @@ export function Grid() {
       shift.current = held;
       schedule(camera.current);
     };
-    const onKey = (e: KeyboardEvent) => set(e.shiftKey);
+    const onKey = (e: KeyboardEvent) => {
+      set(e.shiftKey);
+      if (e.key === "Escape" && !claimed(e.target)) {
+        if (dragging.current) {
+          // Cancel the move: drop the proposal and spend the release on nothing.
+          dragging.current = null;
+          pressed.current = null;
+          setHeld(null);
+        } else setSelection(null);
+      }
+    };
     const onBlur = () => set(false);
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -528,6 +619,7 @@ export function Grid() {
   }, [schedule, camera]);
 
   const onMove = (event: React.PointerEvent) => {
+    pointer.current = { x: event.clientX, y: event.clientY };
     if (claimed(event.target)) return;
     const host = viewport.current;
     if (!host || menu || editing || naming || acting) return;
@@ -563,33 +655,54 @@ export function Grid() {
     if (claimed(event.target)) return;
     pressed.current = { x: event.clientX, y: event.clientY };
     dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
-    if (!event.shiftKey) return;
+    if (dismissing.current) return;
     const at = cellUnder(event);
-    // Anything in a cell can be picked up, text included.
-    const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-    const tile = id ? gridRef.current.tiles.find((x) => x.id === id) : undefined;
-    if (at && tile) {
-      const from = footprint(gridRef.current, tile);
-      dragging.current = { id: tile.id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
-      (event.target as Element).setPointerCapture?.(event.pointerId);
+    if (!at) return;
+    const selected = model.current.selected;
+    let from: Region | null = null;
+    let id: string | null = null;
+    if (event.shiftKey) {
+      // With a selection, shift extends it; the press is spent on the release. Without
+      // one, shift picks up whatever is under the pointer, text included.
+      if (selected) return;
+      const tileId = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
+      const tile = tileId ? gridRef.current.tiles.find((x) => x.id === tileId) : undefined;
+      if (!tile) return;
+      from = footprint(gridRef.current, tile);
+      id = tile.id;
+    } else if (selected && contains(selected, at[0], at[1])) {
+      // A plain press inside the selection carries the selection. The camera has already
+      // yielded it.
+      from = selected;
+      id = selection && "tile" in selection ? selection.tile : null;
     }
+    if (!from) return;
+    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
+    (event.target as Element).setPointerCapture?.(event.pointerId);
   };
 
   const onUp = (event: React.PointerEvent) => {
     if (claimed(event.target)) return;
     const start = pressed.current;
     pressed.current = null;
+    const moved = !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3;
     if (dragging.current) {
       const at = cellUnder(event);
       const carry = dragging.current;
-      if (at) {
-        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
-        const verdict = proposeMove(gridRef.current, carry.from, to);
-        if (verdict.ok) applyMoves(verdict.moves);
-      }
       dragging.current = null;
       setHeld(null);
-      return;
+      // A press inside the selection that never travelled is a click on it, not a move.
+      if (at && moved) {
+        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
+        const verdict = proposeMove(gridRef.current, carry.from, to);
+        if (verdict.ok) {
+          applyMoves(verdict.moves);
+          // A selected tile follows itself; a selected region has to be told where it went.
+          if (carry.id === null) setSelection({ region: to });
+        }
+        return;
+      }
+      if (moved) return;
     }
     const host = viewport.current;
     if (dismissing.current) {
@@ -606,28 +719,62 @@ export function Grid() {
       return;
     }
     // A press that moved was a pan, not a click on a cell.
-    if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3) return;
-    if (!host) return;
+    if (moved || !host) return;
     const box = host.getBoundingClientRect();
     const [ci, ri] = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
-    if (model.current.cells.get(`${ci},${ri}`)?.occupied) return;
-    hover.current = null;
-    setMenu({ x: event.clientX, y: event.clientY, ci, ri });
+    const id = model.current.cells.get(`${ci},${ri}`)?.tileId ?? null;
+    if (event.shiftKey) {
+      // With a selection, shift-click selects the rectangle out to this cell. Without
+      // one, shift-click acts: on an empty cell the act is the add menu; on a tile it
+      // will be opening it, which does not exist yet.
+      const anchor = model.current.selected;
+      if (anchor) {
+        setSelection({ region: reach(anchor, [ci, ri]) });
+        return;
+      }
+      if (id) return;
+      hover.current = null;
+      setMenu({ x: event.clientX, y: event.clientY, ci, ri });
+      return;
+    }
+    // Click selects, and clicking what is already selected clears it.
+    setSelection((was) => {
+      if (id) return was && "tile" in was && was.tile === id ? null : { tile: id };
+      const same =
+        was && "region" in was && was.region.ci === ci && was.region.ri === ri && was.region.span === 1 && was.region.rows === 1;
+      return same ? null : { region: { ci, ri, span: 1, rows: 1 } };
+    });
   };
 
   const onContextMenu = (event: React.MouseEvent) => {
     if (claimed(event.target)) return;
     event.preventDefault();
     const at = cellUnder(event);
-    const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
+    if (!at) return;
+    const id = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
+    hover.current = null;
+    // The menu for what is there. On an empty cell that is the add menu, which is also
+    // what shift-click offers: the act and the menu are the same thing for a place.
     if (id) {
-      hover.current = null;
       setMenu(null);
       setActing({ x: event.clientX, y: event.clientY, id });
-      // Repaint now: otherwise the veil from hovering this agent lingers on a stale
-      // canvas and then vanishes later, when something else happens to trigger a draw.
-      schedule(camera.current);
+    } else {
+      setActing(null);
+      setMenu({ x: event.clientX, y: event.clientY, ci: at[0], ri: at[1] });
     }
+    // Repaint now: otherwise the veil from hovering this agent lingers on a stale
+    // canvas and then vanishes later, when something else happens to trigger a draw.
+    schedule(camera.current);
+  };
+
+  /** Whatever closed a menu, the pointer is still somewhere, and that is still hovered. */
+  const resume = () => {
+    const host = viewport.current;
+    const at = pointer.current;
+    if (!host || !at) return;
+    const box = host.getBoundingClientRect();
+    hover.current = cellAt(camera.current, at.x - box.left, at.y - box.top);
+    schedule(camera.current);
   };
 
   const pick = (kind: TileKind, style?: TextStyle) => {
@@ -637,13 +784,15 @@ export function Grid() {
     if (id && kind === "text") {
       hover.current = null;
       setEditing(id);
-    }
+    } else resume();
   };
 
   const onLeave = () => {
     hover.current = null;
     schedule(camera.current);
   };
+
+  const mode: Mode = editing || naming ? "typing" : menu ? "menu" : acting ? "list" : held ? "moving" : selection ? "selected" : "idle";
 
   return (
     <div
@@ -671,17 +820,35 @@ export function Grid() {
         )}
         {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
       </div>
-      {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
+      <Keys mode={mode} />
+      {menu && (
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          onPick={pick}
+          onClose={() => {
+            setMenu(null);
+            resume();
+          }}
+        />
+      )}
       {acting && (
         <TileMenu
           x={acting.x}
           y={acting.y}
           isText={grid.tiles.find((x) => x.id === acting.id)?.kind === "text"}
-          onClose={() => setActing(null)}
+          onClose={() => {
+            setActing(null);
+            resume();
+          }}
           onPick={(action) => {
             const id = acting.id;
             setActing(null);
-            if (action === "delete") removeTile(id);
+            resume();
+            if (action === "delete") {
+              removeTile(id);
+              setSelection(null);
+            }
             else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {
               hover.current = null;
               setEditing(id);

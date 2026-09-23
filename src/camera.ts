@@ -22,20 +22,27 @@ const MAX_K = 3;
 export function useCamera(
   ref: RefObject<HTMLElement | null>,
   onChange: (camera: Camera) => void,
+  /** Input the grid wants for itself: any while an overlay is open, and a press that
+   *  starts inside a selection. */
+  yields: (event: MouseEvent) => boolean,
 ): RefObject<Camera> {
   const camera = useRef<Camera>({ x: 0, y: 0, k: 1 });
   const handler = useRef(onChange);
   handler.current = onChange;
+  const claim = useRef(yields);
+  claim.current = yields;
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const behaviour = d3zoom<HTMLElement, unknown>()
       .scaleExtent([MIN_K, MAX_K])
-      // Shift is the move gesture, so the camera does not also claim it.
-      // The camera only gets input nothing else has claimed. Shift belongs to moving a
-      // tile; everything else is in pointer.ts.
-      .filter((event: Event) => !(event as MouseEvent).shiftKey && !claimed(event.target))
+      // The camera only gets input nothing else has claimed: shift belongs to the grid,
+      // overlays are in pointer.ts, and the grid says what else it is holding.
+      .filter(
+        (event: Event) =>
+          !(event as MouseEvent).shiftKey && !claimed(event.target) && !claim.current(event as MouseEvent),
+      )
       .on("zoom", (event: { transform: ZoomTransform }) => {
         camera.current = { x: event.transform.x, y: event.transform.y, k: event.transform.k };
         handler.current(camera.current);

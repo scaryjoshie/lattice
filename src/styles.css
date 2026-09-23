@@ -1,6 +1,6 @@
 :root {
-  /* --page, --ink, --surface, --border, --divider, --muted and --hover are written from
-     theme.ts, so the DOM and the canvas cannot disagree about what a colour means. */
+  /* --page, --ink, --surface, --border, --divider, --muted, --hover and --flow are written
+     from theme.ts, so the DOM and the canvas cannot disagree about what a colour means. */
   --font: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -67,7 +67,10 @@ body {
   z-index: 20;
   min-width: 168px;
   padding: 6px;
-  background: var(--surface);
+  /* The key panel's surface, a little more solid: it has to be read, not seen through. */
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
@@ -164,4 +167,80 @@ body {
 .namer {
   text-align: center;
   padding: 0;
+}
+
+/*
+ * What the keys do right now. Screen space, bottom left, and it never takes the pointer:
+ * it describes the interface rather than being part of it.
+ */
+.keys {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 10;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  /* Translucent over the grid, blurred so the ruling behind reads as depth, not noise. */
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  pointer-events: none;
+  user-select: none;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.keys-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.keys-chord {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 104px;
+}
+
+.keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2.5px;
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.keys-pointer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+}
+
+.keys-mouse {
+  width: 17px;
+  height: 24px;
+}
+
+/* The part of the mouse being referred to, in the colour of an act. */
+.keys-part {
+  fill: var(--flow);
+}
+
+.keys-verb {
+  color: var(--ink);
 }
