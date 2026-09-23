@@ -4,6 +4,7 @@ import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
 import {
   type Cell,
+  type Scene,
   type Drag,
   type Focus,
   type Occupant,
@@ -251,6 +252,20 @@ export function Grid() {
       }
       else occupied.push({ ci, ri, kind: tile.kind, name: tile.id === naming ? undefined : tile.name, hue: h });
     }
+    /** Every tile's extent, so anything being acted on can be ringed whole. */
+    const tiles = new Map<string, { ci: number; ri: number; span: number; rows: number; hue: number | null }>();
+    for (const tile of grid.tiles) {
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      tiles.set(tile.id, {
+        ci,
+        ri,
+        span: tile.id === editing ? editSpan : (tile.span ?? 1),
+        rows: tile.rows ?? 1,
+        hue: cells.get(`${ci},${ri}`)?.hue ?? null,
+      });
+    }
+
     const spots = new Map<string, Occupant>();
     for (const tile of grid.tiles) {
       if (tile.kind === "text") continue;
@@ -261,7 +276,7 @@ export function Grid() {
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    return { cells, plates, occupied, texts, spots, byCell, links: grid.links };
+    return { cells, plates, occupied, texts, spots, byCell, tiles, links: grid.links };
   }, [grid, editing, editSpan, naming]);
 
   const model = useRef(scene);
@@ -311,6 +326,14 @@ export function Grid() {
      * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
      * the pointer was when the drag began.
      */
+    // Whatever a menu or a rename is about.
+    const subject = acting?.id ?? naming ?? editing;
+    let selected: Scene["selected"] = null;
+    if (subject) {
+      const tile = model.current.tiles?.get(subject);
+      if (tile) selected = tile;
+    }
+
     let focus: Focus | null = null;
     const spot =
       held?.id ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
@@ -329,7 +352,7 @@ export function Grid() {
 
     paint(
       ctx,
-      { camera, width, height, dpr, plates, cells, occupied, texts, focus, drag, hover: hover.current },
+      { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, drag, hover: hover.current },
       dash.current,
     );
     running.current = focus !== null;
@@ -481,6 +504,9 @@ export function Grid() {
       hover.current = null;
       setMenu(null);
       setActing({ x: event.clientX, y: event.clientY, id });
+      // Repaint now: otherwise the veil from hovering this agent lingers on a stale
+      // canvas and then vanishes later, when something else happens to trigger a draw.
+      schedule(camera.current);
     }
   };
 

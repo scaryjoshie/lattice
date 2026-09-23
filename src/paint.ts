@@ -118,6 +118,8 @@ export interface Scene {
   occupied: readonly Occupant[];
   texts: readonly TextRun[];
   focus: Focus | null;
+  /** What is being acted on — renamed, or shown a menu. Ringed, but nothing is veiled. */
+  selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
   drag: Drag | null;
   hover: readonly [number, number] | null;
 }
@@ -167,7 +169,8 @@ function mark(
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, drag, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, drag, hover } =
+    scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
   ctx.fillStyle = palette.page;
@@ -414,6 +417,20 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.strokeStyle = h.edge;
     const inset = FOCUS_EDGE / 2;
     ctx.strokeRect(sx(focus.ci) + inset, sy(focus.ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+  }
+
+  // What is being acted on stays ringed for as long as it is being acted on, so a menu or
+  // a rename does not make the thing it is about stop being pointed at.
+  if (selected && rule > 0) {
+    const inset = FOCUS_EDGE / 2;
+    ctx.lineWidth = FOCUS_EDGE;
+    ctx.strokeStyle = hue(selected.hue).edge;
+    ctx.strokeRect(
+      sx(selected.ci) + inset,
+      sy(selected.ri) + inset,
+      size * selected.span - FOCUS_EDGE,
+      size * selected.rows - FOCUS_EDGE,
+    );
   }
 
   if (drag) {
