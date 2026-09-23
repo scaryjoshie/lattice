@@ -554,3 +554,40 @@ Attractive, and the reason to hold off is the same reason auto-arrangement is a 
 rather than a daemon: a region can grow a long way from what was asked for, and moving one
 thing should not silently rearrange six. If it is built, it wants a bound and a preview
 showing everything it would move — which the proposal already carries.
+
+## Proposed: selecting
+
+Not built. The gestures, because they are one idea rather than three rules:
+
+```
+click         select, and click again to deselect
+shift+click   do the thing — open a tile, or offer the menu on an empty cell
+right-click   the menu
+```
+
+For an empty cell, "do the thing" *is* the menu, so shift+click and right-click arriving at
+the same place is the same act reached two ways rather than a collision. The plus appears
+only while shift is held, so the affordance shows up exactly when the modifier that
+triggers it does, and the mapping is visible rather than remembered.
+
+A rectangular selection is made by clicking one corner and shift-clicking the other.
+
+**A selection must not span worktrees.** Every cell in it belongs to the same worktree, or
+to none. Note this is *not* the containment rule that governs moving — a selection need not
+contain a whole worktree, it simply may not straddle the edge of one.
+
+It must also be self-contained with respect to tiles: nothing may have cells both inside
+and outside it, which *is* the move rule, and means the two agree about what a well-formed
+region is.
+
+Dragging an agent between worktrees is a separate question and probably disallowed
+regardless, since an agent lives in a worktree and moving its tile does not move its
+checkout.
+
+**A worktree is selected by a handle in the top-left corner of its plate**, not by its
+title. Tying selection to the title would make the title a special object with rules of its
+own, and then "what is the official title?" becomes a question the model has to answer. A
+handle is just a handle, it costs no cell because it sits in the plate rather than in the
+grid, and it is where a selection handle conventionally lives. Selecting a worktree offers
+an arrow on each edge to drag it larger, which is already the documented gesture: dragging
+an edge is a request for room, and room can always be made.
