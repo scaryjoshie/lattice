@@ -112,6 +112,8 @@ export interface Proposal {
   to: { ci: number; ri: number; span: number; rows: number };
   hue: number | null;
   ok: boolean;
+  /** Something would come back the other way, so the chevrons run both directions. */
+  swaps: boolean;
 }
 
 export interface Scene {
@@ -478,14 +480,29 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.lineJoin = "round";
       ctx.beginPath();
       const slide = ((dash * CHEVRON_SPEED) % CHEVRON_GAP) + CHEVRON_GAP;
-      for (let d = start + (slide % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
-        const px = ax + ux * d;
-        const py = ay + uy * d;
-        // Two strokes meeting at a point, aimed the way the move is going.
-        ctx.moveTo(px - ux * CHEVRON_LONG - uy * CHEVRON_WIDE, py - uy * CHEVRON_LONG + ux * CHEVRON_WIDE);
-        ctx.lineTo(px, py);
-        ctx.lineTo(px - ux * CHEVRON_LONG + uy * CHEVRON_WIDE, py - uy * CHEVRON_LONG - ux * CHEVRON_WIDE);
-      }
+      /*
+       * A stream of arrowheads, and a second one the other way when something comes back.
+       * Two identical tiles trading places is otherwise invisible — both cells still hold
+       * the same mark afterwards — so the exchange has to be said by the arrows rather
+       * than left to be noticed in what moved.
+       */
+      const stream = (dx: number, dy: number, from: readonly [number, number], offset: number) => {
+        for (let d = start + ((slide + offset) % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
+          const px = from[0] + dx * d;
+          const py = from[1] + dy * d;
+          ctx.moveTo(
+            px - dx * CHEVRON_LONG - dy * CHEVRON_WIDE,
+            py - dy * CHEVRON_LONG + dx * CHEVRON_WIDE,
+          );
+          ctx.lineTo(px, py);
+          ctx.lineTo(
+            px - dx * CHEVRON_LONG + dy * CHEVRON_WIDE,
+            py - dy * CHEVRON_LONG - dx * CHEVRON_WIDE,
+          );
+        }
+      };
+      stream(ux, uy, [ax, ay], 0);
+      if (proposal.swaps) stream(-ux, -uy, [bx, by], CHEVRON_GAP / 2);
       ctx.stroke();
       ctx.lineCap = "butt";
     }

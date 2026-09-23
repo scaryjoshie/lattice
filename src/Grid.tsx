@@ -222,14 +222,17 @@ export function Grid() {
     };
 
     /*
-     * A tile's colour is the region it belongs to — and while it is being carried, the
-     * region it came *from*. Taking the colour of whatever it is passing over makes the
-     * thing in your hand change identity as it moves.
+     * A tile's colour is the region it belongs to according to the *model* — never
+     * according to where a proposal would put it. Nothing changes colour because of a
+     * move that has not happened, which covers the tile being carried and equally the one
+     * it would displace.
      */
-    const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null => {
-      const home = carry?.id === tile.id ? carry.origin : placed(tile);
-      return regionHue(grid, home[0], home[1]);
-    };
+    const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null =>
+      regionHue(
+        grid,
+        indexOfTrack(grid.columns, tile.columnId),
+        indexOfTrack(grid.rows, tile.rowId),
+      );
 
     const cells = new Map<string, Cell>();
     const plates: Plate[] = [];
@@ -328,6 +331,7 @@ export function Grid() {
             to: { ci: held.to[0], ri: held.to[1], span: shape.span, rows: shape.rows },
             hue: shape.hue,
             ok: held.ok,
+            swaps: held.moves.length > 1,
           }
         : null;
     return {
