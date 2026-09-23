@@ -10,7 +10,8 @@ shadows than from an argument about it.
 ## Pointer over the grid
 
 1. Moving the pointer over a cell marks that cell as hovered.
-2. A hovered empty cell draws a ring in its own hue and a plus in its centre.
+2. A hovered empty cell draws a ring in its own hue, and a plus in its centre while shift
+   is held.
 3. A hovered occupied cell draws a ring and no plus.
 4. Pointing anywhere inside a tile that spans several cells rings the whole tile, not the
    cell under the pointer.
@@ -23,7 +24,8 @@ shadows than from an argument about it.
    being typed, or a tile is being dragged.
 9. Closing a menu re-establishes the hover at the pointer's current position, without
    waiting for it to move.
-10. **[proposed]** The plus appears only while shift is held.
+10. The plus appears only while shift is held. It goes when the window loses focus, since
+    the keyup that would clear it goes elsewhere.
 
 ## Click
 
