@@ -1,6 +1,6 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
-import { fontOf, METRICS, wrap } from "./measure.ts";
+import { clip, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
 import { hue, theme } from "./theme.ts";
 
@@ -30,6 +30,10 @@ const FOCUS_EDGE = 2.5;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
+/** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
+const NAME_FROM = 34;
+const NAME_FADE = 14;
+
 /** How solid a tile looks where it would land, rather than where it is. */
 const GHOST = 0.55;
 /** Corner radius as a fraction of the cell, so the turn scales with the grid. */
@@ -77,6 +81,7 @@ export interface Occupant {
   ci: number;
   ri: number;
   kind: OccupantKind;
+  name?: string;
   hue: number | null;
 }
 
@@ -125,8 +130,10 @@ function mark(
 ): void {
   const side = size * MARK;
   const scale = side / MARK_UNITS;
+  // A named tile sits its mark a little high to make room underneath.
+  const lift = spot.name && size > NAME_FROM ? size * 0.09 : 0;
   ctx.save();
-  ctx.translate(x + (size - side) / 2, y + (size - side) / 2);
+  ctx.translate(x + (size - side) / 2, y + (size - side) / 2 - lift);
   ctx.scale(scale, scale);
   ctx.fillStyle = hue(spot.hue).ink;
   ctx.strokeStyle = hue(spot.hue).ink;
@@ -141,6 +148,18 @@ function mark(
       ctx.stroke(shape);
     }
   }
+  ctx.restore();
+
+  // The name, under the mark, cut to the one cell it has. It disappears before it becomes
+  // unreadable rather than shrinking into a smudge.
+  if (!spot.name || size <= NAME_FROM) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (size - NAME_FROM) / NAME_FADE);
+  ctx.font = nameFont(size);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = hue(spot.hue).ink;
+  ctx.fillText(clip(ctx, spot.name, size * 0.84), x + size / 2, y + size * 0.74);
   ctx.restore();
 }
 

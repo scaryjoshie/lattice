@@ -156,3 +156,9 @@ body {
 .menu-item[data-selected] {
   background: var(--hover);
 }
+
+/* A name is typed where it will sit, centred in the one cell its tile owns. */
+.namer {
+  text-align: center;
+  padding: 0;
+}

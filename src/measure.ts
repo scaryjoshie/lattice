@@ -19,6 +19,19 @@ export interface Metrics {
   weight: number;
 }
 
+/** A tile's name, under its mark. Smaller than a note, and never wrapped. */
+export const NAME = { size: 0.155, weight: 400 };
+
+export const nameFont = (cell: number): string => `${NAME.weight} ${cell * NAME.size}px ${FONT}`;
+
+/** Cut to fit, with an ellipsis, since a name has exactly one cell to live in. */
+export function clip(ctx: CanvasRenderingContext2D, text: string, width: number): string {
+  if (ctx.measureText(text).width <= width) return text;
+  let cut = text;
+  while (cut.length > 1 && ctx.measureText(`${cut}…`).width > width) cut = cut.slice(0, -1);
+  return `${cut}…`;
+}
+
 export const METRICS: Record<TextStyle, Metrics> = {
   title: { size: 0.32, leading: 1, inset: 0.26, weight: 500 },
   note: { size: 0.19, leading: 0.34, inset: 0.2, weight: 400 },

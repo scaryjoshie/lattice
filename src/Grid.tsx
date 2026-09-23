@@ -11,7 +11,7 @@ import {
   type Plate,
   type TextRun,
 } from "./paint.ts";
-import { fontOf, METRICS, spanFor } from "./measure.ts";
+import { fontOf, METRICS, nameFont, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
 import { useGrid } from "./store.ts";
 import { onTheme } from "./theme.ts";
@@ -99,6 +99,46 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
   );
 }
 
+/**
+ * Naming a tile. A name has exactly the one cell its tile occupies, so it is typed in the
+ * place it will live and at the size it will be, and is cut to fit rather than allowed to
+ * spill — an occupant owns one cell and its name cannot claim more.
+ */
+function Namer({ id, onDone }: { id: string; onDone(): void }) {
+  const grid = useGrid((s) => s.grid);
+  const setName = useGrid((s) => s.setName);
+  const tile = grid.tiles.find((x) => x.id === id);
+  const [draft, setDraft] = useState(tile?.name ?? "");
+  if (!tile) return null;
+  const ci = indexOfTrack(grid.columns, tile.columnId);
+  const ri = indexOfTrack(grid.rows, tile.rowId);
+  const commit = () => {
+    onDone();
+    setName(id, draft);
+  };
+  return (
+    <input
+      className="editor namer"
+      autoFocus
+      spellCheck={false}
+      value={draft}
+      style={{
+        left: worldX(ci),
+        top: worldX(ri) + CELL * 0.62,
+        width: CELL,
+        height: CELL * 0.24,
+        font: nameFont(CELL),
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") onDone();
+      }}
+    />
+  );
+}
+
 /** Which region owns a cell, by index, so a tile can take the hue it sits in. */
 function regionHue(grid: ReturnType<typeof useGrid.getState>["grid"], ci: number, ri: number) {
   for (const region of grid.regions) {
@@ -123,6 +163,8 @@ export function Grid() {
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editSpan, setEditSpan] = useState(1);
+  /** The tile being renamed, if any. */
+  const [naming, setNaming] = useState<string | null>(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
   /** The move in progress, while shift is held. */
@@ -193,7 +235,7 @@ export function Grid() {
           });
         }
       }
-      else occupied.push({ ci, ri, kind: tile.kind, hue: h });
+      else occupied.push({ ci, ri, kind: tile.kind, name: tile.id === naming ? undefined : tile.name, hue: h });
     }
     const spots = new Map<string, Occupant>();
     for (const tile of grid.tiles) {
@@ -206,7 +248,7 @@ export function Grid() {
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
     return { cells, plates, occupied, texts, spots, byCell, links: grid.links };
-  }, [grid, editing, editSpan]);
+  }, [grid, editing, editSpan, naming]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -344,7 +386,7 @@ export function Grid() {
 
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
-    if (!host || menu || editing) return;
+    if (!host || menu || editing || naming) return;
     if (dragging.current) {
       const at = cellUnder(event);
       if (at) {
@@ -393,7 +435,7 @@ export function Grid() {
       return;
     }
     const host = viewport.current;
-    if (editing) return;
+    if (editing || naming) return;
     if (menu) {
       setMenu(null);
       // Pick the hover back up where the pointer already is, rather than waiting for it
@@ -413,6 +455,16 @@ export function Grid() {
     if (model.current.cells.get(`${ci},${ri}`)?.occupied) return;
     hover.current = null;
     setMenu({ x: event.clientX, y: event.clientY, ci, ri });
+  };
+
+  const onContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    const at = cellUnder(event);
+    const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
+    if (id) {
+      hover.current = null;
+      setNaming(id);
+    }
   };
 
   const pick = (kind: TileKind, style?: TextStyle) => {
@@ -435,12 +487,14 @@ export function Grid() {
       onPointerLeave={onLeave}
       onPointerDown={onDown}
       onPointerUp={onUp}
+      onContextMenu={onContextMenu}
     >
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
         {editing !== null && (
           <Editor id={editing} onDone={() => setEditing(null)} onSpan={setEditSpan} />
         )}
+        {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
       </div>
       {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
     </div>

@@ -8,6 +8,7 @@ interface Store {
   /** Returns the new tile's id, so a text tile can be opened for editing at once. */
   addAt(columnIndex: number, rowIndex: number, kind: TileKind, style?: TextStyle): string | null;
   setText(tileId: string, text: string, span: number): void;
+  setName(tileId: string, name: string): void;
   remove(tileId: string): void;
   move(tileId: string, columnIndex: number, rowIndex: number): void;
 }
@@ -46,6 +47,16 @@ export const useGrid = create<Store>((set, get) => ({
       grid: {
         ...s.grid,
         tiles: s.grid.tiles.map((t) => (t.id === tileId ? { ...t, text, span } : t)),
+      },
+    }));
+  },
+  setName(tileId, name) {
+    set((s) => ({
+      grid: {
+        ...s.grid,
+        tiles: s.grid.tiles.map((t) =>
+          t.id === tileId ? { ...t, name: name.trim() || undefined } : t,
+        ),
       },
     }));
   },

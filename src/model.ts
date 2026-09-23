@@ -36,6 +36,8 @@ export interface Tile {
   readonly kind: TileKind;
   readonly columnId: string;
   readonly rowId: string;
+  /** What this one is called. Occupants only; a run is named by what it says. */
+  readonly name?: string;
   /** Text only. */
   readonly style?: TextStyle;
   readonly text?: string;
