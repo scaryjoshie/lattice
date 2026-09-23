@@ -236,3 +236,40 @@ Caveats are real but small and not ours: a program mid-render can flicker on `SI
 some applications in an alternate screen lose scrollback across a resize; layouts that
 assume about eighty columns break in a very small grid, so a minimum tile span is worth
 enforcing.
+
+## Proposed: where the logic lives
+
+Not settled. Recorded because the shape is easy to get subtly wrong and expensive to unpick.
+
+The instinct to have a core agent manager that owns communication, with the grid built on
+top of it, is right about the layering and wrong about one thing: **the grid does not sit
+on top of the agent runtime. They sit beside each other, both on the model.**
+
+```
+surfaces    grid canvas, menus, editor       project state, emit commands
+services    agent runtime, layout            act on the model, drive adapters
+adapters    Claude Code, Codex, PTY, git     translate the outside world
+model       tiles, tracks, regions, agents   the only source of truth
+```
+
+**Dependencies point inward.** Nothing inward knows anything about what is outward. The
+grid never calls the runtime; the runtime never knows where a tile is. A tile references
+an agent by id, the runtime records that one agent messaged another, and the grid reads
+that and draws it.
+
+The test is the same one that settled terminal ownership: *would this still be true with no
+browser open?* If yes it is model or service; if it only matters while somebody is looking
+it is surface.
+
+What the discipline buys, concretely: the same state can render as a list without touching
+the runtime, and the runtime can be replaced without touching the canvas. Both properties
+disappear the moment the grid is allowed to "use" the manager, because then the canvas has
+opinions the list does not share and the runtime has a caller it has to keep happy.
+
+One thing that looks like an exception and is not: **layout is model, not surface.** It has
+to survive a closed browser, so it lives in the daemon — but the canvas that renders it is
+still a surface. "Layout lives below" and "the grid lives above" are both true.
+
+There is prior work behind all of this — ports and adapters, the clean-architecture
+dependency rule, entity-component systems in games — and they differ in vocabulary more
+than in substance. The rule above is what they have in common.
