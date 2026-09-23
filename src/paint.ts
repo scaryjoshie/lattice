@@ -101,11 +101,21 @@ export interface Focus {
  * from. Seeing both marks change places is what makes a swap read as a swap rather than as
  * a drop onto something.
  */
+/** Anything a cell can hold, at a place, whether or not it has a mark to draw. */
+export interface Held {
+  ci: number;
+  ri: number;
+  span: number;
+  rows: number;
+  kind?: OccupantKind;
+  hue: number | null;
+}
+
 export interface Drag {
   from: { ci: number; ri: number };
   to: { ci: number; ri: number };
-  moving: Occupant;
-  displaced: Occupant | null;
+  moving: Held;
+  displaced: Held | null;
 }
 
 export interface Scene {
@@ -276,9 +286,14 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   // Occupied cells last, so the ruling does not cross them.
   // While a move is in progress the two tiles involved are drawn where they would end up,
   // not where they are. Leaving them in place as well makes a swap look like a duplication.
+  const within = (held: Held | null, ci: number, ri: number) =>
+    held !== null &&
+    ci >= held.ci &&
+    ci < held.ci + held.span &&
+    ri >= held.ri &&
+    ri < held.ri + held.rows;
   const lifted = (ci: number, ri: number) =>
-    drag !== null &&
-    ((ci === drag.from.ci && ri === drag.from.ri) || (ci === drag.to.ci && ri === drag.to.ri));
+    drag !== null && (within(drag.moving, ci, ri) || within(drag.displaced, ci, ri));
 
   const fills = new Map<string, Path2D>();
   for (const spot of occupied) {
@@ -314,6 +329,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     for (const run of texts) {
       if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
       if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
+      if (lifted(run.ci, run.ri)) continue;
       const m = METRICS[run.style];
       const h = hue(run.hue);
       const x = sx(run.ci);
@@ -434,16 +450,18 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   if (drag) {
-    const ghost = (spot: Occupant, ci: number, ri: number) => {
+    const ghost = (held: Held, ci: number, ri: number) => {
+      const w = size * held.span;
+      const h = size * held.rows;
       ctx.globalAlpha = GHOST;
-      ctx.fillStyle = hue(spot.hue).fill;
-      ctx.fillRect(sx(ci), sy(ri), size, size);
-      mark(ctx, spot, sx(ci), sy(ri), size);
+      ctx.fillStyle = hue(held.hue).fill;
+      ctx.fillRect(sx(ci), sy(ri), w, h);
+      if (held.kind) mark(ctx, { ci, ri, kind: held.kind, hue: held.hue }, sx(ci), sy(ri), size);
       ctx.globalAlpha = 1;
       ctx.lineWidth = FOCUS_EDGE;
-      ctx.strokeStyle = hue(spot.hue).edge;
+      ctx.strokeStyle = hue(held.hue).edge;
       const inset = FOCUS_EDGE / 2;
-      ctx.strokeRect(sx(ci) + inset, sy(ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+      ctx.strokeRect(sx(ci) + inset, sy(ri) + inset, w - FOCUS_EDGE, h - FOCUS_EDGE);
     };
     ghost(drag.moving, drag.to.ci, drag.to.ri);
     if (drag.displaced) ghost(drag.displaced, drag.from.ci, drag.from.ri);

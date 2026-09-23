@@ -310,22 +310,22 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts, spots, byCell, links } = model.current;
+    const { cells, plates, occupied, texts, spots, byCell, tiles, links } = model.current;
 
     // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
     // question "who is this one talking to", and the answer is a read of the model.
     let drag: Drag | null = null;
     const held = dragging.current;
     if (held) {
-      const moving = spots.get(held.id);
-      const targetId = byCell.get(`${held.to[0]},${held.to[1]}`);
-      const displaced = targetId && targetId !== held.id ? spots.get(targetId) : undefined;
+      const moving = tiles.get(held.id);
+      const targetId = cells.get(`${held.to[0]},${held.to[1]}`)?.tileId;
+      const other = targetId && targetId !== held.id ? tiles.get(targetId) : undefined;
       if (moving) {
         drag = {
-          from: { ci: held.from[0], ri: held.from[1] },
+          from: { ci: moving.ci, ri: moving.ri },
           to: { ci: held.to[0], ri: held.to[1] },
-          moving,
-          displaced: displaced ?? null,
+          moving: { ...moving, ci: held.to[0], ri: held.to[1] },
+          displaced: other ? { ...other, ci: moving.ci, ri: moving.ri } : null,
         };
       }
     }
@@ -356,7 +356,8 @@ export function Grid() {
           .filter((s): s is NonNullable<typeof s> => Boolean(s));
         // Every agent focuses, talking or not. Dimming that depended on whether an agent
         // happened to have links would make the canvas respond unevenly to the same act.
-        focus = { ...here, partners };
+        const carried = held?.id === spot && drag ? drag.to : here;
+        focus = { ...here, ci: carried.ci, ri: carried.ri, partners };
       }
     }
 
@@ -469,7 +470,8 @@ export function Grid() {
     dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
     if (!event.shiftKey) return;
     const at = cellUnder(event);
-    const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
+    // Anything in a cell can be picked up, text included.
+    const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
     if (id && at) {
       dragging.current = { id, from: at, to: at };
       (event.target as Element).setPointerCapture?.(event.pointerId);
