@@ -91,31 +91,11 @@ export interface Occupant {
 export interface Focus {
   ci: number;
   ri: number;
+  /** Where the lines leave from. Normally the tile; while it is being carried, where it
+   *  was picked up, so the connections do not swing about as it moves. */
+  anchor: { ci: number; ri: number };
   hue: number | null;
   partners: readonly { ci: number; ri: number }[];
-}
-
-/**
- * A move in progress. Both ends are shown at once: the tile being moved appears where it
- * would land, and if something is already there, that one appears where the first came
- * from. Seeing both marks change places is what makes a swap read as a swap rather than as
- * a drop onto something.
- */
-/** Anything a cell can hold, at a place, whether or not it has a mark to draw. */
-export interface Held {
-  ci: number;
-  ri: number;
-  span: number;
-  rows: number;
-  kind?: OccupantKind;
-  hue: number | null;
-}
-
-export interface Drag {
-  from: { ci: number; ri: number };
-  to: { ci: number; ri: number };
-  moving: Held;
-  displaced: Held | null;
 }
 
 export interface Scene {
@@ -130,7 +110,6 @@ export interface Scene {
   focus: Focus | null;
   /** What is being acted on — renamed, or shown a menu. Ringed, but nothing is veiled. */
   selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
-  drag: Drag | null;
   hover: readonly [number, number] | null;
 }
 
@@ -179,8 +158,7 @@ function mark(
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, drag, hover } =
-    scene;
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
   ctx.fillStyle = palette.page;
@@ -284,21 +262,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   // Occupied cells last, so the ruling does not cross them.
-  // While a move is in progress the two tiles involved are drawn where they would end up,
-  // not where they are. Leaving them in place as well makes a swap look like a duplication.
-  const within = (held: Held | null, ci: number, ri: number) =>
-    held !== null &&
-    ci >= held.ci &&
-    ci < held.ci + held.span &&
-    ri >= held.ri &&
-    ri < held.ri + held.rows;
-  const lifted = (ci: number, ri: number) =>
-    drag !== null && (within(drag.moving, ci, ri) || within(drag.displaced, ci, ri));
-
   const fills = new Map<string, Path2D>();
   for (const spot of occupied) {
     if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
-    if (lifted(spot.ci, spot.ri)) continue;
     const style = hue(spot.hue).fill;
     let path = fills.get(style);
     if (!path) {
@@ -313,7 +279,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
   for (const spot of occupied) {
     if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
-    if (lifted(spot.ci, spot.ri)) continue;
     mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
   }
 
@@ -329,7 +294,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     for (const run of texts) {
       if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
       if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
-      if (lifted(run.ci, run.ri)) continue;
       const m = METRICS[run.style];
       const h = hue(run.hue);
       const x = sx(run.ci);
@@ -387,7 +351,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
      * The route turns rather than cutting across: a diagonal ignores the grid it is drawn
      * on, and on a ruled surface that reads as a mistake. One corner, rounded.
      */
-    const [fx, fy] = centre(focus.ci, focus.ri);
+    const [fx, fy] = centre(focus.anchor.ci, focus.anchor.ri);
     ctx.strokeStyle = h.edge;
     ctx.lineWidth = LINK_EDGE;
     ctx.lineCap = "round";
@@ -449,28 +413,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     );
   }
 
-  if (drag) {
-    const ghost = (held: Held, ci: number, ri: number) => {
-      const w = size * held.span;
-      const h = size * held.rows;
-      ctx.globalAlpha = GHOST;
-      ctx.fillStyle = hue(held.hue).fill;
-      ctx.fillRect(sx(ci), sy(ri), w, h);
-      if (held.kind) mark(ctx, { ci, ri, kind: held.kind, hue: held.hue }, sx(ci), sy(ri), size);
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = FOCUS_EDGE;
-      ctx.strokeStyle = hue(held.hue).edge;
-      const inset = FOCUS_EDGE / 2;
-      ctx.strokeRect(sx(ci) + inset, sy(ri) + inset, w - FOCUS_EDGE, h - FOCUS_EDGE);
-    };
-    ghost(drag.moving, drag.to.ci, drag.to.ri);
-    if (drag.displaced) ghost(drag.displaced, drag.from.ci, drag.from.ri);
-  }
-
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
   // An empty cell also gets a plus, because the point of pointing at one is to put
   // something there.
-  if (hover && rule > 0 && !focus && !drag) {
+  if (hover && rule > 0 && !focus) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;

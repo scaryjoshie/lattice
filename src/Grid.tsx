@@ -5,7 +5,6 @@ import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./mod
 import {
   type Cell,
   type Scene,
-  type Drag,
   type Focus,
   type Occupant,
   paint,
@@ -182,7 +181,14 @@ export function Grid() {
    */
   const dismissing = useRef(false);
   /** The move in progress, while shift is held. */
-  const dragging = useRef<{ id: string; from: [number, number]; to: [number, number] } | null>(null);
+  const dragging = useRef<{ id: string; origin: [number, number] } | null>(null);
+  /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
+  const [held, setHeld] = useState<{
+    id: string;
+    origin: [number, number];
+    to: [number, number];
+    swapping: string | null;
+  } | null>(null);
 
   /**
    * Derived from the model, so it is rebuilt when the model changes and never on a camera
@@ -190,6 +196,21 @@ export function Grid() {
    * for data that had not moved.
    */
   const scene = useMemo(() => {
+    /*
+     * Where a tile is *while the drag is happening*, which is not where the model says it
+     * is. Doing it here rather than in the paint means nothing downstream knows a drag
+     * exists: the cell a tile left is empty, and empty cells already know how to look.
+     */
+    const carry = held;
+    const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      if (!carry) return [ci, ri];
+      if (tile.id === carry.id) return carry.to;
+      if (carry.swapping === tile.id) return carry.origin;
+      return [ci, ri];
+    };
+
     const cells = new Map<string, Cell>();
     const plates: Plate[] = [];
     for (const region of grid.regions) {
@@ -203,8 +224,7 @@ export function Grid() {
     }
     for (const tile of grid.tiles) {
       if (tile.id === editing) continue;
-      const ci = indexOfTrack(grid.columns, tile.columnId);
-      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const [ci, ri] = placed(tile);
       const w = tile.span ?? 1;
       const h = tile.rows ?? 1;
       for (let dy = 0; dy < h; dy++) {
@@ -223,8 +243,7 @@ export function Grid() {
     const occupied: Occupant[] = [];
     const texts: TextRun[] = [];
     for (const tile of grid.tiles) {
-      const ci = indexOfTrack(grid.columns, tile.columnId);
-      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const [ci, ri] = placed(tile);
       const h = cells.get(`${ci},${ri}`)?.hue ?? null;
       if (tile.kind === "text") {
         if (tile.id === editing) {
@@ -255,8 +274,7 @@ export function Grid() {
     /** Every tile's extent, so anything being acted on can be ringed whole. */
     const tiles = new Map<string, { ci: number; ri: number; span: number; rows: number; hue: number | null }>();
     for (const tile of grid.tiles) {
-      const ci = indexOfTrack(grid.columns, tile.columnId);
-      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const [ci, ri] = placed(tile);
       tiles.set(tile.id, {
         ci,
         ri,
@@ -269,15 +287,14 @@ export function Grid() {
     const spots = new Map<string, Occupant>();
     for (const tile of grid.tiles) {
       if (tile.kind === "text") continue;
-      const ci = indexOfTrack(grid.columns, tile.columnId);
-      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const [ci, ri] = placed(tile);
       spots.set(tile.id, { ci, ri, kind: tile.kind, hue: cells.get(`${ci},${ri}`)?.hue ?? null });
     }
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    return { cells, plates, occupied, texts, spots, byCell, tiles, links: grid.links };
-  }, [grid, editing, editSpan, naming]);
+    return { cells, plates, occupied, texts, spots, byCell, tiles, links: grid.links, carried: carry };
+  }, [grid, editing, editSpan, naming, held]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -310,26 +327,10 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts, spots, byCell, tiles, links } = model.current;
+    const { cells, plates, occupied, texts, spots, byCell, tiles, links, carried } = model.current;
 
     // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
     // question "who is this one talking to", and the answer is a read of the model.
-    let drag: Drag | null = null;
-    const held = dragging.current;
-    if (held) {
-      const moving = tiles.get(held.id);
-      const targetId = cells.get(`${held.to[0]},${held.to[1]}`)?.tileId;
-      const other = targetId && targetId !== held.id ? tiles.get(targetId) : undefined;
-      if (moving) {
-        drag = {
-          from: { ci: moving.ci, ri: moving.ri },
-          to: { ci: held.to[0], ri: held.to[1] },
-          moving: { ...moving, ci: held.to[0], ri: held.to[1] },
-          displaced: other ? { ...other, ci: moving.ci, ri: moving.ri } : null,
-        };
-      }
-    }
-
     /*
      * While moving an agent its connections stay lit: that is the one thing still worth
      * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
@@ -346,7 +347,7 @@ export function Grid() {
      */
     let focus: Focus | null = null;
     const spot =
-      held?.id ?? about ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
+      carried?.id ?? about ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
@@ -356,14 +357,17 @@ export function Grid() {
           .filter((s): s is NonNullable<typeof s> => Boolean(s));
         // Every agent focuses, talking or not. Dimming that depended on whether an agent
         // happened to have links would make the canvas respond unevenly to the same act.
-        const carried = held?.id === spot && drag ? drag.to : here;
-        focus = { ...here, ci: carried.ci, ri: carried.ri, partners };
+        const anchor =
+          carried?.id === spot
+            ? { ci: carried.origin[0], ri: carried.origin[1] }
+            : { ci: here.ci, ri: here.ri };
+        focus = { ...here, anchor, partners };
       }
     }
 
     paint(
       ctx,
-      { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, drag, hover: hover.current },
+      { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, hover: hover.current },
       dash.current,
     );
     running.current = focus !== null;
@@ -442,10 +446,15 @@ export function Grid() {
     if (dragging.current) {
       const at = cellUnder(event);
       if (at) {
-        dragging.current = { ...dragging.current, to: at };
-        // Nothing is being pointed at during a move; it is being carried.
+        const carry = dragging.current;
+        const sitting = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
         hover.current = null;
-        schedule(camera.current);
+        setHeld({
+          id: carry.id,
+          origin: carry.origin,
+          to: at,
+          swapping: sitting && sitting !== carry.id ? sitting : null,
+        });
       }
       return;
     }
@@ -473,7 +482,7 @@ export function Grid() {
     // Anything in a cell can be picked up, text included.
     const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
     if (id && at) {
-      dragging.current = { id, from: at, to: at };
+      dragging.current = { id, origin: at };
       (event.target as Element).setPointerCapture?.(event.pointerId);
     }
   };
@@ -485,7 +494,7 @@ export function Grid() {
       const at = cellUnder(event);
       if (at) moveTile(dragging.current.id, at[0], at[1]);
       dragging.current = null;
-      schedule(camera.current);
+      setHeld(null);
       return;
     }
     const host = viewport.current;
