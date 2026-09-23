@@ -490,3 +490,35 @@ One thing to hold on to: voice and orchestration should not be bound by the came
 They address by identity, so they can act on anything regardless of where the view happens
 to be. Zoom level is then a useful *default* for what "this one" means when a person points
 — repositories at one depth, agents at another — rather than a limit on what can be reached.
+
+## Proposed: the keyboard
+
+Not built. Recorded because the shape has one decision in it that is easy to get wrong.
+
+A **cursor** that is not the pointer. Arrows move it a cell, shift and an arrow move it
+five, held keys repeat. Enter does what clicking does — on an empty cell, the menu.
+
+**One highlight, owned by whichever device spoke last.** Two indicators that can disagree
+is the failure everyone hits: the mouse sits over one cell, the keyboard over another, and
+Enter takes the wrong one. Moving the mouse gives it the highlight; pressing an arrow takes
+it back and the pointer is ignored until it moves again.
+
+**Escape returns to where you came from, not to where the pointer is.** Leaving a menu or a
+text run should put the cursor back on the cell that opened it. This is the thing that
+would otherwise be got wrong by accident: the obvious implementation restores the hover,
+and the hover is wherever the mouse happens to be sitting, which is not where the user was.
+
+Moving a tile by keyboard needs its own gesture and is deferred. With a pointer it is
+shift and drag, which the camera does not claim.
+
+## Text overflows like a spreadsheet does
+
+A run grows cell by cell as it is typed, and stops at the first cell that already holds
+something: text spills into empty neighbours and is cut off at a full one. That is the
+spreadsheet convention, and it is right for the same reason — two things cannot be in one
+cell, and the alternative is worse.
+
+The alternative is pushing the neighbour aside, which is what should eventually happen,
+and it cannot be done yet: pushing needs to know what may be pushed and what may not, and
+that is a question about regions and grouping rather than about text. The line-insertion
+rule is the primitive it would be built on.
