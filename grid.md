@@ -522,3 +522,35 @@ The alternative is pushing the neighbour aside, which is what should eventually 
 and it cannot be done yet: pushing needs to know what may be pushed and what may not, and
 that is a question about regions and grouping rather than about text. The line-insertion
 rule is the primitive it would be built on.
+
+## Moving is an exchange of regions
+
+A move is a proposal to exchange one region of the grid with another of the same size: the
+region a tile occupies now, and the region it would occupy. It is legal when **every tile
+touching either region is entirely inside it**. Nothing may have cells both in and out of a
+region, because such a tile cannot be exchanged without tearing.
+
+One rule, and it subsumes the cases that would otherwise each need their own. Swapping two
+tiles of the same size is the case where each region holds exactly one. Moving into free
+space is the case where the destination holds none. Dropping a two-cell run half over
+another two-cell run is refused, because that run straddles the edge. A two-cell run and
+two separate single tiles *can* trade places, because both regions are self-contained.
+
+A region that overlaps its own destination cannot be exchanged with itself, so that is a
+slide rather than a swap, and is allowed only into space nothing else occupies.
+
+The proposal returns every move the exchange implies, and they are applied together: a swap
+is one act, not two moves that happen to be adjacent.
+
+### Possible later: growing the regions until they close
+
+A refusal today means "these regions are not self-contained". It could instead mean "not
+*yet*": when a tile straddles a boundary, expand the region to contain it, and repeat until
+nothing straddles. If both regions close at the same size, the exchange is legal after all —
+so swapping one cell of a two-cell agent pair with a two-cell run would carry the pair's
+other cell along, because that is what makes the exchange whole.
+
+Attractive, and the reason to hold off is the same reason auto-arrangement is a command
+rather than a daemon: a region can grow a long way from what was asked for, and moving one
+thing should not silently rearrange six. If it is built, it wants a bound and a preview
+showing everything it would move — which the proposal already carries.
