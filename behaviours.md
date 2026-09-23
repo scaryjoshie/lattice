@@ -29,11 +29,19 @@ shadows than from an argument about it.
 
 ## Click
 
-11. Clicking an empty cell opens the add menu at the pointer.
-12. Clicking an occupied cell currently does nothing.
-13. **[proposed]** Clicking a tile selects it; clicking it again deselects it.
-14. **[proposed]** Clicking an empty cell begins a rectangular selection at that cell.
-15. **[proposed]** Shift-clicking a second cell completes the rectangle.
+11. Clicking an empty cell selects that cell. Shift-clicking it, or right-clicking it, opens
+    the add menu at the pointer: for a place, the act and the menu are the same thing.
+12. Clicking a tile selects it. A selection is drawn as a ring with a bracket at each
+    corner, in the hue of what it is around; a selected agent keeps its veil and links
+    while the pointer is elsewhere.
+13. Clicking what is already selected deselects it. Escape clears a selection.
+14. With something selected, shift-click on any cell selects the rectangle from the
+    selection out to that cell. It is valid on the same terms as a move: one scope or
+    none, and nothing half in and half out. An invalid one is drawn in the warning
+    colour and cannot be moved.
+15. While shift is held over a selection, the rectangle a shift-click would select is
+    previewed as a crawling dashed outline carrying the corner brackets, and no plus or
+    hover ring is drawn.
 16. A press that moves more than 3px is a pan, not a click.
 17. A click that dismisses an open overlay is spent dismissing it: it does not also open a
     menu, place a tile or select anything.
@@ -42,15 +50,16 @@ shadows than from an argument about it.
 ## Shift-click
 
 19. **[proposed]** Shift-clicking a tile opens it.
-20. **[proposed]** Shift-clicking an empty cell opens the add menu — the same act the plus
-    offers, reached by the modifier that reveals it.
+20. Shift-clicking an empty cell opens the add menu — the same act the plus offers,
+    reached by the modifier that reveals it. With something selected, shift-click extends
+    the selection instead.
 
 ## Right-click
 
 21. Right-clicking an occupied cell opens the tile menu at the pointer.
 22. The tile menu offers rename and delete for an occupant, edit and delete for a run.
 23. Right-clicking any cell of a multi-cell tile finds that tile.
-24. Right-clicking an empty cell does nothing.
+24. Right-clicking an empty cell opens the add menu, ringing the cell it is about.
 25. The browser's own context menu never appears over the canvas.
 
 ## Menus
@@ -66,7 +75,16 @@ shadows than from an argument about it.
 32. Hovering an item moves the selection to it rather than highlighting separately.
 33. The tile menu has no search, being two items.
 34. While a menu is open, the thing it is about stays ringed, and if it is an agent, its
-    veil and links stay lit.
+    veil and links stay lit. A selection stays ringed as well, separately.
+34a. While a menu, a rename or an edit is open, the camera takes nothing: no pan, no wheel,
+    until it is closed.
+
+## The key panel
+
+34b. Bottom left, on a translucent blurred surface, a list of what the keys and the pointer
+    do right now: one row per meaning, filtered by what the grid is in the middle of.
+    Keys are drawn as caps, the pointer as a mouse with the button or wheel in question
+    filled in the move colour.
 
 ## Placing
 
@@ -76,7 +94,9 @@ shadows than from an argument about it.
 
 ## Dragging
 
-38. Shift and drag moves a tile. The camera does not respond to shift.
+38. Shift and drag moves a tile when nothing is selected. A plain drag from inside the
+    selection moves the selection, and the camera yields that press. The camera does not
+    respond to shift.
 39. Anything in a cell can be dragged, including text runs.
 40. While dragging, the tile is drawn at the cell under the pointer, at full strength, with
     its own mark.
@@ -92,7 +112,10 @@ shadows than from an argument about it.
     depends on the zoom as well as on the distance.
 46. A refused move is drawn identically in the warning colour, and nothing is shown as
     moved.
-47. Releasing a refused move does nothing.
+47. Releasing a refused move does nothing. Escape during a move cancels it, and the
+    release that follows does nothing.
+47a. While a move is proposed the selection loses its corner brackets; the proposal says
+    "held" instead. A moved region selection becomes the destination on release.
 48. Nothing changes colour because of a move that has not happened: a tile's hue is the
     region the model says it is in.
 49. While dragging, the dragged tile's links stay lit and stay anchored where the drag
@@ -168,8 +191,7 @@ shadows than from an argument about it.
 79. A tile inside a region takes that region's hue for its mark, its ring and its links.
 80. **[proposed]** A region is selected by a handle in the top-left corner of its plate.
 81. **[proposed]** A selected region offers an arrow on each edge to drag it larger.
-82. **[proposed]** A selection may not span two regions, or a region and the space outside
-    one.
+82. A selection may not span two scopes, or a scope and the space outside one.
 
 ## The camera
 
