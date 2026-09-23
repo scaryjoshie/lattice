@@ -2,7 +2,7 @@ import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { fontOf, METRICS, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
-import { hue } from "./palette.ts";
+import { hue, theme } from "./theme.ts";
 
 /**
  * A ruled grid. The lattice is two sets of lines rather than a shape per cell, which is
@@ -20,7 +20,6 @@ import { hue } from "./palette.ts";
  * out dissolves the ruling into the page rather than crowding it.
  */
 
-const PAGE = "#f5f5f6";
 
 /** Below roughly this many screen pixels a line is noise rather than structure. */
 const FADE_FROM = 8;
@@ -28,8 +27,6 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
-/** How far back everything that is not in focus is pushed toward the page. */
-const VEIL = "rgba(245, 245, 246, 0.82)";
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
@@ -134,7 +131,8 @@ function mark(
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
   const { camera, width, height, dpr, plates, cells, occupied, texts, focus, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = PAGE;
+  const palette = theme();
+  ctx.fillStyle = palette.page;
   ctx.fillRect(0, 0, width, height);
 
   const k = camera.k;
@@ -250,7 +248,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       const y = sy(run.ri);
       const inset = size * m.inset;
       ctx.font = fontOf(run.style, size);
-      ctx.fillStyle = run.hue === null ? PAGE : h.tint;
+      ctx.fillStyle = run.hue === null ? palette.page : h.tint;
 
       if (run.style === "title") {
         // The whole span, not just as far as the words reach. A run's span is derived from
@@ -286,7 +284,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    */
   if (focus) {
     const centre = (c: number, r: number) => [sx(c) + size / 2, sy(r) + size / 2] as const;
-    ctx.fillStyle = VEIL;
+    ctx.fillStyle = palette.veil;
     ctx.fillRect(0, 0, width, height);
 
     const h = hue(focus.hue);
@@ -344,6 +342,16 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.fill();
     };
     for (const partner of focus.partners) stop(...centre(partner.ci, partner.ri));
+    // And where each line leaves the focused agent, so a connection is marked at both
+    // ends. Two partners in the same direction share a departure point, which is correct:
+    // the dot says links leave this way, not how many.
+    for (const partner of focus.partners) {
+      const [px, py] = centre(partner.ci, partner.ri);
+      const half = size / 2;
+      if (px === fx && py === fy) continue;
+      if (px === fx) stop(fx, fy + Math.sign(py - fy) * half);
+      else stop(fx + Math.sign(px - fx) * half, fy);
+    }
 
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = h.edge;

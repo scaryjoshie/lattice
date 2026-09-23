@@ -1,6 +1,6 @@
 :root {
-  --page: #f5f5f6;
-  --ink: #3a3a42;
+  /* --page, --ink, --surface, --border, --divider, --muted and --hover are written from
+     theme.ts, so the DOM and the canvas cannot disagree about what a colour means. */
   --font: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -67,21 +67,21 @@ body {
   z-index: 20;
   min-width: 168px;
   padding: 6px;
-  background: #fff;
-  border: 1px solid #e4e4e9;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 12px 32px rgb(40 44 60 / 14%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
 }
 
 .menu-group + .menu-group {
   margin-top: 4px;
   padding-top: 5px;
-  border-top: 1px solid #f0f0f3;
+  border-top: 1px solid var(--divider);
 }
 
 .menu-heading {
   padding: 4px 8px 5px;
-  color: #a2a5b0;
+  color: var(--muted);
   font-size: 10px;
   letter-spacing: 0.04em;
 }
@@ -102,13 +102,13 @@ body {
 }
 
 .menu-item:hover {
-  background: #f2f3f6;
+  background: var(--hover);
 }
 
 .menu-mark {
   display: grid;
   place-items: center;
-  color: #6f7280;
+  color: var(--muted);
   line-height: 0;
 }
 

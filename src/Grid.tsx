@@ -6,6 +6,7 @@ import { type Cell, type Focus, type Occupant, paint, type Plate, type TextRun }
 import { fontOf, METRICS, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
 import { useGrid } from "./store.ts";
+import { onTheme } from "./theme.ts";
 
 /**
  * Two layers over one camera. The canvas paints every cell, occupied or not, so that cells
@@ -212,6 +213,8 @@ export function Grid() {
   useEffect(() => {
     draw(camera.current);
   }, [draw, camera, scene]);
+
+  useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
 
   useEffect(() => {
     const onResize = () => schedule(camera.current);
