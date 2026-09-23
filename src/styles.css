@@ -126,6 +126,9 @@ body {
   color: var(--ink);
   font-family: var(--font);
   pointer-events: auto;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
 }
 
 /*

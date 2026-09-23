@@ -67,11 +67,12 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
   };
 
   return (
-    <input
+    <textarea
       className="editor"
       autoFocus
       spellCheck={false}
       value={draft}
+      rows={1}
       style={{
         left: worldX(ci),
         top: worldX(ri),
@@ -80,6 +81,10 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
         paddingLeft: CELL * m.inset,
         paddingRight: CELL * m.inset,
         font: fontOf(style, CELL),
+        // After `font`, not before: the shorthand resets line-height to normal, so setting
+        // it first is silently undone. An input centres its own text; a textarea needs the
+        // line box to be the cell for one line to sit where the input's did.
+        lineHeight: `${CELL}px`,
       }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

@@ -14,7 +14,7 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "t" || e.metaKey || e.ctrlKey) return;
       const target = e.target as HTMLElement | null;
-      if (target?.tagName === "INPUT") return;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
       setTheme(theme().name === "dark" ? light : dark);
     };
     window.addEventListener("keydown", onKey);
