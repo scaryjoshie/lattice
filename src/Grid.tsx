@@ -170,6 +170,16 @@ export function Grid() {
   const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * Whether the press that is happening was one that dismissed something. A click that
+   * closes an overlay is spent closing it and does nothing else.
+   *
+   * It has to be recorded at pointer-down, because an input commits on blur and blur
+   * happens between the press and the release — so by the time the release is handled,
+   * the thing that was open has already gone and the release looks like a click on empty
+   * canvas.
+   */
+  const dismissing = useRef(false);
   /** The move in progress, while shift is held. */
   const dragging = useRef<{ id: string; from: [number, number]; to: [number, number] } | null>(null);
 
@@ -419,6 +429,7 @@ export function Grid() {
 
   const onDown = (event: React.PointerEvent) => {
     pressed.current = { x: event.clientX, y: event.clientY };
+    dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
     if (!event.shiftKey) return;
     const at = cellUnder(event);
     const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
@@ -439,13 +450,10 @@ export function Grid() {
       return;
     }
     const host = viewport.current;
-    if (editing || naming) return;
-    if (acting) {
-      setActing(null);
-      return;
-    }
-    if (menu) {
+    if (dismissing.current) {
+      dismissing.current = false;
       setMenu(null);
+      setActing(null);
       // Pick the hover back up where the pointer already is, rather than waiting for it
       // to move before the grid responds again.
       if (host) {
