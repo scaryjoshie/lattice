@@ -2,6 +2,7 @@ import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { clip, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
+import { cells as cellsOf, type Region } from "./region.ts";
 import { hue, theme } from "./theme.ts";
 
 /**
@@ -108,8 +109,8 @@ export interface Focus {
 
 /** A move being proposed: where it came from, where it would land, and whether it may. */
 export interface Proposal {
-  from: { ci: number; ri: number; span: number; rows: number };
-  to: { ci: number; ri: number; span: number; rows: number };
+  from: Region;
+  to: Region;
   hue: number | null;
   ok: boolean;
   /** Something would come back the other way, so the chevrons run both directions. */
@@ -199,7 +200,21 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   const sx = (ci: number) => worldX(ci) * k + camera.x;
   const sy = (ri: number) => worldX(ri) * k + camera.y;
 
-  // Regions, beneath the ruling.
+  /**
+   * One way to draw a cell: its surface, and the occupant on it if there is one. Used for
+   * the ordinary pass and again for any cell that must show through the veil, so the two
+   * cannot disagree about what a cell looks like.
+   */
+  const spotAt = new Map(occupied.map((s) => [`${s.ci},${s.ri}`, s]));
+  const paintCell = (ci: number, ri: number) => {
+    const spot = spotAt.get(`${ci},${ri}`);
+    const cell = at(ci, ri);
+    ctx.fillStyle = spot ? hue(spot.hue).fill : cell?.hue == null ? palette.page : hue(cell.hue).tint;
+    ctx.fillRect(sx(ci), sy(ri), size, size);
+    if (spot) mark(ctx, spot, sx(ci), sy(ri), size);
+  };
+
+  // Scopes, beneath the ruling.
   for (const plate of plates) {
     if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
     ctx.fillStyle = hue(plate.hue).tint;
@@ -285,25 +300,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.globalAlpha = 1;
   }
 
-  // Occupied cells last, so the ruling does not cross them.
-  const fills = new Map<string, Path2D>();
+  // Occupied cells after the ruling, so it does not cross them.
   for (const spot of occupied) {
     if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
-    const style = hue(spot.hue).fill;
-    let path = fills.get(style);
-    if (!path) {
-      path = new Path2D();
-      fills.set(style, path);
-    }
-    path.rect(sx(spot.ci), sy(spot.ri), size, size);
-  }
-  for (const [style, shape] of fills) {
-    ctx.fillStyle = style;
-    ctx.fill(shape);
-  }
-  for (const spot of occupied) {
-    if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
-    mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
+    paintCell(spot.ci, spot.ri);
   }
 
   /*
@@ -365,20 +365,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.fillRect(0, 0, width, height);
 
     const h = hue(focus.hue);
-    const restore = (c: number, r: number, tint: number | null) => {
-      ctx.fillStyle = hue(tint).fill;
-      ctx.fillRect(sx(c), sy(r), size, size);
-    };
-    for (const partner of focus.partners) {
-      restore(partner.ci, partner.ri, at(partner.ci, partner.ri)?.hue ?? null);
-    }
-    restore(focus.ci, focus.ri, focus.hue);
-    for (const spot of occupied) {
-      const lit =
-        (spot.ci === focus.ci && spot.ri === focus.ri) ||
-        focus.partners.some((p) => p.ci === spot.ci && p.ri === spot.ri);
-      if (lit) mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
-    }
+    for (const partner of focus.partners) paintCell(partner.ci, partner.ri);
+    paintCell(focus.ci, focus.ri);
 
     /*
      * Lines run over the tiles rather than stopping at their edges, and end in a dot at
@@ -456,7 +444,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    * that means no, so the shape of the answer does not change with the answer.
    */
   if (proposal && rule > 0) {
-    const centre = (r: Proposal["to"]) =>
+    const centre = (r: Region) =>
       [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
     /*
      * Both regions are lit and outlined, always. A proposal is a statement about two
@@ -464,32 +452,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
      * veil happened to restore, which lit a cell only when it was a link partner of the
      * dragged agent and so worked or did not depending on something unrelated.
      */
-    const relight = (r: Proposal["to"]) => {
-      for (let dy = 0; dy < r.rows; dy++) {
-        for (let dx = 0; dx < r.span; dx++) {
-          const ci = r.ci + dx;
-          const ri = r.ri + dy;
-          const cell = at(ci, ri);
-          ctx.fillStyle = cell?.hue == null ? palette.page : hue(cell.hue).tint;
-          ctx.fillRect(sx(ci), sy(ri), size, size);
-        }
-      }
-      for (const spot of occupied) {
-        if (spot.ci < r.ci || spot.ci >= r.ci + r.span) continue;
-        if (spot.ri < r.ri || spot.ri >= r.ri + r.rows) continue;
-        ctx.fillStyle = hue(spot.hue).fill;
-        ctx.fillRect(sx(spot.ci), sy(spot.ri), size, size);
-        mark(ctx, spot, sx(spot.ci), sy(spot.ri), size);
-      }
-    };
-    relight(proposal.from);
-    relight(proposal.to);
+    for (const r of [proposal.from, proposal.to]) {
+      for (const [ci, ri] of cellsOf(r)) paintCell(ci, ri);
+    }
 
     const [ax, ay] = centre(proposal.from);
     const [bx, by] = centre(proposal.to);
     /** Where a ray from the centre leaves a region's edge, so the path runs edge to edge
      *  rather than centre to centre and is not buried under what it connects. */
-    const toEdge = (r: Proposal["to"], ux: number, uy: number) => {
+    const toEdge = (r: Region, ux: number, uy: number) => {
       const hw = (size * r.span) / 2;
       const hh = (size * r.rows) / 2;
       const tx = Math.abs(ux) < 1e-6 ? Number.POSITIVE_INFINITY : hw / Math.abs(ux);
