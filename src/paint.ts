@@ -30,7 +30,10 @@ const FOCUS_EDGE = 2.5;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
-const ARROW = 8;
+/** Arm length, spacing and weight of a chevron, all in screen pixels. */
+const CHEVRON = 5;
+const CHEVRON_GAP = 15;
+const CHEVRON_EDGE = 2;
 /** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
 const NAME_FROM = 34;
 const NAME_FADE = 14;
@@ -438,35 +441,39 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
     const [ax, ay] = centre(proposal.from);
     const [bx, by] = centre(proposal.to);
-    const colour = proposal.ok ? hue(proposal.hue).edge : palette.warn;
+    // The act has its own colour. It is not the hue of the thing being moved, because it
+    // is not describing the thing — it is describing what is happening to it.
+    const colour = proposal.ok ? palette.flow : palette.warn;
     const inset = FOCUS_EDGE / 2;
 
+    /*
+     * Chevrons flowing along the path rather than a dashed line. A dash says "there is a
+     * connection here"; a row of arrowheads moving one way says "this is going that way",
+     * which is the thing a move needs to say. They are spaced in screen pixels and slide
+     * by the same counter the links crawl on, so everything in flight moves together.
+     */
     const far = Math.hypot(bx - ax, by - ay);
-    if (far > size * 0.4) {
+    if (far > CHEVRON_GAP) {
       const ux = (bx - ax) / far;
       const uy = (by - ay) / far;
-      // Stop short of the destination so the head sits outside what it is pointing at.
-      const hx = bx - ux * (size * 0.4);
-      const hy = by - uy * (size * 0.4);
+      const start = size * 0.36;
+      const end = far - size * 0.36;
       ctx.strokeStyle = colour;
-      ctx.lineWidth = LINK_EDGE;
+      ctx.lineWidth = CHEVRON_EDGE;
       ctx.lineCap = "round";
-      ctx.setLineDash(LINK_DASH);
-      ctx.lineDashOffset = -dash;
+      ctx.lineJoin = "round";
       ctx.beginPath();
-      ctx.moveTo(ax + ux * (size * 0.34), ay + uy * (size * 0.34));
-      ctx.lineTo(hx, hy);
+      const slide = ((dash * 1.6) % CHEVRON_GAP) + CHEVRON_GAP;
+      for (let d = start + (slide % CHEVRON_GAP); d < end; d += CHEVRON_GAP) {
+        const px = ax + ux * d;
+        const py = ay + uy * d;
+        // Two strokes meeting at a point, aimed the way the move is going.
+        ctx.moveTo(px - ux * CHEVRON - uy * CHEVRON, py - uy * CHEVRON + ux * CHEVRON);
+        ctx.lineTo(px, py);
+        ctx.lineTo(px - ux * CHEVRON + uy * CHEVRON, py - uy * CHEVRON - ux * CHEVRON);
+      }
       ctx.stroke();
-      ctx.setLineDash([]);
       ctx.lineCap = "butt";
-
-      ctx.fillStyle = colour;
-      ctx.beginPath();
-      ctx.moveTo(hx + ux * ARROW, hy + uy * ARROW);
-      ctx.lineTo(hx - uy * ARROW * 0.62, hy + ux * ARROW * 0.62);
-      ctx.lineTo(hx + uy * ARROW * 0.62, hy - ux * ARROW * 0.62);
-      ctx.closePath();
-      ctx.fill();
     }
 
     ctx.lineWidth = FOCUS_EDGE;
