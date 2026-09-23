@@ -129,9 +129,10 @@ shadows than from an argument about it.
     is free beside it — so anything that stops blocking a run lets it breathe, whether
     that is an agent moving away, a worktree expanding, or a tile being deleted, with no
     rule per case.
-63c. **[proposed]** A run is either unlimited in width, growing sideways to its boundaries,
-    or capped at a number of columns, wrapping to fit. It is capped by dragging its edge
-    in, and by nothing else.
+63c. **[proposed]** A run grows sideways while there is room and wraps when there is not,
+    if there is a free row below it. With no row below it keeps going sideways and is cut
+    with an ellipsis. There is no capped mode to switch into: wrapping is what running out
+    of room means.
 63c2. **[proposed]** Shift-enter inserts a line break. At any time, in either mode,
     including on the first line. It has nothing to do with width.
 63d. **[proposed]** Any run may have extra lines. A title and a note differ only in type

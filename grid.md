@@ -623,23 +623,23 @@ never mutually recursive.
 
 ## Proposed: one text object at two sizes
 
-A run has a **width mode**, and it is the only thing that decides how it grows:
+A run grows sideways while there is room, and **wraps when there is not — provided there is
+a free row below it**. If there is not, it keeps going sideways as it does now, and is cut
+with an ellipsis at the boundary.
 
-- **unlimited** — the run grows sideways as far as the boundaries allow. The default.
-- **capped at n columns** — the width is fixed and the words wrap to fit it.
+So there is no capped and uncapped mode, and no gesture that switches between them.
+Wrapping is what running out of room means, and the only reason text is ever lost is that
+it has run out of room in both directions at once. Dragging a run's edge then does one
+obvious thing — makes it narrower, and the text reflows — rather than also switching it
+into a different behaviour.
 
-A run is capped by dragging its edge in, and only that. Height then follows from the mode:
-unlimited, a run is as tall as its explicit line breaks; capped, as tall as the wrapping
-needs, bounded by what is free below.
+Shift-enter is separate from all of it: a line break, any time, in either direction.
 
-**Shift-enter is unrelated to any of this.** It inserts a line break, at any time, in
-either mode, including on the first line. Making it also set the width would have been one
-gesture doing two things, and would have meant a run could not have a second line without
-being capped — which is a rule with no reason behind it.
+And a title may have extra lines like anything else, so nothing distinguishes the two
+styles but type size. `style` stops being a behavioural switch and becomes a size.
 
-And a title may have extra lines like anything else. There is then nothing distinguishing
-the two styles but type size: a note is smaller, so more lines fit in the same cell height.
-`style` stops being a behavioural switch and becomes a size, and nothing branches on it.
+Both this and shift-enter need the same two things underneath: multi-line runs, and a run
+behaving as a region rather than as a row of cells.
 
 ## Proposed: emphasis
 
