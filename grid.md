@@ -623,26 +623,23 @@ never mutually recursive.
 
 ## Proposed: one text object at two sizes
 
-Rather than being created at some arbitrary block size, a note is what a run becomes when
-you press shift and enter while typing it.
+A run has a **width mode**, and it is the only thing that decides how it grows:
 
-The first shift-enter fixes the run's **width** at what had been typed so far — measured at
-the run's real cell width, not at the width the editor happened to be projecting, or the
-line that triggered it gets clipped by its own act.
+- **unlimited** — the run grows sideways as far as the boundaries allow. The default.
+- **capped at n columns** — the width is fixed and the words wrap to fit it.
 
-After that, width is fixed and height behaves exactly as width does for a title: it grows
-by wrapping, it stops at whatever is below it, and while you are still typing, the run
-scrolls so the line you are on stays visible and the earlier lines move out of sight. Which
-is what a title already does horizontally — the editor shows the end of a line that has
-outgrown its span.
+A run is capped by dragging its edge in, and only that. Height then follows from the mode:
+unlimited, a run is as tall as its explicit line breaks; capped, as tall as the wrapping
+needs, bounded by what is free below.
 
-**And a title may have extra lines too.** There is then nothing that distinguishes the two
-except type size: a note is smaller, so more lines fit in the same cell height. Everything
-else — wrapping, growing, stopping at what is beside or below it, scrolling while typed —
-is one behaviour on two axes, shared by both.
+**Shift-enter is unrelated to any of this.** It inserts a line break, at any time, in
+either mode, including on the first line. Making it also set the width would have been one
+gesture doing two things, and would have meant a run could not have a second line without
+being capped — which is a rule with no reason behind it.
 
-So `style` stops being a behavioural switch and becomes a size. Two is enough; the point is
-that nothing branches on it.
+And a title may have extra lines like anything else. There is then nothing distinguishing
+the two styles but type size: a note is smaller, so more lines fit in the same cell height.
+`style` stops being a behavioural switch and becomes a size, and nothing branches on it.
 
 ## Proposed: emphasis
 

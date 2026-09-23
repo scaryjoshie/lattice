@@ -129,9 +129,11 @@ shadows than from an argument about it.
     is free beside it — so anything that stops blocking a run lets it breathe, whether
     that is an agent moving away, a worktree expanding, or a tile being deleted, with no
     rule per case.
-63c. **[proposed]** Shift-enter gives a run a second line, and fixes its width at what was
-    typed so far, measured at the run's real cell width. Height then grows by wrapping and
-    stops at whatever is below, exactly as width does horizontally.
+63c. **[proposed]** A run is either unlimited in width, growing sideways to its boundaries,
+    or capped at a number of columns, wrapping to fit. It is capped by dragging its edge
+    in, and by nothing else.
+63c2. **[proposed]** Shift-enter inserts a line break. At any time, in either mode,
+    including on the first line. It has nothing to do with width.
 63d. **[proposed]** Any run may have extra lines. A title and a note differ only in type
     size — a note is smaller, so more lines fit in the same cell height. Nothing else
     branches on which it is.
