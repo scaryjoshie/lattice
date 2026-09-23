@@ -119,7 +119,13 @@ shadows than from an argument about it.
 61. A run's span is derived from its text, measured at the cell's own size.
 62. A run grows cell by cell as it is typed.
 63. A run stops growing at the first cell that already holds something; further text is cut
-    off.
+    off, both while typing and once committed.
+63a. **[proposed]** A run also stops at the edge of the worktree it is in. Text may not
+    leave its worktree, which makes a worktree a container in fact and not only in
+    appearance.
+63b. **[proposed]** When a worktree is expanded, a run that was being cut off against the
+    edge being moved expands with it, up to what it needs. Growing the container gives
+    back exactly the room the container was taking.
 64. The ruling is omitted inside a run rather than painted over.
 65. While a run is being typed, the canvas still owns its surface and its ruling; the input
     contributes only a caret and glyphs.

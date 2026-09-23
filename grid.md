@@ -591,3 +591,19 @@ handle is just a handle, it costs no cell because it sits in the plate rather th
 grid, and it is where a selection handle conventionally lives. Selecting a worktree offers
 an arrow on each edge to drag it larger, which is already the documented gesture: dragging
 an edge is a request for room, and room can always be made.
+
+## Proposed: text is bounded by its worktree
+
+A run stops at the first occupied cell. It should also stop at the edge of the worktree it
+is in — text may not leave its worktree, which is what makes a worktree a container in fact
+rather than in appearance, and is the same containment rule that governs moves and
+selections applied to growth.
+
+The other half matters as much: **expanding a worktree gives back the room it was taking.**
+A run that was being cut off against the edge being dragged expands with it, up to what it
+needs and no further. Growth is not a separate mechanism from the cut-off; it is the cut-off
+being relieved.
+
+This is the first thing that connects text to Room. A run currently has exactly one
+response to having no space, which is to stop. With this, the space it lacks becomes
+something a person can grant, in one gesture, at the place where it is missing.
