@@ -25,10 +25,15 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
+/** The gap a run cuts into whatever it sits on. */
+const CUT = "#ffffff";
 /** Cap height as a fraction of the cell, so text scales with the grid it sits in. */
 const TEXT = 0.3;
 /** Left padding, also as a fraction of the cell, so the inset scales too. */
 const TEXT_INSET = 0.26;
+/** Half the plus's width, as a fraction of the cell. Its stroke is screen pixels. */
+const PLUS = 0.16;
+const PLUS_EDGE = 2;
 const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
@@ -185,7 +190,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.font = `${Math.round(size * TEXT)}px ${FONT}`;
-    const snap = (n: number) => Math.round(n) + 0.5;
     for (const run of texts) {
       if (run.ci + run.span - 1 < c0 || run.ci > c1 || run.ri < r0 || run.ri > r1) continue;
       const h = hue(run.hue);
@@ -194,8 +198,13 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const w = size * run.span;
       ctx.fillStyle = run.hue === null ? PAGE : h.tint;
       ctx.fillRect(x, y, w, size);
-      ctx.strokeStyle = h.edge;
-      ctx.strokeRect(snap(x), snap(y), Math.round(w) - 1, Math.round(size) - 1);
+      // White, at the focus weight: the run reads as cut out of the surface rather than
+      // drawn on top of it, and no new colour enters the palette to do it.
+      ctx.lineWidth = FOCUS_EDGE;
+      ctx.strokeStyle = CUT;
+      const inset = FOCUS_EDGE / 2;
+      ctx.strokeRect(x + inset, y + inset, w - FOCUS_EDGE, size - FOCUS_EDGE);
+      ctx.lineWidth = RULE;
       ctx.fillStyle = h.ink;
       ctx.fillText(run.text, x + size * TEXT_INSET, y + size / 2);
     }
@@ -203,11 +212,32 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   }
 
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
+  // An empty cell also gets a plus, because the point of pointing at one is to put
+  // something there.
   if (hover && rule > 0) {
     const [ci, ri] = hover;
+    const cell = at(ci, ri);
+    const colour = hue(cell?.hue ?? null).edge;
     const inset = FOCUS_EDGE / 2;
+    const x = sx(ci);
+    const y = sy(ri);
     ctx.lineWidth = FOCUS_EDGE;
-    ctx.strokeStyle = hue(at(ci, ri)?.hue ?? null).edge;
-    ctx.strokeRect(sx(ci) + inset, sy(ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+    ctx.strokeStyle = colour;
+    ctx.strokeRect(x + inset, y + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+
+    if (!cell?.occupied) {
+      const arm = size * PLUS;
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+      ctx.lineWidth = PLUS_EDGE;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx - arm, cy);
+      ctx.lineTo(cx + arm, cy);
+      ctx.moveTo(cx, cy - arm);
+      ctx.lineTo(cx, cy + arm);
+      ctx.stroke();
+      ctx.lineCap = "butt";
+    }
   }
 }
