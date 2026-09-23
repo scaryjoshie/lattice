@@ -13,7 +13,7 @@ import {
   type TextStyle,
   type TileKind,
 } from "./model.ts";
-import { cells as cellsOf, overlaps } from "./region.ts";
+import { cells as cellsOf, type Region } from "./region.ts";
 import {
   type Cell,
   type Scene,
@@ -201,17 +201,18 @@ export function Grid() {
    */
   const dragging = useRef<{
     id: string;
-    origin: [number, number];
+    from: Region;
     grab: [number, number];
   } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
   const [held, setHeld] = useState<{
     id: string;
-    origin: [number, number];
-    to: [number, number];
+    from: Region;
+    to: Region;
     /** Everywhere the proposal would put something. Empty when it is refused. */
     moves: readonly Move[];
     ok: boolean;
+    swaps: boolean;
   } | null>(null);
 
   /**
@@ -330,28 +331,10 @@ export function Grid() {
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    const shape = held ? tiles.get(held.id) : undefined;
+    const heldTile = held && grid.tiles.find((x) => x.id === held.id);
     const proposal =
-      held && shape
-        ? {
-            from: { ci: held.origin[0], ri: held.origin[1], span: shape.span, rows: shape.rows },
-            to: { ci: held.to[0], ri: held.to[1], span: shape.span, rows: shape.rows },
-            hue: shape.hue,
-            ok: held.ok,
-            // Whether something would come back the other way, read from what the model
-            // has at the destination rather than from the moves — a refusal produces no
-            // moves, and a refused exchange must still draw as the exchange it refuses.
-            swaps: grid.tiles.some(
-              (other) =>
-                other.id !== held.id &&
-                overlaps(footprint(grid, other), {
-                  ci: held.to[0],
-                  ri: held.to[1],
-                  span: shape.span,
-                  rows: shape.rows,
-                }),
-            ),
-          }
+      held && heldTile
+        ? { from: held.from, to: held.to, hue: hueAt(heldTile), ok: held.ok, swaps: held.swaps }
         : null;
     return {
       cells,
@@ -430,9 +413,7 @@ export function Grid() {
         // Every agent focuses, talking or not. Dimming that depended on whether an agent
         // happened to have links would make the canvas respond unevenly to the same act.
         const anchor =
-          carried?.id === spot
-            ? { ci: carried.origin[0], ri: carried.origin[1] }
-            : { ci: here.ci, ri: here.ri };
+          carried?.id === spot ? { ci: carried.from.ci, ri: carried.from.ri } : { ci: here.ci, ri: here.ri };
         focus = { ...here, anchor, partners };
       }
     }
@@ -554,11 +535,11 @@ export function Grid() {
       const at = cellUnder(event);
       if (at) {
         const carry = dragging.current;
-        const to: [number, number] = [at[0] - carry.grab[0], at[1] - carry.grab[1]];
+        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
         // From the model, never from the scene: the scene is built from this answer.
-        const verdict = proposeMove(gridRef.current, carry.id, to[0], to[1]);
+        const verdict = proposeMove(gridRef.current, carry.from, to);
         hover.current = null;
-        setHeld({ id: carry.id, origin: carry.origin, to, moves: verdict.moves, ok: verdict.ok });
+        setHeld({ id: carry.id, from: carry.from, to, ...verdict });
       }
       return;
     }
@@ -586,13 +567,10 @@ export function Grid() {
     const at = cellUnder(event);
     // Anything in a cell can be picked up, text included.
     const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-    const shape = id ? model.current.tiles.get(id) : undefined;
-    if (id && at && shape) {
-      dragging.current = {
-        id,
-        origin: [shape.ci, shape.ri],
-        grab: [at[0] - shape.ci, at[1] - shape.ri],
-      };
+    const tile = id ? gridRef.current.tiles.find((x) => x.id === id) : undefined;
+    if (at && tile) {
+      const from = footprint(gridRef.current, tile);
+      dragging.current = { id: tile.id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
       (event.target as Element).setPointerCapture?.(event.pointerId);
     }
   };
@@ -605,12 +583,8 @@ export function Grid() {
       const at = cellUnder(event);
       const carry = dragging.current;
       if (at) {
-        const verdict = proposeMove(
-          gridRef.current,
-          carry.id,
-          at[0] - carry.grab[0],
-          at[1] - carry.grab[1],
-        );
+        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
+        const verdict = proposeMove(gridRef.current, carry.from, to);
         if (verdict.ok) applyMoves(verdict.moves);
       }
       dragging.current = null;

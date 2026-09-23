@@ -261,50 +261,51 @@ export interface Move {
   ri: number;
 }
 
+/**
+ * Whether one region of the grid may be exchanged with another, and everything that would
+ * move if it were. Dragging a tile is the case where `from` is that tile's footprint; a
+ * selection is any region. `swaps` says whether something at the destination would come
+ * back, and is answered whatever the verdict, because a refused exchange is still drawn
+ * as the exchange it refuses.
+ */
 export function proposeMove(
   grid: Grid,
-  tileId: string,
-  ci: number,
-  ri: number,
-): { ok: boolean; moves: readonly Move[] } {
-  const tile = grid.tiles.find((t) => t.id === tileId);
-  if (!tile) return { ok: false, moves: [] };
-  const from = footprint(grid, tile);
-  const to: Region = { ci, ri, span: from.span, rows: from.rows };
-  if (to.ci === from.ci && to.ri === from.ri) return { ok: true, moves: [] };
-
+  from: Region,
+  to: Region,
+): { ok: boolean; swaps: boolean; moves: readonly Move[] } {
   const touching = (region: Region): Tile[] =>
-    grid.tiles.filter((other) => other.id !== tileId && overlaps(footprint(grid, other), region));
+    grid.tiles.filter((tile) => overlaps(footprint(grid, tile), region));
+  const inside = (region: Region): Tile[] =>
+    grid.tiles.filter((tile) => covers(region, footprint(grid, tile)));
+  const here = inside(from);
+  const there = touching(to).filter((tile) => !here.includes(tile));
+  const swaps = there.length > 0;
+  const refuse = { ok: false, swaps, moves: [] as const };
 
-  // The destination may not straddle a scope edge: the same rule a selection obeys.
-  if (!homogeneous(grid, to)) return { ok: false, moves: [] };
+  if (to.ci === from.ci && to.ri === from.ri) return { ok: true, swaps, moves: [] };
+
+  // Both regions must be self-contained: nothing may have cells both in and out of one,
+  // because such a tile cannot be exchanged without tearing. And neither may straddle a
+  // scope edge, which is the same rule a selection obeys.
+  if (!homogeneous(grid, from) || !homogeneous(grid, to)) return refuse;
+  if (touching(from).length !== here.length) return refuse;
+
+  const shift = (tile: Tile, by: Region, into: Region): Move => {
+    const f = footprint(grid, tile);
+    return { tileId: tile.id, ci: f.ci - by.ci + into.ci, ri: f.ri - by.ri + into.ri };
+  };
 
   // A region that overlaps its own destination cannot be exchanged with itself, so the
   // move is only a slide, and only into space nothing else is in.
   if (overlaps(from, to)) {
-    return touching(to).length === 0
-      ? { ok: true, moves: [{ tileId, ci: to.ci, ri: to.ri }] }
-      : { ok: false, moves: [] };
+    return swaps ? refuse : { ok: true, swaps, moves: here.map((tile) => shift(tile, from, to)) };
   }
 
-  const there = touching(to);
-  const here = touching(from);
-  const whole = [...there, ...here].every((other) =>
-    covers(overlaps(footprint(grid, other), to) ? to : from, footprint(grid, other)),
-  );
-  if (!whole) return { ok: false, moves: [] };
-
-  const shift = (other: Tile, by: Region, into: Region): Move => {
-    const f = footprint(grid, other);
-    return { tileId: other.id, ci: f.ci - by.ci + into.ci, ri: f.ri - by.ri + into.ri };
-  };
+  if (!there.every((tile) => covers(to, footprint(grid, tile)))) return refuse;
   return {
     ok: true,
-    moves: [
-      { tileId, ci: to.ci, ri: to.ri },
-      ...there.map((other) => shift(other, to, from)),
-      ...here.map((other) => shift(other, from, to)),
-    ],
+    swaps,
+    moves: [...here.map((tile) => shift(tile, from, to)), ...there.map((tile) => shift(tile, to, from))],
   };
 }
 
