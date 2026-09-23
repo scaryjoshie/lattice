@@ -12,6 +12,8 @@
  * a drag landed on). They are never stored.
  */
 
+import { cells, contains, covers, overlaps, type Region } from "./region.ts";
+
 export interface Track {
   readonly id: string;
 }
@@ -45,12 +47,11 @@ export interface Tile {
 }
 
 /**
- * A region is rectangular in the model — that is what keeps room always makeable — but
- * nothing requires its painted shape to look rectangular, because the paint merges cells
- * rather than drawing a box. Stored as two track ranges, not a cell list, so inserting a
- * track inside it costs nothing.
+ * A scope is a named region that tiles belong to — a worktree. Rectangular in the model,
+ * which is what keeps room always makeable. Stored as two track ranges, not a cell list,
+ * so inserting a track inside it costs nothing.
  */
-export interface Region {
+export interface Scope {
   readonly id: string;
   /** Index into the palette. Hue says which group and nothing else does. */
   readonly hue: number;
@@ -74,7 +75,7 @@ export interface Grid {
   readonly columns: readonly Track[];
   readonly rows: readonly Track[];
   readonly tiles: readonly Tile[];
-  readonly regions: readonly Region[];
+  readonly scopes: readonly Scope[];
   readonly links: readonly Link[];
 }
 
@@ -148,57 +149,58 @@ export function removeTile(grid: Grid, tileId: string): Grid {
   return { ...grid, tiles: grid.tiles.filter((t) => t.id !== tileId) };
 }
 
-/** The index box a region covers. Indices, because membership is an ordering question. */
-export function regionBounds(
-  grid: Grid,
-  region: Region,
-): { c0: number; c1: number; r0: number; r1: number } {
+/** The region a scope covers. Indices, because membership is an ordering question. */
+export function bounds(grid: Grid, scope: Scope): Region {
+  const c0 = indexOfTrack(grid.columns, scope.columnStart);
+  const r0 = indexOfTrack(grid.rows, scope.rowStart);
   return {
-    c0: indexOfTrack(grid.columns, region.columnStart),
-    c1: indexOfTrack(grid.columns, region.columnEnd),
-    r0: indexOfTrack(grid.rows, region.rowStart),
-    r1: indexOfTrack(grid.rows, region.rowEnd),
+    ci: c0,
+    ri: r0,
+    span: indexOfTrack(grid.columns, scope.columnEnd) - c0 + 1,
+    rows: indexOfTrack(grid.rows, scope.rowEnd) - r0 + 1,
   };
 }
 
 /**
- * Which region owns a cell, by index. Null for open grid. Regions are compared by
- * identity: within one grid each is one object, so "same region" is `===`.
+ * Which scope owns a cell. Null for open grid. Scopes are compared by identity: within
+ * one grid each is one object, so "same scope" is `===`.
  */
-export function regionAt(grid: Grid, ci: number, ri: number): Region | null {
-  for (const region of grid.regions) {
-    const { c0, c1, r0, r1 } = regionBounds(grid, region);
-    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region;
+export function scopeAt(grid: Grid, ci: number, ri: number): Scope | null {
+  for (const scope of grid.scopes) {
+    if (contains(bounds(grid, scope), ci, ri)) return scope;
   }
   return null;
+}
+
+/** Every cell of a region lies in the same scope, or in none. */
+export function homogeneous(grid: Grid, r: Region): boolean {
+  const home = scopeAt(grid, r.ci, r.ri);
+  for (const [ci, ri] of cells(r)) if (scopeAt(grid, ci, ri) !== home) return false;
+  return true;
 }
 
 /**
  * Whether a cell is available to a run that started in `home`.
  *
  * This is the primitive, and there is only one: a **boundary** is anything a run cannot
- * cross, and a cell holding something else and a cell in a different region are the same
+ * cross, and a cell holding something else and a cell in a different scope are the same
  * kind of thing. Writing them as two checks makes it possible for one axis to learn about
  * a boundary the other does not, which is how a note ended up with no vertical rule at all.
  */
 export function available(
   grid: Grid,
   tileId: string,
-  home: Region | null,
+  home: Scope | null,
   ci: number,
   ri: number,
 ): boolean {
-  if (regionAt(grid, ci, ri) !== home) return false;
-  return !grid.tiles.some((other) => {
-    if (other.id === tileId) return false;
-    const f = footprint(grid, other);
-    return ci >= f.ci && ci < f.ci + f.span && ri >= f.ri && ri < f.ri + f.rows;
-  });
+  if (scopeAt(grid, ci, ri) !== home) return false;
+  return !grid.tiles.some((other) => other.id !== tileId && contains(footprint(grid, other), ci, ri));
 }
 
 /** How many columns a run may occupy, starting at its own cell. */
 export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, limit = 40): number {
-  const home = regionAt(grid, ci, ri);
+  const home = scopeAt(grid, ci, ri);
   let n = 1;
   while (n < limit && available(grid, tileId, home, ci + n, ri)) n += 1;
   return n;
@@ -217,32 +219,16 @@ export function rowsFor(
   span: number,
   limit = 40,
 ): number {
-  const home = regionAt(grid, ci, ri);
+  const home = scopeAt(grid, ci, ri);
+  const row = (n: number): Region => ({ ci, ri: ri + n, span, rows: 1 });
   let n = 1;
-  while (n < limit) {
-    let clear = true;
-    for (let dx = 0; dx < span; dx++) {
-      if (!available(grid, tileId, home, ci + dx, ri + n)) {
-        clear = false;
-        break;
-      }
-    }
-    if (!clear) break;
-    n += 1;
-  }
+  while (n < limit && [...cells(row(n))].every(([c, r]) => available(grid, tileId, home, c, r))) n += 1;
   return n;
 }
 
 /* Moving ------------------------------------------------------------------ */
 
-export interface Footprint {
-  ci: number;
-  ri: number;
-  span: number;
-  rows: number;
-}
-
-export function footprint(grid: Grid, tile: Tile): Footprint {
+export function footprint(grid: Grid, tile: Tile): Region {
   return {
     ci: indexOfTrack(grid.columns, tile.columnId),
     ri: indexOfTrack(grid.rows, tile.rowId),
@@ -250,9 +236,6 @@ export function footprint(grid: Grid, tile: Tile): Footprint {
     rows: tile.rows ?? 1,
   };
 }
-
-const overlaps = (a: Footprint, b: Footprint): boolean =>
-  a.ci < b.ci + b.span && b.ci < a.ci + a.span && a.ri < b.ri + b.rows && b.ri < a.ri + a.rows;
 
 /**
  * Whether a tile may be put down at a cell, and everything that would move if it were.
@@ -287,36 +270,17 @@ export function proposeMove(
   const tile = grid.tiles.find((t) => t.id === tileId);
   if (!tile) return { ok: false, moves: [] };
   const from = footprint(grid, tile);
-  const to: Footprint = { ci, ri, span: from.span, rows: from.rows };
+  const to: Region = { ci, ri, span: from.span, rows: from.rows };
   if (to.ci === from.ci && to.ri === from.ri) return { ok: true, moves: [] };
 
-  const contains = (region: Footprint, f: Footprint): boolean =>
-    f.ci >= region.ci &&
-    f.ci + f.span <= region.ci + region.span &&
-    f.ri >= region.ri &&
-    f.ri + f.rows <= region.ri + region.rows;
-
-  const touching = (region: Footprint): Tile[] =>
+  const touching = (region: Region): Tile[] =>
     grid.tiles.filter((other) => other.id !== tileId && overlaps(footprint(grid, other), region));
+
+  // The destination may not straddle a scope edge: the same rule a selection obeys.
+  if (!homogeneous(grid, to)) return { ok: false, moves: [] };
 
   // A region that overlaps its own destination cannot be exchanged with itself, so the
   // move is only a slide, and only into space nothing else is in.
-  /*
-   * A region may not straddle a worktree edge — the same rule a selection obeys, and one
-   * moving was not applying at all. Containment was checked against tiles and never
-   * against worktrees, so a run could be dropped half inside one.
-   */
-  const inOneRegion = (r: Footprint): boolean => {
-    const home = regionAt(grid, r.ci, r.ri);
-    for (let dy = 0; dy < r.rows; dy++) {
-      for (let dx = 0; dx < r.span; dx++) {
-        if (regionAt(grid, r.ci + dx, r.ri + dy) !== home) return false;
-      }
-    }
-    return true;
-  };
-  if (!inOneRegion(to)) return { ok: false, moves: [] };
-
   if (overlaps(from, to)) {
     return touching(to).length === 0
       ? { ok: true, moves: [{ tileId, ci: to.ci, ri: to.ri }] }
@@ -326,11 +290,11 @@ export function proposeMove(
   const there = touching(to);
   const here = touching(from);
   const whole = [...there, ...here].every((other) =>
-    contains(overlaps(footprint(grid, other), to) ? to : from, footprint(grid, other)),
+    covers(overlaps(footprint(grid, other), to) ? to : from, footprint(grid, other)),
   );
   if (!whole) return { ok: false, moves: [] };
 
-  const shift = (other: Tile, by: Footprint, into: Footprint): Move => {
+  const shift = (other: Tile, by: Region, into: Region): Move => {
     const f = footprint(grid, other);
     return { tileId: other.id, ci: f.ci - by.ci + into.ci, ri: f.ri - by.ri + into.ri };
   };
@@ -352,7 +316,7 @@ export function seed(): Grid {
   const col = (i: number) => columns[i]!.id;
   const row = (i: number) => rows[i]!.id;
 
-  const regions: Region[] = [
+  const scopes: Scope[] = [
     { id: nextId("g"), hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
     { id: nextId("g"), hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
     { id: nextId("g"), hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
@@ -400,5 +364,5 @@ export function seed(): Grid {
     { from: agent(5), to: agent(6) },
     { from: agent(1), to: agent(9) },
   ];
-  return { columns, rows, tiles, regions, links };
+  return { columns, rows, tiles, scopes, links };
 }

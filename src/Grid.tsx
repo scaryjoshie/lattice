@@ -7,11 +7,13 @@ import {
   proposeMove,
   columnsFor,
   rowsFor,
-  regionAt,
-  regionBounds,
+  bounds,
+  footprint,
+  scopeAt,
   type TextStyle,
   type TileKind,
 } from "./model.ts";
+import { cells as cellsOf, overlaps } from "./region.ts";
 import {
   type Cell,
   type Scene,
@@ -239,7 +241,7 @@ export function Grid() {
      * it would displace.
      */
     const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null =>
-      regionAt(
+      scopeAt(
         grid,
         indexOfTrack(grid.columns, tile.columnId),
         indexOfTrack(grid.rows, tile.rowId),
@@ -247,31 +249,23 @@ export function Grid() {
 
     const cells = new Map<string, Cell>();
     const plates: Plate[] = [];
-    for (const region of grid.regions) {
-      const { c0, c1, r0, r1 } = regionBounds(grid, region);
-      plates.push({ hue: region.hue, c0, c1, r0, r1 });
-      for (let ri = r0; ri <= r1; ri++) {
-        for (let ci = c0; ci <= c1; ci++) {
-          cells.set(`${ci},${ri}`, { hue: region.hue, occupied: false });
-        }
-      }
+    for (const scope of grid.scopes) {
+      const b = bounds(grid, scope);
+      plates.push({ hue: scope.hue, c0: b.ci, c1: b.ci + b.span - 1, r0: b.ri, r1: b.ri + b.rows - 1 });
+      for (const [ci, ri] of cellsOf(b)) cells.set(`${ci},${ri}`, { hue: scope.hue, occupied: false });
     }
     for (const tile of grid.tiles) {
       if (tile.id === editing) continue;
       const [ci, ri] = placed(tile);
-      const w = tile.span ?? 1;
-      const h = tile.rows ?? 1;
-      for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) {
-          const existing = cells.get(`${ci + dx},${ri + dy}`);
-          cells.set(`${ci + dx},${ri + dy}`, {
-            hue: existing?.hue ?? null,
-            occupied: true,
-            tileId: tile.id,
-            // Selecting a run selects all of it, not the one cell under the pointer.
-            extent: { ci, ri, span: w, rows: h },
-          });
-        }
+      const extent = { ci, ri, span: tile.span ?? 1, rows: tile.rows ?? 1 };
+      for (const [c, r] of cellsOf(extent)) {
+        cells.set(`${c},${r}`, {
+          hue: cells.get(`${c},${r}`)?.hue ?? null,
+          occupied: true,
+          tileId: tile.id,
+          // Selecting a run selects all of it, not the one cell under the pointer.
+          extent,
+        });
       }
     }
     const occupied: Occupant[] = [];
@@ -345,17 +339,16 @@ export function Grid() {
             // Whether something would come back the other way, read from what the model
             // has at the destination rather than from the moves — a refusal produces no
             // moves, and a refused exchange must still draw as the exchange it refuses.
-            swaps: grid.tiles.some((other) => {
-              if (other.id === held.id) return false;
-              const oc = indexOfTrack(grid.columns, other.columnId);
-              const or_ = indexOfTrack(grid.rows, other.rowId);
-              return (
-                oc < held.to[0] + shape.span &&
-                held.to[0] < oc + (other.span ?? 1) &&
-                or_ < held.to[1] + shape.rows &&
-                held.to[1] < or_ + (other.rows ?? 1)
-              );
-            }),
+            swaps: grid.tiles.some(
+              (other) =>
+                other.id !== held.id &&
+                overlaps(footprint(grid, other), {
+                  ci: held.to[0],
+                  ri: held.to[1],
+                  span: shape.span,
+                  rows: shape.rows,
+                }),
+            ),
           }
         : null;
     return {
