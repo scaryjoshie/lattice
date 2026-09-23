@@ -127,10 +127,14 @@ shadows than from an argument about it.
     is free beside it — so anything that stops blocking a run lets it breathe, whether
     that is an agent moving away, a worktree expanding, or a tile being deleted, with no
     rule per case.
-63c. **[proposed]** A note is what a run becomes on shift-enter. That first shift-enter
-    fixes its width at what was typed so far, measured at the run's real cell width.
-    Afterwards height grows by wrapping and stops at whatever is below, exactly as width
-    does for a title.
+63c. **[proposed]** Shift-enter gives a run a second line, and fixes its width at what was
+    typed so far, measured at the run's real cell width. Height then grows by wrapping and
+    stops at whatever is below, exactly as width does horizontally.
+63d. **[proposed]** Any run may have extra lines. A title and a note differ only in type
+    size — a note is smaller, so more lines fit in the same cell height. Nothing else
+    branches on which it is.
+63e. **[proposed]** `*italic*` and `**bold**` mark emphasis inline, as markdown writes it.
+    Emphasis changes width, so it changes the span a run needs.
 64. The ruling is omitted inside a run rather than painted over.
 65. While a run is being typed, the canvas still owns its surface and its ruling; the input
     contributes only a caret and glyphs.

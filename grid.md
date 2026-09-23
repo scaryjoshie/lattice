@@ -621,7 +621,7 @@ that a run is bounded by the *origin* of another tile rather than by that tile's
 derived span, and where two runs still compete, the earlier one wins. Deterministic, and
 never mutually recursive.
 
-## Proposed: a note is a title that was given a second line
+## Proposed: one text object at two sizes
 
 Rather than being created at some arbitrary block size, a note is what a run becomes when
 you press shift and enter while typing it.
@@ -636,6 +636,23 @@ scrolls so the line you are on stays visible and the earlier lines move out of s
 is what a title already does horizontally — the editor shows the end of a line that has
 outgrown its span.
 
-So there is one text object, not two. A title is a run that has never been given a second
-line. With this, the space it lacks becomes
+**And a title may have extra lines too.** There is then nothing that distinguishes the two
+except type size: a note is smaller, so more lines fit in the same cell height. Everything
+else — wrapping, growing, stopping at what is beside or below it, scrolling while typed —
+is one behaviour on two axes, shared by both.
+
+So `style` stops being a behavioural switch and becomes a size. Two is enough; the point is
+that nothing branches on it.
+
+## Proposed: emphasis
+
+`*italic*` and `**bold**`, inline, as markdown writes them.
+
+Consequence worth knowing before it is built: a run stops being one string to draw and
+becomes a sequence of spans with weights, which changes measurement as well as drawing.
+Bold is wider, so the span a run needs depends on its emphasis — and since span is derived
+from what the text needs, the measurement and the drawing have to agree about exactly where
+each mark begins. That is the same "one owner" problem as the editor and the canvas both
+claiming a run's surface, and it wants solving once in `measure.ts` rather than in both
+places. With this, the space it lacks becomes
 something a person can grant, in one gesture, at the place where it is missing.
