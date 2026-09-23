@@ -14,9 +14,10 @@ shadows than from an argument about it.
 3. A hovered occupied cell draws a ring and no plus.
 4. Pointing anywhere inside a tile that spans several cells rings the whole tile, not the
    cell under the pointer.
-5. A hovered agent additionally veils everything else back toward the page and draws
+5. A hovered occupant — agent, terminal or browser — additionally veils everything else back toward the page and draws
    crawling dashed lines to every agent it is linked to, with a dot at each end.
-6. Every agent does this, whether it has links or not.
+6. Every occupant does this, whether it has links or not. The menu distinguishes agents
+   from utilities; the canvas does not.
 7. Leaving the viewport clears the hover.
 8. Hover is suppressed entirely while: a menu is open, a run is being edited, a name is
    being typed, or a tile is being dragged.
@@ -84,8 +85,9 @@ shadows than from an argument about it.
     the move colour.
 44. Chevrons flow from one region to the other, and in both directions when something is
     coming back, in two lanes.
-45. Chevrons run edge to edge, except between adjacent regions where they run centre to
-    centre.
+45. Chevrons run edge to edge, falling back to centre to centre when there is less than
+    one chevron's spacing between the two edges. That is a screen-pixel test, so it
+    depends on the zoom as well as on the distance.
 46. A refused move is drawn identically in the warning colour, and nothing is shown as
     moved.
 47. Releasing a refused move does nothing.
@@ -153,7 +155,8 @@ shadows than from an argument about it.
 84. Zoom is limited to between 0.25 and 3.
 85. Panning and zooming never change the model.
 86. The canvas repaints at most once per animation frame, always with the latest camera.
-87. Nothing animates during a camera move.
+87. A camera move starts nothing animating. Anything already in flight — crawling links,
+    flowing chevrons — keeps moving through it.
 
 ## What scales and what does not
 
