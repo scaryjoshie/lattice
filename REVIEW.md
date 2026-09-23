@@ -24,6 +24,70 @@ each into an embedded gitlink, which is worse than what is there now. Leave the 
 or move to one repository deliberately by deleting the nested `.git` directories, which is
 a decision rather than a fix.
 
+## Update: the afternoon reset, and the text redesign
+
+Read against `experiment-5` at `0ebf3d7` plus its uncommitted working tree, `docs/` at
+`1007e90`, and the transcript through the writing session's turn at 17:59 UTC.
+
+**Main was reset to `384c96e`.** At 17:42 UTC the user reported chevrons, drag previews
+and typing all broken. The writing session hard-reset to the commit before the verifier
+fixes and moved the two fix commits to a branch, `verifier-fixes`. That branch is where
+section 3's headline lives; on `main` the four repaint effects are present again
+(`Grid.tsx:467-491`). The session's own diagnosis was "I rewrote the frame loop blind
+alongside six unrelated fixes", which is the same hunk section 3 names. So the finding
+was right and is now moot on `main`; it would come back with any cherry-pick from that
+branch.
+
+**What that undid.** Only 63 (clip a committed title) and 61 (re-measure after the
+webfont) were re-applied, as separate commits. Everything else the verifier found is
+false again on `main`: 101 (the frame loop never stops), 9 (nothing hovered after escape
+or placing), 86 (two paints per frame while dragging), 46 (a refusal draws one lane), 34
+(the add menu rings nothing), 49 (a refused drag drops its links). The doc-only
+corrections in `behaviours.md` stand. The 4×3 note in section 3 is gone with the reset,
+and the design replacing it is below.
+
+**New on `main`: one boundary primitive.** `available(grid, tileId, home, ci, ri)` in
+`model.ts` treats a cell in a different region and a cell holding something else as the
+same kind of obstacle, and `columnsFor` and `rowsFor` are built on it. The editor uses
+`columnsFor` (`Grid.tsx:57`); `rowsFor` has no caller yet. This matches what the user
+asked for, that the primitive is "boundary", not "region". Two things to know about it:
+
+- `available` bounds a run by other tiles' `footprint`, that is, their stored span.
+  `grid.md`'s new section says a derived span must be bounded by another tile's *origin*,
+  or two runs in one row become mutually recursive. That is correct and the code does not
+  do it yet. It is fine today because span is still stored. It becomes the circularity the
+  doc warns about the moment 63b is built with `available` as written.
+- `rowsFor` requires every cell across the run's width to be clear before a row counts,
+  which is the multi-line calculation the user flagged. Right.
+
+**The text redesign, as recorded against what was said.** The user's message covers cut-off
+relief as a general behaviour, shift-enter fixing width at the real cell width, and
+vertical growth that scrolls while blocked. The transcript adds, and the docs record, five
+more pieces: span is derived rather than stored (63b); the boundary rule runs both ways,
+so a run may not enter a worktree either (63a); a title may have extra lines too, so
+`style` is only a size (63d); `*italic*` and `**bold**` (63e); and the earlier-run-wins
+tiebreak for two runs competing in one row (`grid.md`, the hazard paragraph). All five
+are marked proposed and none is built. Step 1 of the sequence, "style is only a size", is
+applied and uncommitted in `measure.ts` and `paint.ts`.
+
+Three things in that recording to fix:
+
+- `grid.md`'s new section opens by calling the worktree rule "the containment rule that
+  governs moves and selections". Two paragraphs later in the same file (`grid.md`, the
+  selection section) it says the worktree rule is *not* the containment rule, and 63a
+  states it correctly as "same worktree or none". The file now contradicts itself twice.
+  The user's own words settle it: this is a **boundary** rule, and it is a different rule
+  from containment. It also means an eighth system is emerging that none of the seven
+  covers: what a thing may grow into, shared by text growth (63a) and selection (82).
+- The last sentence of `grid.md` ("With this, the space it lacks becomes something a person
+  can grant, in one gesture, at the place where it is missing") is orphaned from a
+  paragraph that was replaced. It belongs to nothing.
+- The uncommitted step 1 changes the line-fit test from "the line's centre is inside the
+  box" to "the line's top is inside the box" (`paint.ts`, the `ly - leading / 2 >= y + box.h`
+  break). For a one-cell note that draws a third line whose lower half is clipped off,
+  where the old test drew two whole lines. A half line at the bottom of a committed note
+  is a smudge. Titles are unaffected. Worth looking at before committing.
+
 ## 1. The message matches the transcript
 
 The message pasted as "the last few messages" is, word for word, the final assistant turn
@@ -100,7 +164,8 @@ Minor: Gesture's list "11–25, 38, 16, 25" names 16 and 25 twice.
 
 ## 3. The code right now, beyond what the verifier found
 
-**The fix for behaviour 101 deleted the canvas's other four reasons to repaint.** Commit
+**The fix for behaviour 101 deleted the canvas's other four reasons to repaint.** (Now
+only on the `verifier-fixes` branch; see the update above.) Commit
 `6bdcca3` replaced the always-on frame loop with a pump that runs only while something is
 in flight. The same hunk removed four effects and put none of them back: the repaint on
 scene change, the `onTheme` subscription, the repaint on `acting`/`naming`/`editing`, and
@@ -125,7 +190,7 @@ hidden by the fact that the next pointer move repaints:
 This is one hunk to restore and should come before anything else.
 
 **Two things in one cell is reachable through the interface, by a route the docs do not
-name.** The gap recorded at the end of `behaviours.md` (a run's span not being checked
+name.** (Gone with the reset; the 4×3 note no longer exists.) The gap recorded at the end of `behaviours.md` (a run's span not being checked
 on placement) is unreachable, as the verifier showed. But a note is created as a 4×3
 block (`model.ts:152`), `addTile` checks only the origin cell (`model.ts:145`), the click
 path checks only the clicked cell (`Grid.tsx`, the `cells.get(...)?.occupied` test), and
