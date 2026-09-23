@@ -60,11 +60,22 @@ export interface Region {
   readonly rowEnd: string;
 }
 
+/**
+ * Who is talking to whom. A fact about the agents, not about the canvas: the runtime
+ * records it, the grid only renders it. Stored as tile ids here because this is a mock;
+ * really it would be agent ids, and a tile would reference an agent.
+ */
+export interface Link {
+  readonly from: string;
+  readonly to: string;
+}
+
 export interface Grid {
   readonly columns: readonly Track[];
   readonly rows: readonly Track[];
   readonly tiles: readonly Tile[];
   readonly regions: readonly Region[];
+  readonly links: readonly Link[];
 }
 
 let counter = 0;
@@ -215,5 +226,13 @@ export function seed(): Grid {
       rowId: row(r),
     })),
   ];
-  return { columns, rows, tiles, regions };
+  const agent = (n: number) => tiles.filter((x) => x.kind !== "text")[n]?.id ?? "";
+  const links: Link[] = [
+    { from: agent(0), to: agent(3) },
+    { from: agent(0), to: agent(5) },
+    { from: agent(3), to: agent(8) },
+    { from: agent(5), to: agent(6) },
+    { from: agent(1), to: agent(9) },
+  ];
+  return { columns, rows, tiles, regions, links };
 }

@@ -27,6 +27,11 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
+/** How far back everything that is not in focus is pushed toward the page. */
+const VEIL = "rgba(245, 245, 246, 0.82)";
+const LINK_EDGE = 2;
+const LINK_DASH = [7, 6];
+
 /** Half the plus's width, as a fraction of the cell. Its stroke is screen pixels. */
 const PLUS = 0.16;
 const PLUS_EDGE = 2;
@@ -71,6 +76,14 @@ export interface Occupant {
   hue: number | null;
 }
 
+/** The focused agent and everyone it is talking to, in cell coordinates. */
+export interface Focus {
+  ci: number;
+  ri: number;
+  hue: number | null;
+  partners: readonly { ci: number; ri: number }[];
+}
+
 export interface Scene {
   camera: Camera;
   width: number;
@@ -80,11 +93,12 @@ export interface Scene {
   cells: ReadonlyMap<string, Cell>;
   occupied: readonly Occupant[];
   texts: readonly TextRun[];
+  focus: Focus | null;
   hover: readonly [number, number] | null;
 }
 
-export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, hover } = scene;
+export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = PAGE;
   ctx.fillRect(0, 0, width, height);
@@ -226,10 +240,50 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
     ctx.globalAlpha = 1;
   }
 
+  /*
+   * Focus on an agent: everything else is veiled back toward the page, then the agent, the
+   * ones it is talking to, and the lines between them are drawn over the veil. Dimming is
+   * one rectangle rather than a decision made per cell, and lines are only ever drawn
+   * inside a focus — which is what keeps a canvas of relationships from becoming a web.
+   */
+  if (focus) {
+    const centre = (c: number, r: number) => [sx(c) + size / 2, sy(r) + size / 2] as const;
+    ctx.fillStyle = VEIL;
+    ctx.fillRect(0, 0, width, height);
+
+    const h = hue(focus.hue);
+    const [fx, fy] = centre(focus.ci, focus.ri);
+    ctx.strokeStyle = h.edge;
+    ctx.lineWidth = LINK_EDGE;
+    ctx.setLineDash(LINK_DASH);
+    ctx.lineDashOffset = -dash;
+    ctx.beginPath();
+    for (const partner of focus.partners) {
+      const [px, py] = centre(partner.ci, partner.ri);
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const restore = (c: number, r: number, tint: number | null) => {
+      ctx.fillStyle = hue(tint).fill;
+      ctx.fillRect(sx(c), sy(r), size, size);
+    };
+    for (const partner of focus.partners) {
+      restore(partner.ci, partner.ri, at(partner.ci, partner.ri)?.hue ?? null);
+    }
+    restore(focus.ci, focus.ri, focus.hue);
+    ctx.lineWidth = FOCUS_EDGE;
+    ctx.strokeStyle = h.edge;
+    const inset = FOCUS_EDGE / 2;
+    ctx.strokeRect(sx(focus.ci) + inset, sy(focus.ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+  }
+
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
   // An empty cell also gets a plus, because the point of pointing at one is to put
   // something there.
-  if (hover && rule > 0) {
+  if (hover && rule > 0 && !focus) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;

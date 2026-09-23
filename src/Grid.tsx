@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
-import { type Cell, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
+import { type Cell, type Focus, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
 import { Mark } from "./marks.tsx";
 import { fontOf, METRICS, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
@@ -98,7 +98,17 @@ export function Grid() {
       }
       else occupied.push({ ci, ri, hue: h });
     }
-    return { cells, plates, occupied, texts };
+    const spots = new Map<string, { ci: number; ri: number; hue: number | null }>();
+    for (const tile of grid.tiles) {
+      if (tile.kind === "text") continue;
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      spots.set(tile.id, { ci, ri, hue: cells.get(`${ci},${ri}`)?.hue ?? null });
+    }
+    /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
+    const byCell = new Map<string, string>();
+    for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
+    return { cells, plates, occupied, texts, spots, byCell, links: grid.links };
   }, [grid, editing]);
 
   const model = useRef(scene);
@@ -123,8 +133,29 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts } = model.current;
-    paint(ctx, { camera, width, height, dpr, plates, cells, occupied, texts, hover: hover.current });
+    const { cells, plates, occupied, texts, spots, byCell, links } = model.current;
+
+    // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
+    // question "who is this one talking to", and the answer is a read of the model.
+    let focus: Focus | null = null;
+    const spot = hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`);
+    if (spot) {
+      const here = spots.get(spot);
+      if (here) {
+        const partners = links
+          .filter((l) => l.from === spot || l.to === spot)
+          .map((l) => spots.get(l.from === spot ? l.to : l.from))
+          .filter((s): s is NonNullable<typeof s> => Boolean(s));
+        if (partners.length) focus = { ...here, partners };
+      }
+    }
+
+    paint(
+      ctx,
+      { camera, width, height, dpr, plates, cells, occupied, texts, focus, hover: hover.current },
+      dash.current,
+    );
+    running.current = focus !== null;
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
@@ -138,6 +169,9 @@ export function Grid() {
    * one does work nobody sees. One paint per frame, always the latest camera.
    */
   const queued = useRef(0);
+  /** Advances only while something is focused, so an idle canvas paints nothing. */
+  const dash = useRef(0);
+  const running = useRef(false);
   /**
    * The latest camera, not the one that happened to queue the frame. Capturing `next` in
    * the closure instead paints the *first* event of each batch and discards the rest, so
@@ -158,6 +192,21 @@ export function Grid() {
   );
 
   const camera = useCamera(viewport, schedule);
+
+  // The dashes crawl, which is what makes a live connection look live. The loop exists
+  // only while a focus does; with nothing focused the canvas is still and costs nothing.
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      if (running.current) {
+        dash.current += 0.6;
+        draw(latest.current);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [draw]);
 
   // Redraw on model change and on resize. Both are human-paced.
   useEffect(() => {
