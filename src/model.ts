@@ -17,7 +17,7 @@ export interface Track {
 }
 
 /** What a tile holds. Not a label — it decides what is drawn. */
-export type TileKind = "claude" | "codex" | "shell" | "text";
+export type TileKind = "claude" | "codex" | "shell" | "browser" | "text";
 
 export interface Tile {
   readonly id: string;
@@ -111,7 +111,8 @@ export function addTile(
   id = nextId("t"),
 ): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
-  return { ...grid, tiles: [...grid.tiles, { id, kind, columnId, rowId }] };
+  const tile: Tile = kind === "text" ? { id, kind, columnId, rowId, text: "", span: 1 } : { id, kind, columnId, rowId };
+  return { ...grid, tiles: [...grid.tiles, tile] };
 }
 
 export function removeTile(grid: Grid, tileId: string): Grid {

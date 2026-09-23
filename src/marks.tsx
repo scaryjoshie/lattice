@@ -38,6 +38,14 @@ export function Mark({ kind }: { kind: TileKind }) {
       </Svg>
     );
   }
+  if (kind === "browser") {
+    return (
+      <Svg>
+        <rect x="2.6" y="4.2" width="18.8" height="15.6" rx="2.6" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M2.6 9.1h18.8" fill="none" stroke="currentColor" strokeWidth="2" />
+      </Svg>
+    );
+  }
   // A plain shell is not a brand. A prompt is the thing everyone already reads as one.
   return (
     <Svg>

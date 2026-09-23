@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
-import { indexOfTrack, regionBounds } from "./model.ts";
+import { indexOfTrack, regionBounds, type TileKind } from "./model.ts";
 import { type Cell, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
 import { Mark } from "./marks.tsx";
+import { spanFor, TEXT, TEXT_INSET } from "./measure.ts";
+import { Menu } from "./Menu.tsx";
 import { hue } from "./palette.ts";
 import { useGrid } from "./store.ts";
 
@@ -31,6 +33,15 @@ export function Grid() {
   const hover = useRef<[number, number] | null>(null);
 
   const grid = useGrid((s) => s.grid);
+  const addAt = useGrid((s) => s.addAt);
+  const setText = useGrid((s) => s.setText);
+  const removeTile = useGrid((s) => s.remove);
+
+  /** Open at the pointer, holding the cell it was asked about. */
+  const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  /** Where a press started, so a drag that pans is not also read as a click. */
+  const pressed = useRef<{ x: number; y: number } | null>(null);
 
   /**
    * Derived from the model, so it is rebuilt when the model changes and never on a camera
@@ -63,11 +74,15 @@ export function Grid() {
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
       const h = cells.get(`${ci},${ri}`)?.hue ?? null;
-      if (tile.kind === "text") texts.push({ ci, ri, span: tile.span ?? 1, text: tile.text ?? "", hue: h });
+      if (tile.kind === "text") {
+        if (tile.id !== editing) {
+          texts.push({ ci, ri, span: tile.span ?? 1, text: tile.text ?? "", hue: h });
+        }
+      }
       else occupied.push({ ci, ri, hue: h });
     }
     return { cells, plates, occupied, texts };
-  }, [grid]);
+  }, [grid, editing]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -150,15 +165,84 @@ export function Grid() {
     schedule(camera.current);
   };
 
+  const onDown = (event: React.PointerEvent) => {
+    pressed.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const onUp = (event: React.PointerEvent) => {
+    const start = pressed.current;
+    pressed.current = null;
+    if (menu) {
+      setMenu(null);
+      return;
+    }
+    // A press that moved was a pan, not a click on a cell.
+    if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3) return;
+    const host = viewport.current;
+    if (!host) return;
+    const box = host.getBoundingClientRect();
+    const [ci, ri] = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
+    if (model.current.cells.get(`${ci},${ri}`)?.occupied) return;
+    setMenu({ x: event.clientX, y: event.clientY, ci, ri });
+  };
+
+  const pick = (kind: TileKind) => {
+    if (!menu) return;
+    const id = addAt(menu.ci, menu.ri, kind);
+    setMenu(null);
+    if (id && kind === "text") setEditing(id);
+  };
+
   const onLeave = () => {
     hover.current = null;
     schedule(camera.current);
   };
 
   return (
-    <div className="viewport" ref={viewport} onPointerMove={onMove} onPointerLeave={onLeave}>
+    <div
+      className="viewport"
+      ref={viewport}
+      onPointerMove={onMove}
+      onPointerLeave={onLeave}
+      onPointerDown={onDown}
+      onPointerUp={onUp}
+    >
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
+        {editing !== null &&
+          (() => {
+            const tile = grid.tiles.find((x) => x.id === editing);
+            if (!tile) return null;
+            const ci = indexOfTrack(grid.columns, tile.columnId);
+            const ri = indexOfTrack(grid.rows, tile.rowId);
+            const commit = (value: string) => {
+              setEditing(null);
+              if (value.trim() === "") removeTile(tile.id);
+              else setText(tile.id, value, spanFor(value));
+            };
+            return (
+              <input
+                className="editor"
+                autoFocus
+                defaultValue={tile.text ?? ""}
+                style={{
+                  left: worldX(ci) + CELL * TEXT_INSET,
+                  top: worldX(ri),
+                  height: CELL,
+                  width: CELL * 8,
+                  fontSize: Math.round(CELL * TEXT),
+                }}
+                onBlur={(e) => commit(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    setEditing(null);
+                    if ((tile.text ?? "") === "") removeTile(tile.id);
+                  }
+                }}
+              />
+            );
+          })()}
         {grid.tiles.map((tile) => {
           if (tile.kind === "text") return null;
           const ci = indexOfTrack(grid.columns, tile.columnId);
@@ -177,6 +261,7 @@ export function Grid() {
           );
         })}
       </div>
+      {menu && <Menu x={menu.x} y={menu.y} onPick={pick} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
+import { FONT, TEXT, TEXT_INSET } from "./measure.ts";
 import { hue } from "./palette.ts";
 
 /**
@@ -25,16 +26,9 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
-/** The gap a run cuts into whatever it sits on. */
-const CUT = "#ffffff";
-/** Cap height as a fraction of the cell, so text scales with the grid it sits in. */
-const TEXT = 0.3;
-/** Left padding, also as a fraction of the cell, so the inset scales too. */
-const TEXT_INSET = 0.26;
 /** Half the plus's width, as a fraction of the cell. Its stroke is screen pixels. */
 const PLUS = 0.16;
 const PLUS_EDGE = 2;
-const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
@@ -182,8 +176,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
   }
 
   // Text runs. The span is cleared back to the surface it sits on, which takes the ruling
-  // out from under the words, then outlined so the cells it occupies are visible, then
-  // written left-aligned. Clearing rather than skipping keeps the ruling ignorant of text.
+  // out from under the words, and then written left-aligned. Clearing rather than skipping
+  // keeps the ruling ignorant of text.
   if (rule > 0) {
     ctx.globalAlpha = rule;
     ctx.lineWidth = RULE;
@@ -195,18 +189,14 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       const h = hue(run.hue);
       const x = sx(run.ci);
       const y = sy(run.ri);
-      const w = size * run.span;
+      const inset = size * TEXT_INSET;
+      // Clear only as far as the words reach, not to the end of the span. A run may own
+      // more cells than it currently fills, and the ruling should still show in them.
+      const cleared = Math.min(inset * 2 + ctx.measureText(run.text).width, size * run.span);
       ctx.fillStyle = run.hue === null ? PAGE : h.tint;
-      ctx.fillRect(x, y, w, size);
-      // White, at the focus weight: the run reads as cut out of the surface rather than
-      // drawn on top of it, and no new colour enters the palette to do it.
-      ctx.lineWidth = FOCUS_EDGE;
-      ctx.strokeStyle = CUT;
-      const inset = FOCUS_EDGE / 2;
-      ctx.strokeRect(x + inset, y + inset, w - FOCUS_EDGE, size - FOCUS_EDGE);
-      ctx.lineWidth = RULE;
+      ctx.fillRect(x, y, cleared, size);
       ctx.fillStyle = h.ink;
-      ctx.fillText(run.text, x + size * TEXT_INSET, y + size / 2);
+      ctx.fillText(run.text, x + inset, y + size / 2);
     }
     ctx.globalAlpha = 1;
   }
