@@ -337,11 +337,18 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.beginPath();
       ctx.rect(x, y, box.w, box.h);
       ctx.clip();
-      const lines = wrap(ctx, run.text, box.w - inset * 2);
-      for (let i = 0; i < lines.length; i++) {
-        const ly = y + size * m.pad + leading * (i + 0.5);
-        if (ly - leading / 2 >= y + box.h) break;
-        ctx.fillText(lines[i] as string, x + inset, ly);
+      /*
+       * Cut with an ellipsis rather than at the glyph, on both axes. A word sheared
+       * through the middle reads as a rendering fault; an ellipsis reads as "there is
+       * more", which is what is true. Names already do this — runs did not.
+       */
+      const room = box.w - inset * 2;
+      const lines = wrap(ctx, run.text, room);
+      const fits = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
+      for (let i = 0; i < Math.min(lines.length, fits); i++) {
+        const last = i === fits - 1 && lines.length > fits;
+        const line = lines[i] as string;
+        ctx.fillText(clip(ctx, last ? `${line} ${lines[i + 1] ?? ""}` : line, room), x + inset, y + size * m.pad + leading * (i + 0.5));
       }
       ctx.restore();
     }
