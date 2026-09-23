@@ -13,6 +13,7 @@ For a reviewing agent, start at [ONBOARDING.md](ONBOARDING.md).
 
 | Doc | What it covers |
 |---|---|
+| [session-record.md](session-record.md) | What happened, what was asked for, and what is unresolved |
 | [behaviours.md](behaviours.md) | Every specific behaviour of the grid, as raw material for a system |
 | [choices.md](choices.md) | The specific decisions behind the grid, as made |
 | [principles.md](principles.md) | Generalisations drawn from them. Subordinate to the above |
