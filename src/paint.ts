@@ -158,22 +158,45 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     );
   }
 
+  /*
+   * Boundaries that fall inside a text run, which the ruling omits.
+   *
+   * A run's extent is canonical — it owns whole cells — so the lines inside it are known
+   * and can simply not be drawn. The previous version drew them and then painted over
+   * them, which is why the ends came out uneven: painting over a line at a fractional
+   * position antialiases differently cell by cell, and the overdraw needed to close the
+   * seams spilled into whatever was next door.
+   */
+  const insideRun = new Set<string>();
+  for (const run of texts) {
+    for (let dy = 0; dy < run.rows; dy++) {
+      for (let dx = 1; dx < run.span; dx++) insideRun.add(`v${run.ci + dx},${run.ri + dy}`);
+    }
+    for (let dy = 1; dy < run.rows; dy++) {
+      for (let dx = 0; dx < run.span; dx++) insideRun.add(`h${run.ci + dx},${run.ri + dy}`);
+    }
+  }
+
   if (rule > 0) {
     const rules = (a: number, b: number, p: number, q: number): Path2D => {
       const path = new Path2D();
-      const top = sy(p);
-      const bottom = sy(q) + size;
-      const left = sx(a);
-      const right = sx(b) + size;
       for (let ci = a; ci <= b + 1; ci++) {
         const x = snap(sx(ci));
-        path.moveTo(x, top);
-        path.lineTo(x, bottom);
+        for (let ri = p; ri <= q; ri++) {
+          if (insideRun.has(`v${ci},${ri}`)) continue;
+          const y = sy(ri);
+          path.moveTo(x, y);
+          path.lineTo(x, y + size);
+        }
       }
       for (let ri = p; ri <= q + 1; ri++) {
         const y = snap(sy(ri));
-        path.moveTo(left, y);
-        path.lineTo(right, y);
+        for (let ci = a; ci <= b; ci++) {
+          if (insideRun.has(`h${ci},${ri}`)) continue;
+          const x = sx(ci);
+          path.moveTo(x, y);
+          path.lineTo(x + size, y);
+        }
       }
       return path;
     };
@@ -231,9 +254,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   /*
-   * Text. A title is one line that clears the ruling only as far as its words reach; a
-   * note is a block whose words wrap inside the cells it has been given. Clearing rather
-   * than teaching the ruling to skip text keeps the two independent.
+   * Text. A title is one line; a note is a block whose words wrap inside the cells it has
+   * been given. Nothing is cleared: the ruling already left these cells unruled, because a
+   * run owns whole cells and which lines fall inside it is known rather than discovered.
    */
   if (rule > 0) {
     ctx.globalAlpha = rule;
@@ -248,55 +271,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       const y = sy(run.ri);
       const inset = size * m.inset;
       ctx.font = fontOf(run.style, size);
-
-      /*
-       * Cleared cell by cell, each in its own surface, and then the outside edges are put
-       * back.
-       *
-       * Clearing the whole span in one colour punched a hole through any region the run
-       * reached into, which made a rectangle stop looking like one. And clearing to the
-       * cell boundary ate the rules that sit on it — a rule is centred on the boundary, so
-       * half of it lives inside the cell — which is why the neighbours above and to the
-       * left appeared to lose their edges.
-       */
-      for (let dy = 0; dy < run.rows; dy++) {
-        for (let dx = 0; dx < run.span; dx++) {
-          const cell = at(run.ci + dx, run.ri + dy);
-          const own = hue(cell?.hue ?? null);
-          const cx = sx(run.ci + dx);
-          const cy = sy(run.ri + dy);
-          ctx.fillStyle = cell?.hue == null ? palette.page : own.tint;
-          ctx.fillRect(cx, cy, size + 1, size + 1);
-        }
-      }
-      ctx.lineWidth = RULE;
-      for (let dy = 0; dy < run.rows; dy++) {
-        for (let dx = 0; dx < run.span; dx++) {
-          const cell = at(run.ci + dx, run.ri + dy);
-          ctx.strokeStyle = hue(cell?.hue ?? null).line;
-          const cx = snap(sx(run.ci + dx));
-          const cy = snap(sy(run.ri + dy));
-          ctx.beginPath();
-          if (dy === 0) {
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + size, cy);
-          }
-          if (dy === run.rows - 1) {
-            ctx.moveTo(cx, cy + size);
-            ctx.lineTo(cx + size, cy + size);
-          }
-          if (dx === 0) {
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx, cy + size);
-          }
-          if (dx === run.span - 1) {
-            ctx.moveTo(cx + size, cy);
-            ctx.lineTo(cx + size, cy + size);
-          }
-          ctx.stroke();
-        }
-      }
-
       ctx.fillStyle = h.ink;
       if (run.style === "title") {
         ctx.fillText(run.text, x + inset, y + size / 2);
