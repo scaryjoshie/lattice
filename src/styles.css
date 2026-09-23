@@ -121,7 +121,8 @@ body {
   position: absolute;
   border: 0;
   outline: none;
-  background: var(--page);
+  /* Transparent: the canvas has already drawn this cell's surface, and left it unruled. */
+  background: none;
   color: var(--ink);
   font-family: var(--font);
   pointer-events: auto;

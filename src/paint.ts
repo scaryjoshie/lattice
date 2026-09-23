@@ -30,6 +30,8 @@ const FOCUS_EDGE = 2.5;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
+/** How solid a tile looks where it would land, rather than where it is. */
+const GHOST = 0.55;
 /** Corner radius as a fraction of the cell, so the turn scales with the grid. */
 const LINK_TURN = 0.3;
 
@@ -86,6 +88,19 @@ export interface Focus {
   partners: readonly { ci: number; ri: number }[];
 }
 
+/**
+ * A move in progress. Both ends are shown at once: the tile being moved appears where it
+ * would land, and if something is already there, that one appears where the first came
+ * from. Seeing both marks change places is what makes a swap read as a swap rather than as
+ * a drop onto something.
+ */
+export interface Drag {
+  from: { ci: number; ri: number };
+  to: { ci: number; ri: number };
+  moving: Occupant;
+  displaced: Occupant | null;
+}
+
 export interface Scene {
   camera: Camera;
   width: number;
@@ -96,6 +111,7 @@ export interface Scene {
   occupied: readonly Occupant[];
   texts: readonly TextRun[];
   focus: Focus | null;
+  drag: Drag | null;
   hover: readonly [number, number] | null;
 }
 
@@ -129,7 +145,7 @@ function mark(
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, drag, hover } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
   ctx.fillStyle = palette.page;
@@ -370,10 +386,26 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.strokeRect(sx(focus.ci) + inset, sy(focus.ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
   }
 
+  if (drag) {
+    const ghost = (spot: Occupant, ci: number, ri: number) => {
+      ctx.globalAlpha = GHOST;
+      ctx.fillStyle = hue(spot.hue).fill;
+      ctx.fillRect(sx(ci), sy(ri), size, size);
+      mark(ctx, spot, sx(ci), sy(ri), size);
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = FOCUS_EDGE;
+      ctx.strokeStyle = hue(spot.hue).edge;
+      const inset = FOCUS_EDGE / 2;
+      ctx.strokeRect(sx(ci) + inset, sy(ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+    };
+    ghost(drag.moving, drag.to.ci, drag.to.ri);
+    if (drag.displaced) ghost(drag.displaced, drag.from.ci, drag.from.ri);
+  }
+
   // Focus: the cell's own hue, inset by half its stroke so the ring sits inside the cell.
   // An empty cell also gets a plus, because the point of pointing at one is to put
   // something there.
-  if (hover && rule > 0 && !focus) {
+  if (hover && rule > 0 && !focus && !drag) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;

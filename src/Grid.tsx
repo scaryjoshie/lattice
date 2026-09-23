@@ -2,7 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
 import { indexOfTrack, regionBounds, type TextStyle, type TileKind } from "./model.ts";
-import { type Cell, type Focus, type Occupant, paint, type Plate, type TextRun } from "./paint.ts";
+import {
+  type Cell,
+  type Drag,
+  type Focus,
+  type Occupant,
+  paint,
+  type Plate,
+  type TextRun,
+} from "./paint.ts";
 import { fontOf, METRICS, spanFor } from "./measure.ts";
 import { Menu } from "./Menu.tsx";
 import { useGrid } from "./store.ts";
@@ -25,7 +33,7 @@ import { onTheme } from "./theme.ts";
  * because two things cannot be in one cell, and pushing the neighbour aside needs a notion
  * of what may be pushed that does not exist yet.
  */
-function Editor({ id, onDone }: { id: string; onDone(): void }) {
+function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: number): void }) {
   const grid = useGrid((s) => s.grid);
   const setText = useGrid((s) => s.setText);
   const removeTile = useGrid((s) => s.remove);
@@ -54,6 +62,9 @@ function Editor({ id, onDone }: { id: string; onDone(): void }) {
   }
 
   const span = Math.min(spanFor(style, draft || " "), room);
+  // The canvas owns the surface and the ruling even while typing; the input contributes
+  // only a caret and glyphs, so it has to say how far it currently reaches.
+  onSpan(span);
   const commit = () => {
     onDone();
     if (draft.trim() === "") removeTile(id);
@@ -111,10 +122,11 @@ export function Grid() {
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [editSpan, setEditSpan] = useState(1);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
-  /** The tile being moved, while shift is held. */
-  const dragging = useRef<string | null>(null);
+  /** The move in progress, while shift is held. */
+  const dragging = useRef<{ id: string; from: [number, number]; to: [number, number] } | null>(null);
 
   /**
    * Derived from the model, so it is rebuilt when the model changes and never on a camera
@@ -158,7 +170,18 @@ export function Grid() {
       const ri = indexOfTrack(grid.rows, tile.rowId);
       const h = cells.get(`${ci},${ri}`)?.hue ?? null;
       if (tile.kind === "text") {
-        if (tile.id !== editing) {
+        if (tile.id === editing) {
+          // No glyphs — the input draws those — but the cells it covers stay unruled.
+          texts.push({
+            ci,
+            ri,
+            span: editSpan,
+            rows: tile.rows ?? 1,
+            style: tile.style ?? "title",
+            text: "",
+            hue: h,
+          });
+        } else {
           texts.push({
             ci,
             ri,
@@ -172,18 +195,18 @@ export function Grid() {
       }
       else occupied.push({ ci, ri, kind: tile.kind, hue: h });
     }
-    const spots = new Map<string, { ci: number; ri: number; hue: number | null }>();
+    const spots = new Map<string, Occupant>();
     for (const tile of grid.tiles) {
       if (tile.kind === "text") continue;
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
-      spots.set(tile.id, { ci, ri, hue: cells.get(`${ci},${ri}`)?.hue ?? null });
+      spots.set(tile.id, { ci, ri, kind: tile.kind, hue: cells.get(`${ci},${ri}`)?.hue ?? null });
     }
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
     return { cells, plates, occupied, texts, spots, byCell, links: grid.links };
-  }, [grid, editing]);
+  }, [grid, editing, editSpan]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -211,6 +234,22 @@ export function Grid() {
 
     // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
     // question "who is this one talking to", and the answer is a read of the model.
+    let drag: Drag | null = null;
+    const held = dragging.current;
+    if (held) {
+      const moving = spots.get(held.id);
+      const targetId = byCell.get(`${held.to[0]},${held.to[1]}`);
+      const displaced = targetId && targetId !== held.id ? spots.get(targetId) : undefined;
+      if (moving) {
+        drag = {
+          from: { ci: held.from[0], ri: held.from[1] },
+          to: { ci: held.to[0], ri: held.to[1] },
+          moving,
+          displaced: displaced ?? null,
+        };
+      }
+    }
+
     let focus: Focus | null = null;
     const spot = hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`);
     if (spot) {
@@ -228,7 +267,7 @@ export function Grid() {
 
     paint(
       ctx,
-      { camera, width, height, dpr, plates, cells, occupied, texts, focus, hover: hover.current },
+      { camera, width, height, dpr, plates, cells, occupied, texts, focus, drag, hover: hover.current },
       dash.current,
     );
     running.current = focus !== null;
@@ -300,6 +339,14 @@ export function Grid() {
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
     if (!host || menu || editing) return;
+    if (dragging.current) {
+      const at = cellUnder(event);
+      if (at) {
+        dragging.current = { ...dragging.current, to: at };
+        schedule(camera.current);
+      }
+      return;
+    }
     const box = host.getBoundingClientRect();
     const next = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
     const prev = hover.current;
@@ -321,8 +368,8 @@ export function Grid() {
     if (!event.shiftKey) return;
     const at = cellUnder(event);
     const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
-    if (id) {
-      dragging.current = id;
+    if (id && at) {
+      dragging.current = { id, from: at, to: at };
       (event.target as Element).setPointerCapture?.(event.pointerId);
     }
   };
@@ -332,8 +379,9 @@ export function Grid() {
     pressed.current = null;
     if (dragging.current) {
       const at = cellUnder(event);
-      if (at) moveTile(dragging.current, at[0], at[1]);
+      if (at) moveTile(dragging.current.id, at[0], at[1]);
       dragging.current = null;
+      schedule(camera.current);
       return;
     }
     const host = viewport.current;
@@ -382,7 +430,9 @@ export function Grid() {
     >
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
-        {editing !== null && <Editor id={editing} onDone={() => setEditing(null)} />}
+        {editing !== null && (
+          <Editor id={editing} onDone={() => setEditing(null)} onSpan={setEditSpan} />
+        )}
       </div>
       {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
     </div>
