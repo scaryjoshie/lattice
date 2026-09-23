@@ -66,28 +66,45 @@ export function spanFor(style: TextStyle, text: string): number {
   const c = measurer();
   if (!c) return 1;
   c.font = fontOf(style, CELL);
-  const width = CELL * METRICS[style].inset * 2 + c.measureText(text).width;
+  // The widest line, since a run may carry its own line breaks.
+  const widest = Math.max(...text.split("\n").map((line) => c.measureText(line).width));
+  const width = CELL * METRICS[style].inset * 2 + widest;
   return Math.max(1, Math.ceil(width / CELL));
 }
 
-/** Break a note into lines that fit the width it has been given. */
+/**
+ * How many cells tall a run of this many lines is. A title's leading is a whole cell, so
+ * it is one cell per line; a note fits several lines in a cell. Rounded up, because a
+ * run owns whole cells.
+ */
+export function cellsFor(style: TextStyle, lines: number): number {
+  const m = METRICS[style];
+  return Math.max(1, Math.ceil(m.pad + lines * m.leading - 1e-6));
+}
+
+/**
+ * Break a run into lines that fit the width it has been given. A line break the writer
+ * typed is kept: each paragraph wraps on its own, and an empty one is an empty line.
+ */
 export function wrap(
   measure: CanvasRenderingContext2D,
   text: string,
   width: number,
 ): string[] {
   const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const next = line ? `${line} ${word}` : word;
-    if (line && measure.measureText(next).width > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = next;
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && measure.measureText(next).width > width) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
     }
+    lines.push(line);
   }
-  if (line) lines.push(line);
   return lines;
 }
 

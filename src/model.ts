@@ -226,6 +226,32 @@ export function rowsFor(
   return n;
 }
 
+/**
+ * The smallest region containing `r` that no tile straddles: grow to the bounding box of
+ * everything it touches, and again, until nothing new is touched. A selection is offered
+ * closed, so the only way it can still be invalid is by crossing a scope edge, which
+ * growing cannot fix.
+ */
+export function close(grid: Grid, r: Region): Region {
+  for (;;) {
+    let c0 = r.ci;
+    let r0 = r.ri;
+    let c1 = r.ci + r.span;
+    let r1 = r.ri + r.rows;
+    for (const tile of grid.tiles) {
+      const f = footprint(grid, tile);
+      if (!overlaps(f, r)) continue;
+      c0 = Math.min(c0, f.ci);
+      r0 = Math.min(r0, f.ri);
+      c1 = Math.max(c1, f.ci + f.span);
+      r1 = Math.max(r1, f.ri + f.rows);
+    }
+    const grown: Region = { ci: c0, ri: r0, span: c1 - c0, rows: r1 - r0 };
+    if (grown.span === r.span && grown.rows === r.rows) return grown;
+    r = grown;
+  }
+}
+
 /* Moving ------------------------------------------------------------------ */
 
 export function footprint(grid: Grid, tile: Tile): Region {

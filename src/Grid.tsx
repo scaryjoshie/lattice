@@ -8,6 +8,7 @@ import {
   columnsFor,
   rowsFor,
   bounds,
+  close,
   footprint,
   homogeneous,
   scopeAt,
@@ -24,7 +25,7 @@ import {
   type Plate,
   type TextRun,
 } from "./paint.ts";
-import { fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
+import { cellsFor, fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
 import { Keys, type Mode } from "./Keys.tsx";
 import { Menu, TileMenu } from "./Menu.tsx";
 import { claimed } from "./pointer.ts";
@@ -77,7 +78,8 @@ function Editor({
    * is, they go down instead — as far as there is room below at that width, and no
    * further, at which point the paint cuts them with an ellipsis.
    */
-  const rows = Math.min(linesFor(style, draft, span), rowsFor(grid, id, ci, ri, span));
+  // In cells, not lines: a note fits several lines in a cell, a title exactly one.
+  const rows = Math.min(cellsFor(style, linesFor(style, draft, span)), rowsFor(grid, id, ci, ri, span));
   // The canvas owns the surface and the ruling even while typing; the input contributes
   // only a caret and glyphs, so it has to say how far it currently reaches.
   // Both, not just the width: the canvas leaves a run's cells unruled while it is being
@@ -99,7 +101,7 @@ function Editor({
       style={{
         left: worldX(ci),
         top: worldX(ri) + CELL * m.pad,
-        height: CELL * m.leading * rows,
+        height: CELL * rows - CELL * m.pad,
         width: CELL * span,
         paddingLeft: CELL * m.inset,
         paddingRight: CELL * m.inset,
@@ -112,7 +114,11 @@ function Editor({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
+        // Enter commits. Shift-enter is a line break, which the textarea inserts itself.
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
         if (e.key === "Escape") {
           onDone();
           if ((tile.text ?? "") === "") removeTile(id);
@@ -375,8 +381,12 @@ export function Grid() {
      * else. Brackets say "held"; while a move is proposed the proposal says it instead.
      */
     const acted = acting?.id ?? naming ?? editing;
+    // One ring where the thing acted on is also the thing selected.
+    const own = selection !== null && "tile" in selection && selection.tile === acted;
     const about: Scene["about"] = acted
-      ? (tiles.get(acted) ?? null)
+      ? own
+        ? null
+        : (tiles.get(acted) ?? null)
       : menu
         ? { ci: menu.ci, ri: menu.ri, span: 1, rows: 1, hue: scopeAt(grid, menu.ci, menu.ri)?.hue ?? null }
         : null;
@@ -446,9 +456,9 @@ export function Grid() {
 
     // With something selected, shift previews the rectangle a shift-click would select.
     const extending: Scene["extending"] =
-      shift.current && selected && hover.current && !proposal
+      shift.current && selected && hover.current && !proposal && !contains(selected, ...hover.current)
         ? (() => {
-            const r = reach(selected, hover.current);
+            const r = close(gridRef.current, reach(selected, hover.current));
             return { ...r, hue: selected.hue, invalid: !usable(r) };
           })()
         : null;
@@ -661,20 +671,29 @@ export function Grid() {
     const selected = model.current.selected;
     let from: Region | null = null;
     let id: string | null = null;
-    if (event.shiftKey) {
-      // With a selection, shift extends it; the press is spent on the release. Without
-      // one, shift picks up whatever is under the pointer, text included.
-      if (selected) return;
+    const inside = selected !== null && contains(selected, at[0], at[1]);
+    if (event.shiftKey && selected && !inside) {
+      // Shift outside the selection extends it, on the release. Nothing to pick up.
+      return;
+    }
+    if (inside && selected.invalid) {
+      // A press on an invalid selection is the grid's, and it goes nowhere: the selection
+      // is already drawn in the colour that says so. A drag does nothing; a click is a
+      // click on the cell.
+      return;
+    }
+    if (inside) {
+      // A press inside the selection, shift or not, carries the selection. The camera has
+      // already yielded the plain one.
+      from = selected;
+      id = selection && "tile" in selection ? selection.tile : null;
+    } else if (event.shiftKey) {
+      // Shift picks up whatever is under the pointer, text included.
       const tileId = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
       const tile = tileId ? gridRef.current.tiles.find((x) => x.id === tileId) : undefined;
       if (!tile) return;
       from = footprint(gridRef.current, tile);
       id = tile.id;
-    } else if (selected && contains(selected, at[0], at[1])) {
-      // A plain press inside the selection carries the selection. The camera has already
-      // yielded it.
-      from = selected;
-      id = selection && "tile" in selection ? selection.tile : null;
     }
     if (!from) return;
     dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
@@ -728,8 +747,8 @@ export function Grid() {
       // one, shift-click acts: on an empty cell the act is the add menu; on a tile it
       // will be opening it, which does not exist yet.
       const anchor = model.current.selected;
-      if (anchor) {
-        setSelection({ region: reach(anchor, [ci, ri]) });
+      if (anchor && !contains(anchor, ci, ri)) {
+        setSelection({ region: close(gridRef.current, reach(anchor, [ci, ri])) });
         return;
       }
       if (id) return;
@@ -783,6 +802,8 @@ export function Grid() {
     setMenu(null);
     if (id && kind === "text") {
       hover.current = null;
+      // The run is what is selected now, and its ring grows with it as it is typed.
+      setSelection({ tile: id });
       setEditing(id);
     } else resume();
   };
@@ -792,7 +813,19 @@ export function Grid() {
     schedule(camera.current);
   };
 
-  const mode: Mode = editing || naming ? "typing" : menu ? "menu" : acting ? "list" : held ? "moving" : selection ? "selected" : "idle";
+  const mode: Mode = editing || naming
+    ? "typing"
+    : menu
+      ? "menu"
+      : acting
+        ? "list"
+        : held
+          ? "moving"
+          : scene.selected
+            ? scene.selected.invalid
+              ? "invalid"
+              : "selected"
+            : "idle";
 
   return (
     <div
@@ -851,6 +884,7 @@ export function Grid() {
             }
             else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {
               hover.current = null;
+              setSelection({ tile: id });
               setEditing(id);
             }
             else setNaming(id);

@@ -2,7 +2,7 @@ import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { clip as clip_, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
-import { cells as cellsOf, type Region } from "./region.ts";
+import { cells as cellsOf, contains, type Region } from "./region.ts";
 import { hue, theme } from "./theme.ts";
 
 /**
@@ -617,7 +617,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       size * box.rows - FOCUS_EDGE,
     );
 
-    if (!cell?.occupied && shift && !selected) {
+    // Inside the selection shift still means act, so the plus shows there too.
+    if (!cell?.occupied && shift && (!selected || contains(selected, ci, ri))) {
       const arm = size * PLUS;
       const cx = sx(ci) + size / 2;
       const cy = sy(ri) + size / 2;
