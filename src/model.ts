@@ -180,6 +180,75 @@ export function regionBounds(
   };
 }
 
+/** Which region owns a cell, by index. Null for open grid. */
+export function regionIdAt(grid: Grid, ci: number, ri: number): string | null {
+  for (const region of grid.regions) {
+    const { c0, c1, r0, r1 } = regionBounds(grid, region);
+    if (ci >= c0 && ci <= c1 && ri >= r0 && ri <= r1) return region.id;
+  }
+  return null;
+}
+
+/**
+ * Whether a cell is available to a run that started in `home`.
+ *
+ * This is the primitive, and there is only one: a **boundary** is anything a run cannot
+ * cross, and a cell holding something else and a cell in a different region are the same
+ * kind of thing. Writing them as two checks makes it possible for one axis to learn about
+ * a boundary the other does not, which is how a note ended up with no vertical rule at all.
+ */
+export function available(
+  grid: Grid,
+  tileId: string,
+  home: string | null,
+  ci: number,
+  ri: number,
+): boolean {
+  if (regionIdAt(grid, ci, ri) !== home) return false;
+  return !grid.tiles.some((other) => {
+    if (other.id === tileId) return false;
+    const f = footprint(grid, other);
+    return ci >= f.ci && ci < f.ci + f.span && ri >= f.ri && ri < f.ri + f.rows;
+  });
+}
+
+/** How many columns a run may occupy, starting at its own cell. */
+export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, limit = 40): number {
+  const home = regionIdAt(grid, ci, ri);
+  let n = 1;
+  while (n < limit && available(grid, tileId, home, ci + n, ri)) n += 1;
+  return n;
+}
+
+/**
+ * How many rows a run of this width may occupy. A row is available only if every cell
+ * across the run's width is — one blocked cell anywhere along it stops the whole row,
+ * because a line of text cannot be written around an obstacle.
+ */
+export function rowsFor(
+  grid: Grid,
+  tileId: string,
+  ci: number,
+  ri: number,
+  span: number,
+  limit = 40,
+): number {
+  const home = regionIdAt(grid, ci, ri);
+  let n = 1;
+  while (n < limit) {
+    let clear = true;
+    for (let dx = 0; dx < span; dx++) {
+      if (!available(grid, tileId, home, ci + dx, ri + n)) {
+        clear = false;
+        break;
+      }
+    }
+    if (!clear) break;
+    n += 1;
+  }
+  return n;
+}
+
 /* Moving ------------------------------------------------------------------ */
 
 export interface Footprint {

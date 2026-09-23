@@ -5,6 +5,7 @@ import {
   indexOfTrack,
   type Move,
   proposeMove,
+  columnsFor,
   regionBounds,
   type TextStyle,
   type TileKind,
@@ -53,20 +54,7 @@ function Editor({ id, onDone, onSpan }: { id: string; onDone(): void; onSpan(n: 
   const style = tile.style ?? "title";
   const m = METRICS[style];
 
-  // How far the row is free, starting here and not counting this run.
-  let room = 1;
-  while (room < 40) {
-    const next = grid.tiles.some((other) => {
-      if (other.id === id) return false;
-      const oc = indexOfTrack(grid.columns, other.columnId);
-      const or_ = indexOfTrack(grid.rows, other.rowId);
-      const w = other.span ?? 1;
-      const h = other.rows ?? 1;
-      return ci + room >= oc && ci + room < oc + w && ri >= or_ && ri < or_ + h;
-    });
-    if (next) break;
-    room += 1;
-  }
+  const room = columnsFor(grid, id, ci, ri);
 
   const span = Math.min(spanFor(style, draft || " "), room);
   // The canvas owns the surface and the ruling even while typing; the input contributes
