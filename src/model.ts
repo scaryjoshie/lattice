@@ -29,8 +29,6 @@ export type OccupantKind = "claude" | "codex" | "shell" | "browser";
 export type TextStyle = "title" | "note";
 export type TileKind = OccupantKind | "text";
 
-export const isText = (kind: TileKind): boolean => kind === "text";
-
 export interface Tile {
   readonly id: string;
   readonly kind: TileKind;
@@ -148,23 +146,6 @@ export function addTile(
 
 export function removeTile(grid: Grid, tileId: string): Grid {
   return { ...grid, tiles: grid.tiles.filter((t) => t.id !== tileId) };
-}
-
-/**
- * Occupancy, not snapping: a cell holds one tile, so landing on an occupied cell swaps the
- * two. Swapping rather than displacing keeps the move reversible and never cascades.
- */
-export function moveTile(grid: Grid, tileId: string, columnId: string, rowId: string): Grid {
-  const moving = grid.tiles.find((t) => t.id === tileId);
-  if (!moving) return grid;
-  const sitting = tileAt(grid, columnId, rowId);
-  if (sitting?.id === tileId) return grid;
-  const tiles = grid.tiles.map((t) => {
-    if (t.id === tileId) return { ...t, columnId, rowId };
-    if (sitting && t.id === sitting.id) return { ...t, columnId: moving.columnId, rowId: moving.rowId };
-    return t;
-  });
-  return { ...grid, tiles };
 }
 
 /** The index box a region covers. Indices, because membership is an ordering question. */

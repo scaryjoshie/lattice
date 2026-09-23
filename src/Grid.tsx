@@ -174,7 +174,6 @@ export function Grid() {
 
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
-  const setText = useGrid((s) => s.setText);
   const applyMoves = useGrid((s) => s.apply);
   const removeTile = useGrid((s) => s.remove);
 

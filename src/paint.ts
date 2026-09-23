@@ -44,8 +44,6 @@ const LANE = 11;
 const NAME_FROM = 34;
 const NAME_FADE = 14;
 
-/** How solid a tile looks where it would land, rather than where it is. */
-const GHOST = 0.55;
 /** Corner radius as a fraction of the cell, so the turn scales with the grid. */
 const LINK_TURN = 0.3;
 
