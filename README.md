@@ -7,6 +7,8 @@ was not asked to carry, and the product has changed shape enough that inherited
 assumptions are the expensive kind of mistake. Everything from the archive re-enters by
 being written down again on purpose, or it does not re-enter.
 
+For a reviewing agent, start at [ONBOARDING.md](ONBOARDING.md).
+
 ## Current
 
 | Doc | What it covers |
