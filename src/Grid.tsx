@@ -189,13 +189,20 @@ export function Grid() {
   const onUp = (event: React.PointerEvent) => {
     const start = pressed.current;
     pressed.current = null;
+    const host = viewport.current;
     if (menu) {
       setMenu(null);
+      // Pick the hover back up where the pointer already is, rather than waiting for it
+      // to move before the grid responds again.
+      if (host) {
+        const box = host.getBoundingClientRect();
+        hover.current = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
+        schedule(camera.current);
+      }
       return;
     }
     // A press that moved was a pan, not a click on a cell.
     if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3) return;
-    const host = viewport.current;
     if (!host) return;
     const box = host.getBoundingClientRect();
     const [ci, ri] = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);

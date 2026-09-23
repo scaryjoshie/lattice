@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { spanFor } from "./measure.ts";
 import { addTile, type Grid, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
 
 /** The model, and nothing else. Camera state deliberately does not live here. */
@@ -10,8 +11,24 @@ interface Store {
   remove(tileId: string): void;
 }
 
+/**
+ * The seed names its runs but cannot size them: measuring text needs a browser, and the
+ * model is meant to run without one. Sizing them here keeps the span derived from the
+ * words in every case rather than only for the ones someone types.
+ */
+function measured(grid: Grid): Grid {
+  return {
+    ...grid,
+    tiles: grid.tiles.map((tile) =>
+      tile.kind === "text" && tile.text
+        ? { ...tile, span: spanFor(tile.style ?? "title", tile.text) }
+        : tile,
+    ),
+  };
+}
+
 export const useGrid = create<Store>((set, get) => ({
-  grid: seed(),
+  grid: measured(seed()),
   addAt(columnIndex, rowIndex, kind, style) {
     const g = get().grid;
     const column = g.columns[columnIndex];

@@ -201,8 +201,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene): void {
       ctx.fillStyle = run.hue === null ? PAGE : h.tint;
 
       if (run.style === "title") {
-        const cleared = Math.min(inset * 2 + ctx.measureText(run.text).width, size * run.span);
-        ctx.fillRect(x, y, cleared, size);
+        // The whole span, not just as far as the words reach. A run's span is derived from
+        // its text, so these are the same thing rounded to a cell — and clearing less than
+        // it owns puts the selection ring somewhere the run visibly is not.
+        ctx.fillRect(x, y, size * run.span, size);
         ctx.fillStyle = h.ink;
         ctx.fillText(run.text, x + inset, y + size / 2);
         continue;
