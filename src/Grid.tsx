@@ -432,7 +432,7 @@ export function Grid() {
       },
       dash.current,
     );
-    running.current = focus !== null;
+    running.current = focus !== null || proposal !== null;
 
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
