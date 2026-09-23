@@ -25,8 +25,11 @@ export function useCamera(
   /** Input the grid wants for itself: any while an overlay is open, and a press that
    *  starts inside a selection. */
   yields: (event: MouseEvent) => boolean,
-): RefObject<Camera> {
+): { camera: RefObject<Camera>; shift: (dx: number, dy: number) => void } {
   const camera = useRef<Camera>({ x: 0, y: 0, k: 1 });
+  /** Move the view by a world distance, so that when the world's origin moves the picture
+   *  does not. Set once the behaviour exists. */
+  const shift = useRef<(dx: number, dy: number) => void>(() => {});
   const handler = useRef(onChange);
   handler.current = onChange;
   const claim = useRef(yields);
@@ -50,10 +53,11 @@ export function useCamera(
     const sel = select(el);
     sel.call(behaviour).on("dblclick.zoom", null);
     sel.call(behaviour.transform, zoomIdentity.translate(80, 80));
+    shift.current = (dx, dy) => sel.call(behaviour.translateBy, dx, dy);
     return () => {
       sel.on(".zoom", null);
     };
   }, [ref]);
 
-  return camera;
+  return { camera, shift: (dx, dy) => shift.current(dx, dy) };
 }

@@ -10,12 +10,12 @@ import {
   bounds,
   close,
   footprint,
-  homogeneous,
+  wellFormed,
   scopeAt,
   type TextStyle,
   type TileKind,
 } from "./model.ts";
-import { cells as cellsOf, contains, covers, overlaps, type Region } from "./region.ts";
+import { cells as cellsOf, contains, type Region } from "./region.ts";
 import {
   type Cell,
   type Scene,
@@ -70,16 +70,14 @@ function Editor({
   const style = tile.style ?? "title";
   const m = METRICS[style];
 
-  const room = columnsFor(grid, id, ci, ri);
-
-  const span = Math.min(spanFor(style, draft || " "), room);
+  const span = columnsFor(grid, id, ci, ri, spanFor(style, draft || " "));
   /*
    * Wrapping is what running out of room means. If the words need more width than there
    * is, they go down instead — as far as there is room below at that width, and no
    * further, at which point the paint cuts them with an ellipsis.
    */
   // In cells, not lines: a note fits several lines in a cell, a title exactly one.
-  const rows = Math.min(cellsFor(style, linesFor(style, draft, span)), rowsFor(grid, id, ci, ri, span));
+  const rows = rowsFor(grid, id, ci, ri, span, cellsFor(style, linesFor(style, draft, span)));
   // The canvas owns the surface and the ruling even while typing; the input contributes
   // only a caret and glyphs, so it has to say how far it currently reaches.
   // Both, not just the width: the canvas leaves a run's cells unruled while it is being
@@ -259,11 +257,17 @@ export function Grid() {
      * exists: the cell a tile left is empty, and empty cells already know how to look.
      */
     const carry = held?.ok ? held : null;
-    const proposed = new Map(carry?.moves.map((m) => [m.tileId, m]) ?? []);
+    const proposed = new Map(carry?.moves.map((m) => [m.id, m]) ?? []);
     const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
       const m = proposed.get(tile.id);
       if (m) return [m.ci, m.ri];
       return [indexOfTrack(grid.columns, tile.columnId), indexOfTrack(grid.rows, tile.rowId)];
+    };
+    /** A scope's bounds, where the drag would put it. */
+    const placedScope = (scope: (typeof grid.scopes)[number]): Region => {
+      const b = bounds(grid, scope);
+      const m = proposed.get(scope.id);
+      return m ? { ...b, ci: m.ci, ri: m.ri } : b;
     };
 
     /*
@@ -282,7 +286,7 @@ export function Grid() {
     const cells = new Map<string, Cell>();
     const plates: Plate[] = [];
     for (const scope of grid.scopes) {
-      const b = bounds(grid, scope);
+      const b = placedScope(scope);
       plates.push({ hue: scope.hue, c0: b.ci, c1: b.ci + b.span - 1, r0: b.ri, r1: b.ri + b.rows - 1 });
       for (const [ci, ri] of cellsOf(b)) cells.set(`${ci},${ri}`, { hue: scope.hue, occupied: false });
     }
@@ -368,12 +372,7 @@ export function Grid() {
     const subject =
       acting?.id ?? naming ?? editing ?? (selection && "tile" in selection ? selection.tile : null);
     const region = selection && "region" in selection ? selection.region : null;
-    const usable = (r: Region): boolean =>
-      homogeneous(grid, r) &&
-      grid.tiles.every((tile) => {
-        const f = footprint(grid, tile);
-        return !overlaps(f, r) || covers(r, f);
-      });
+    const usable = (r: Region): boolean => wellFormed(grid, r);
     /*
      * Two rings, for two questions. `about` is what a menu, a rename or an edit is about:
      * a tile, or for the add menu the cell it was asked on. `selected` is the selection.
@@ -564,7 +563,7 @@ export function Grid() {
   // While a menu, a rename or an edit is open the camera is still: the press that closes
   // it is spent closing it, and the wheel would slide the cell out from under the menu.
   const overlay = menu !== null || acting !== null || editing !== null || naming !== null;
-  const camera = useCamera(
+  const { camera, shift: shiftView } = useCamera(
     viewport,
     schedule,
     (event) => overlay || (event.type === "mousedown" && !event.shiftKey && inSelection(event)),
@@ -715,9 +714,14 @@ export function Grid() {
         const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
         const verdict = proposeMove(gridRef.current, carry.from, to);
         if (verdict.ok) {
-          applyMoves(verdict.moves);
+          const { dc, dr } = applyMoves(verdict.moves);
+          // Tracks prepended on the way shift every index; the view shifts to match.
+          if (dc || dr) {
+            shiftView(-dc * CELL, -dr * CELL);
+            hover.current = null;
+          }
           // A selected tile follows itself; a selected region has to be told where it went.
-          if (carry.id === null) setSelection({ region: to });
+          if (carry.id === null) setSelection({ region: { ...to, ci: to.ci + dc, ri: to.ri + dr } });
         }
         return;
       }
@@ -798,13 +802,17 @@ export function Grid() {
 
   const pick = (kind: TileKind, style?: TextStyle) => {
     if (!menu) return;
-    const id = addAt(menu.ci, menu.ri, kind, style);
+    const made = addAt(menu.ci, menu.ri, kind, style);
     setMenu(null);
-    if (id && kind === "text") {
+    if (made && (made.dc || made.dr)) {
+      shiftView(-made.dc * CELL, -made.dr * CELL);
+      hover.current = null;
+    }
+    if (made && kind === "text") {
       hover.current = null;
       // The run is what is selected now, and its ring grows with it as it is typed.
-      setSelection({ tile: id });
-      setEditing(id);
+      setSelection({ tile: made.id });
+      setEditing(made.id);
     } else resume();
   };
 

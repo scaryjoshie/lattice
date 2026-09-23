@@ -172,11 +172,38 @@ export function scopeAt(grid: Grid, ci: number, ri: number): Scope | null {
   return null;
 }
 
-/** Every cell of a region lies in the same scope, or in none. */
-export function homogeneous(grid: Grid, r: Region): boolean {
-  const home = scopeAt(grid, r.ci, r.ri);
-  for (const [ci, ri] of cells(r)) if (scopeAt(grid, ci, ri) !== home) return false;
-  return true;
+/**
+ * Whether a region is one the grid can use — select, move, exchange. Nothing it touches may
+ * be partly inside it: a tile it touches lies entirely within it, and a scope it touches
+ * lies entirely within it or entirely around it. Never neither. That is the one rule for
+ * selection and for both halves of a move, and it is what "you cannot cut a worktree"
+ * means.
+ */
+export function wellFormed(grid: Grid, r: Region): boolean {
+  return (
+    grid.tiles.every((tile) => {
+      const f = footprint(grid, tile);
+      return !overlaps(f, r) || covers(r, f);
+    }) &&
+    grid.scopes.every((scope) => {
+      const b = bounds(grid, scope);
+      return !overlaps(b, r) || covers(r, b) || covers(b, r);
+    })
+  );
+}
+
+/**
+ * The world with some things lifted out of it. A proposal reasons about this, not about
+ * the world as it is: what is being carried is nowhere until it lands, and asking the
+ * ordinary questions of the lifted world is what stops a thing from straddling its own
+ * destination.
+ */
+export function without(grid: Grid, ids: ReadonlySet<string>): Grid {
+  return {
+    ...grid,
+    tiles: grid.tiles.filter((tile) => !ids.has(tile.id)),
+    scopes: grid.scopes.filter((scope) => !ids.has(scope.id)),
+  };
 }
 
 /**
@@ -198,11 +225,11 @@ export function available(
   return !grid.tiles.some((other) => other.id !== tileId && contains(footprint(grid, other), ci, ri));
 }
 
-/** How many columns a run may occupy, starting at its own cell. */
-export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, limit = 40): number {
+/** How many columns a run may occupy, starting at its own cell, of the `want` it needs. */
+export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, want: number): number {
   const home = scopeAt(grid, ci, ri);
   let n = 1;
-  while (n < limit && available(grid, tileId, home, ci + n, ri)) n += 1;
+  while (n < want && available(grid, tileId, home, ci + n, ri)) n += 1;
   return n;
 }
 
@@ -217,20 +244,41 @@ export function rowsFor(
   ci: number,
   ri: number,
   span: number,
-  limit = 40,
+  want: number,
 ): number {
   const home = scopeAt(grid, ci, ri);
   const row = (n: number): Region => ({ ci, ri: ri + n, span, rows: 1 });
   let n = 1;
-  while (n < limit && [...cells(row(n))].every(([c, r]) => available(grid, tileId, home, c, r))) n += 1;
+  while (n < want && [...cells(row(n))].every(([c, r]) => available(grid, tileId, home, c, r))) n += 1;
   return n;
 }
 
 /**
- * The smallest region containing `r` that no tile straddles: grow to the bounding box of
- * everything it touches, and again, until nothing new is touched. A selection is offered
- * closed, so the only way it can still be invalid is by crossing a scope edge, which
- * growing cannot fix.
+ * Tracks for every cell of a region, made on demand. The lattice is infinite and the
+ * model's tracks are not, so anything placed or moved past the last one gets tracks
+ * appended, and anything placed before the first gets them prepended — which shifts every
+ * index by the count returned, though no stored position changes, since positions are
+ * ids. The camera moves by the same amount so nothing on screen does.
+ */
+export function ensureTracks(grid: Grid, r: Region): { grid: Grid; dc: number; dr: number } {
+  const dc = Math.max(0, -r.ci);
+  const dr = Math.max(0, -r.ri);
+  const fresh = (prefix: string, n: number) => Array.from({ length: n }, () => nextId(prefix));
+  let g = grid;
+  if (dc > 0) g = insertColumnsAt(g, 0, fresh("c", dc));
+  if (dr > 0) g = insertRowsAt(g, 0, fresh("r", dr));
+  const moreC = r.ci + dc + r.span - g.columns.length;
+  const moreR = r.ri + dr + r.rows - g.rows.length;
+  if (moreC > 0) g = insertColumnsAt(g, g.columns.length, fresh("c", moreC));
+  if (moreR > 0) g = insertRowsAt(g, g.rows.length, fresh("r", moreR));
+  return { grid: g, dc, dr };
+}
+
+/**
+ * The smallest well-formed region containing `r`: grow to the bounding box of everything
+ * it partly touches — tiles, and scopes it is not inside — and again, until nothing new
+ * is touched. A selection is offered closed, so it is invalid only when closing it ran
+ * into something on the way.
  */
 export function close(grid: Grid, r: Region): Region {
   for (;;) {
@@ -238,13 +286,19 @@ export function close(grid: Grid, r: Region): Region {
     let r0 = r.ri;
     let c1 = r.ci + r.span;
     let r1 = r.ri + r.rows;
-    for (const tile of grid.tiles) {
-      const f = footprint(grid, tile);
-      if (!overlaps(f, r)) continue;
+    const take = (f: Region) => {
       c0 = Math.min(c0, f.ci);
       r0 = Math.min(r0, f.ri);
       c1 = Math.max(c1, f.ci + f.span);
       r1 = Math.max(r1, f.ri + f.rows);
+    };
+    for (const tile of grid.tiles) {
+      const f = footprint(grid, tile);
+      if (overlaps(f, r)) take(f);
+    }
+    for (const scope of grid.scopes) {
+      const b = bounds(grid, scope);
+      if (overlaps(b, r) && !covers(b, r)) take(b);
     }
     const grown: Region = { ci: c0, ri: r0, span: c1 - c0, rows: r1 - r0 };
     if (grown.span === r.span && grown.rows === r.rows) return grown;
@@ -281,57 +335,66 @@ export function footprint(grid: Grid, tile: Tile): Region {
  * circular, because the scene is built from the answer, and a circular answer flickers
  * between values and drags unrelated tiles along with it.
  */
+/** Where a thing — a tile or a scope, by id — would go. */
 export interface Move {
-  tileId: string;
+  id: string;
   ci: number;
   ri: number;
+}
+
+/** Everything that owns a region, so a move can carry tiles and scopes alike. */
+function owners(grid: Grid): readonly { id: string; region: Region }[] {
+  return [
+    ...grid.tiles.map((tile) => ({ id: tile.id, region: footprint(grid, tile) })),
+    ...grid.scopes.map((scope) => ({ id: scope.id, region: bounds(grid, scope) })),
+  ];
 }
 
 /**
  * Whether one region of the grid may be exchanged with another, and everything that would
  * move if it were. Dragging a tile is the case where `from` is that tile's footprint; a
- * selection is any region. `swaps` says whether something at the destination would come
- * back, and is answered whatever the verdict, because a refused exchange is still drawn
- * as the exchange it refuses.
+ * selection is any region, and may carry whole scopes. `swaps` says whether something at
+ * the destination would come back, and is answered whatever the verdict, because a
+ * refused exchange is still drawn as the exchange it refuses.
  */
 export function proposeMove(
   grid: Grid,
   from: Region,
   to: Region,
 ): { ok: boolean; swaps: boolean; moves: readonly Move[] } {
-  const touching = (region: Region): Tile[] =>
-    grid.tiles.filter((tile) => overlaps(footprint(grid, tile), region));
-  const inside = (region: Region): Tile[] =>
-    grid.tiles.filter((tile) => covers(region, footprint(grid, tile)));
-  const here = inside(from);
-  const there = touching(to).filter((tile) => !here.includes(tile));
-  const swaps = there.length > 0;
+  const here = owners(grid).filter((o) => covers(from, o.region));
+  // Everything else, in a world with the carried things lifted out of it.
+  const rest = without(grid, new Set(here.map((o) => o.id)));
+  const others = owners(rest);
+  // What is inside the destination and would come back — not what merely surrounds it,
+  // which is a scope the destination lies in and which stays where it is.
+  const there = others.filter((o) => covers(to, o.region));
+  const swaps = others.some((o) => overlaps(o.region, to) && !covers(o.region, to));
   const refuse = { ok: false, swaps, moves: [] as const };
 
   if (to.ci === from.ci && to.ri === from.ri) return { ok: true, swaps, moves: [] };
 
-  // Both regions must be self-contained: nothing may have cells both in and out of one,
-  // because such a tile cannot be exchanged without tearing. And neither may straddle a
-  // scope edge, which is the same rule a selection obeys.
-  if (!homogeneous(grid, from) || !homogeneous(grid, to)) return refuse;
-  if (touching(from).length !== here.length) return refuse;
+  // Both regions must be well-formed: nothing partly inside either, because such a thing
+  // cannot be exchanged without tearing, and no worktree is ever cut. The source is
+  // judged in the world as it is; the destination in the world without the carried.
+  if (!wellFormed(grid, from) || !wellFormed(rest, to)) return refuse;
 
-  const shift = (tile: Tile, by: Region, into: Region): Move => {
-    const f = footprint(grid, tile);
-    return { tileId: tile.id, ci: f.ci - by.ci + into.ci, ri: f.ri - by.ri + into.ri };
-  };
+  const shift = (o: { id: string; region: Region }, by: Region, into: Region): Move => ({
+    id: o.id,
+    ci: o.region.ci - by.ci + into.ci,
+    ri: o.region.ri - by.ri + into.ri,
+  });
 
   // A region that overlaps its own destination cannot be exchanged with itself, so the
   // move is only a slide, and only into space nothing else is in.
   if (overlaps(from, to)) {
-    return swaps ? refuse : { ok: true, swaps, moves: here.map((tile) => shift(tile, from, to)) };
+    return swaps ? refuse : { ok: true, swaps, moves: here.map((o) => shift(o, from, to)) };
   }
 
-  if (!there.every((tile) => covers(to, footprint(grid, tile)))) return refuse;
   return {
     ok: true,
     swaps,
-    moves: [...here.map((tile) => shift(tile, from, to)), ...there.map((tile) => shift(tile, to, from))],
+    moves: [...here.map((o) => shift(o, from, to)), ...there.map((o) => shift(o, to, from))],
   };
 }
 
