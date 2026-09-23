@@ -201,7 +201,19 @@ shadows than from an argument about it.
 79. A tile inside a region takes that region's hue for its mark, its ring and its links.
 80. **[proposed]** A region is selected by a handle in the top-left corner of its plate.
 81. **[proposed]** A selected region offers an arrow on each edge to drag it larger.
-82. A selection may not span two scopes, or a scope and the space outside one.
+82. A region is well-formed when nothing it touches is partly inside it: a tile it touches
+    lies entirely within it, and a scope it touches lies entirely within it or entirely
+    around it. Never neither. One rule for a selection and for both halves of a move, so
+    a selection may hold whole worktrees and loose tiles together, and a move carries
+    the worktrees with it.
+82a. A proposal judges its destination against the world with the carried things lifted
+    out, so a thing may slide over its own old cells.
+82b. Tracks are made on demand. Placing or moving something past the last track appends
+    tracks; before the first prepends them, and the view shifts by the same distance so
+    nothing on screen moves. A run walks as far as its text needs and no artificial
+    bound stops it.
+82c. An action applies whole or not at all. A proposal is judged once, in the model; apply
+    never declines part of a verdict.
 
 ## The camera
 
