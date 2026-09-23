@@ -30,6 +30,7 @@ const FOCUS_EDGE = 2.5;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
+const ARROW = 8;
 /** Names stop being drawn below this many screen pixels of cell, fading over the next few. */
 const NAME_FROM = 34;
 const NAME_FADE = 14;
@@ -98,6 +99,14 @@ export interface Focus {
   partners: readonly { ci: number; ri: number }[];
 }
 
+/** A move being proposed: where it came from, where it would land, and whether it may. */
+export interface Proposal {
+  from: { ci: number; ri: number; span: number; rows: number };
+  to: { ci: number; ri: number; span: number; rows: number };
+  hue: number | null;
+  ok: boolean;
+}
+
 export interface Scene {
   camera: Camera;
   width: number;
@@ -113,14 +122,8 @@ export interface Scene {
    * something. Ringed, but nothing is veiled. `warn` means the thing it describes would
    * not be allowed.
    */
-  selected: {
-    ci: number;
-    ri: number;
-    span: number;
-    rows: number;
-    hue: number | null;
-    warn?: boolean;
-  } | null;
+  selected: { ci: number; ri: number; span: number; rows: number; hue: number | null } | null;
+  proposal: Proposal | null;
   hover: readonly [number, number] | null;
 }
 
@@ -169,7 +172,8 @@ function mark(
 }
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
-  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, hover } = scene;
+  const { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, proposal, hover } =
+    scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
   ctx.fillStyle = palette.page;
@@ -415,12 +419,63 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   if (selected && rule > 0) {
     const inset = FOCUS_EDGE / 2;
     ctx.lineWidth = FOCUS_EDGE;
-    ctx.strokeStyle = selected.warn ? palette.warn : hue(selected.hue).edge;
+    ctx.strokeStyle = hue(selected.hue).edge;
     ctx.strokeRect(
       sx(selected.ci) + inset,
       sy(selected.ri) + inset,
       size * selected.span - FOCUS_EDGE,
       size * selected.rows - FOCUS_EDGE,
+    );
+  }
+
+  /*
+   * A proposed move: an arrow from where a thing was to where it would go, and a ring
+   * around the destination. Refused proposals are drawn the same way in the one colour
+   * that means no, so the shape of the answer does not change with the answer.
+   */
+  if (proposal && rule > 0) {
+    const centre = (r: Proposal["to"]) =>
+      [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
+    const [ax, ay] = centre(proposal.from);
+    const [bx, by] = centre(proposal.to);
+    const colour = proposal.ok ? hue(proposal.hue).edge : palette.warn;
+    const inset = FOCUS_EDGE / 2;
+
+    const far = Math.hypot(bx - ax, by - ay);
+    if (far > size * 0.4) {
+      const ux = (bx - ax) / far;
+      const uy = (by - ay) / far;
+      // Stop short of the destination so the head sits outside what it is pointing at.
+      const hx = bx - ux * (size * 0.4);
+      const hy = by - uy * (size * 0.4);
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = LINK_EDGE;
+      ctx.lineCap = "round";
+      ctx.setLineDash(LINK_DASH);
+      ctx.lineDashOffset = -dash;
+      ctx.beginPath();
+      ctx.moveTo(ax + ux * (size * 0.34), ay + uy * (size * 0.34));
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineCap = "butt";
+
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      ctx.moveTo(hx + ux * ARROW, hy + uy * ARROW);
+      ctx.lineTo(hx - uy * ARROW * 0.62, hy + ux * ARROW * 0.62);
+      ctx.lineTo(hx + uy * ARROW * 0.62, hy - ux * ARROW * 0.62);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.lineWidth = FOCUS_EDGE;
+    ctx.strokeStyle = colour;
+    ctx.strokeRect(
+      sx(proposal.to.ci) + inset,
+      sy(proposal.to.ri) + inset,
+      size * proposal.to.span - FOCUS_EDGE,
+      size * proposal.to.rows - FOCUS_EDGE,
     );
   }
 

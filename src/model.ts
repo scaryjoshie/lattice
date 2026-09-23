@@ -202,47 +202,77 @@ const overlaps = (a: Footprint, b: Footprint): boolean =>
   a.ci < b.ci + b.span && b.ci < a.ci + a.span && a.ri < b.ri + b.rows && b.ri < a.ri + a.rows;
 
 /**
- * Whether a tile may be put down at a cell, and what it would displace.
+ * Whether a tile may be put down at a cell, and everything that would move if it were.
+ *
+ * A move is a proposal to exchange one region of the grid with another of the same size:
+ * the region the tile occupies now, and the region it would occupy. It is legal when
+ * **every tile touching either region is entirely inside it** — nothing may have cells both
+ * in and out of a region, because such a tile cannot be exchanged without tearing.
+ *
+ * That single rule replaces a pile of special cases. Swapping two tiles of the same size
+ * is the case where each region holds exactly one; moving into free space is the case
+ * where the destination holds none; and dropping a two-cell run half over another
+ * two-cell run is refused, because that run straddles the region's edge.
  *
  * Answered from the model alone — the positions tiles actually have, never a view of the
- * world that already assumes the move. Deriving this from the rendered scene makes it
+ * world that already assumes the move. Deriving it from the rendered scene makes it
  * circular, because the scene is built from the answer, and a circular answer flickers
  * between values and drags unrelated tiles along with it.
- *
- * A move is allowed when the space is free, or when exactly one tile is in the way and it
- * has the same footprint — that is what makes it a swap rather than two overlapping tiles.
- * Anything else is refused: a four-cell run cannot trade places with one cell.
  */
+export interface Move {
+  tileId: string;
+  ci: number;
+  ri: number;
+}
+
 export function proposeMove(
   grid: Grid,
   tileId: string,
   ci: number,
   ri: number,
-): { ok: boolean; swapWith: Tile | null } {
+): { ok: boolean; moves: readonly Move[] } {
   const tile = grid.tiles.find((t) => t.id === tileId);
-  if (!tile) return { ok: false, swapWith: null };
-  const here = footprint(grid, tile);
-  const target: Footprint = { ci, ri, span: here.span, rows: here.rows };
+  if (!tile) return { ok: false, moves: [] };
+  const from = footprint(grid, tile);
+  const to: Footprint = { ci, ri, span: from.span, rows: from.rows };
+  if (to.ci === from.ci && to.ri === from.ri) return { ok: true, moves: [] };
 
-  const hit = grid.tiles.filter((other) => {
-    if (other.id === tileId) return false;
-    return overlaps(footprint(grid, other), target);
-  });
+  const contains = (region: Footprint, f: Footprint): boolean =>
+    f.ci >= region.ci &&
+    f.ci + f.span <= region.ci + region.span &&
+    f.ri >= region.ri &&
+    f.ri + f.rows <= region.ri + region.rows;
 
-  if (hit.length === 0) return { ok: true, swapWith: null };
-  if (hit.length > 1) return { ok: false, swapWith: null };
+  const touching = (region: Footprint): Tile[] =>
+    grid.tiles.filter((other) => other.id !== tileId && overlaps(footprint(grid, other), region));
 
-  const other = hit[0] as Tile;
-  const theirs = footprint(grid, other);
-  const sameSize = theirs.span === here.span && theirs.rows === here.rows;
-  // And the swap has to be legal in both directions.
-  const wouldFit =
-    sameSize &&
-    !grid.tiles.some((third) => {
-      if (third.id === tileId || third.id === other.id) return false;
-      return overlaps(footprint(grid, third), { ...here, span: theirs.span, rows: theirs.rows });
-    });
-  return wouldFit ? { ok: true, swapWith: other } : { ok: false, swapWith: null };
+  // A region that overlaps its own destination cannot be exchanged with itself, so the
+  // move is only a slide, and only into space nothing else is in.
+  if (overlaps(from, to)) {
+    return touching(to).length === 0
+      ? { ok: true, moves: [{ tileId, ci: to.ci, ri: to.ri }] }
+      : { ok: false, moves: [] };
+  }
+
+  const there = touching(to);
+  const here = touching(from);
+  const whole = [...there, ...here].every((other) =>
+    contains(overlaps(footprint(grid, other), to) ? to : from, footprint(grid, other)),
+  );
+  if (!whole) return { ok: false, moves: [] };
+
+  const shift = (other: Tile, by: Footprint, into: Footprint): Move => {
+    const f = footprint(grid, other);
+    return { tileId: other.id, ci: f.ci - by.ci + into.ci, ri: f.ri - by.ri + into.ri };
+  };
+  return {
+    ok: true,
+    moves: [
+      { tileId, ci: to.ci, ri: to.ri },
+      ...there.map((other) => shift(other, to, from)),
+      ...here.map((other) => shift(other, from, to)),
+    ],
+  };
 }
 
 /* Seed -------------------------------------------------------------------- */

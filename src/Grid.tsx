@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
 import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
-import { indexOfTrack, proposeMove, regionBounds, type TextStyle, type TileKind } from "./model.ts";
+import {
+  indexOfTrack,
+  type Move,
+  proposeMove,
+  regionBounds,
+  type TextStyle,
+  type TileKind,
+} from "./model.ts";
 import {
   type Cell,
   type Scene,
@@ -157,7 +164,7 @@ export function Grid() {
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
   const setText = useGrid((s) => s.setText);
-  const moveTile = useGrid((s) => s.move);
+  const applyMoves = useGrid((s) => s.apply);
   const removeTile = useGrid((s) => s.remove);
 
   /** Open at the pointer, holding the cell it was asked about. */
@@ -187,7 +194,8 @@ export function Grid() {
     id: string;
     origin: [number, number];
     to: [number, number];
-    swapping: string | null;
+    /** Everywhere the proposal would put something. Empty when it is refused. */
+    moves: readonly Move[];
     ok: boolean;
   } | null>(null);
 
@@ -206,13 +214,11 @@ export function Grid() {
      * exists: the cell a tile left is empty, and empty cells already know how to look.
      */
     const carry = held?.ok ? held : null;
+    const proposed = new Map(carry?.moves.map((m) => [m.tileId, m]) ?? []);
     const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
-      const ci = indexOfTrack(grid.columns, tile.columnId);
-      const ri = indexOfTrack(grid.rows, tile.rowId);
-      if (!carry) return [ci, ri];
-      if (tile.id === carry.id) return carry.to;
-      if (carry.swapping === tile.id) return carry.origin;
-      return [ci, ri];
+      const m = proposed.get(tile.id);
+      if (m) return [m.ci, m.ri];
+      return [indexOfTrack(grid.columns, tile.columnId), indexOfTrack(grid.rows, tile.rowId)];
     };
 
     /*
@@ -314,14 +320,14 @@ export function Grid() {
     /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
     const byCell = new Map<string, string>();
     for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    const refused =
-      held && !held.ok
+    const shape = held ? tiles.get(held.id) : undefined;
+    const proposal =
+      held && shape
         ? {
-            ci: held.to[0],
-            ri: held.to[1],
-            span: tiles.get(held.id)?.span ?? 1,
-            rows: tiles.get(held.id)?.rows ?? 1,
-            hue: null as number | null,
+            from: { ci: held.origin[0], ri: held.origin[1], span: shape.span, rows: shape.rows },
+            to: { ci: held.to[0], ri: held.to[1], span: shape.span, rows: shape.rows },
+            hue: shape.hue,
+            ok: held.ok,
           }
         : null;
     return {
@@ -334,7 +340,7 @@ export function Grid() {
       tiles,
       links: grid.links,
       carried: carry,
-      refused,
+      proposal,
     };
   }, [grid, editing, editSpan, naming, held]);
 
@@ -369,7 +375,8 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts, spots, byCell, tiles, links, carried } = model.current;
+    const { cells, plates, occupied, texts, spots, byCell, tiles, links, carried, proposal } =
+      model.current;
 
     // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
     // question "who is this one talking to", and the answer is a read of the model.
@@ -379,9 +386,7 @@ export function Grid() {
      * the pointer was when the drag began.
      */
     const about = subject.current;
-    let selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
-    const refused = model.current.refused;
-    if (refused) selected = { ...refused, warn: true };
+    const selected: Scene["selected"] = about ? (model.current.tiles.get(about) ?? null) : null;
 
     /*
      * Focus survives a menu and a rename. Opening a menu about an agent is still being
@@ -411,7 +416,20 @@ export function Grid() {
 
     paint(
       ctx,
-      { camera, width, height, dpr, plates, cells, occupied, texts, focus, selected, hover: hover.current },
+      {
+        camera,
+        width,
+        height,
+        dpr,
+        plates,
+        cells,
+        occupied,
+        texts,
+        focus,
+        selected,
+        proposal,
+        hover: hover.current,
+      },
       dash.current,
     );
     running.current = focus !== null;
@@ -494,13 +512,7 @@ export function Grid() {
         // From the model, never from the scene: the scene is built from this answer.
         const verdict = proposeMove(gridRef.current, carry.id, at[0], at[1]);
         hover.current = null;
-        setHeld({
-          id: carry.id,
-          origin: carry.origin,
-          to: at,
-          swapping: verdict.swapWith?.id ?? null,
-          ok: verdict.ok,
-        });
+        setHeld({ id: carry.id, origin: carry.origin, to: at, moves: verdict.moves, ok: verdict.ok });
       }
       return;
     }
@@ -538,8 +550,9 @@ export function Grid() {
     pressed.current = null;
     if (dragging.current) {
       const at = cellUnder(event);
-      if (at && proposeMove(gridRef.current, dragging.current.id, at[0], at[1]).ok) {
-        moveTile(dragging.current.id, at[0], at[1]);
+      if (at) {
+        const verdict = proposeMove(gridRef.current, dragging.current.id, at[0], at[1]);
+        if (verdict.ok) applyMoves(verdict.moves);
       }
       dragging.current = null;
       setHeld(null);

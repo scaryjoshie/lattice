@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { spanFor } from "./measure.ts";
-import { addTile, type Grid, moveTile, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
+import { addTile, type Grid, type Move, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
 
 /** The model, and nothing else. Camera state deliberately does not live here. */
 interface Store {
@@ -10,7 +10,7 @@ interface Store {
   setText(tileId: string, text: string, span: number): void;
   setName(tileId: string, name: string): void;
   remove(tileId: string): void;
-  move(tileId: string, columnIndex: number, rowIndex: number): void;
+  apply(moves: readonly Move[]): void;
 }
 
 /**
@@ -63,11 +63,22 @@ export const useGrid = create<Store>((set, get) => ({
   remove(tileId) {
     set((s) => ({ grid: { ...s.grid, tiles: s.grid.tiles.filter((t) => t.id !== tileId) } }));
   },
-  move(tileId, columnIndex, rowIndex) {
+  /** Every move a proposal produced, applied together — a swap is not two moves. */
+  apply(moves) {
+    if (moves.length === 0) return;
     const g = get().grid;
-    const column = g.columns[columnIndex];
-    const row = g.rows[rowIndex];
-    if (!column || !row) return;
-    set({ grid: moveTile(g, tileId, column.id, row.id) });
+    const at = new Map(moves.map((m) => [m.tileId, m]));
+    set({
+      grid: {
+        ...g,
+        tiles: g.tiles.map((tile) => {
+          const m = at.get(tile.id);
+          if (!m) return tile;
+          const column = g.columns[m.ci];
+          const row = g.rows[m.ri];
+          return column && row ? { ...tile, columnId: column.id, rowId: row.id } : tile;
+        }),
+      },
+    });
   },
 }));
