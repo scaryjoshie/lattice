@@ -11,6 +11,7 @@ interface Store {
   setName(tileId: string, name: string): void;
   remove(tileId: string): void;
   apply(moves: readonly Move[]): void;
+  remeasure(): void;
 }
 
 /**
@@ -31,6 +32,14 @@ function measured(grid: Grid): Grid {
 
 export const useGrid = create<Store>((set, get) => ({
   grid: measured(seed()),
+  /**
+   * Measure every run again. The seed is measured when this module is evaluated, which is
+   * before the web font has loaded, so until then every run is sized against the fallback
+   * face — a different width for the same words.
+   */
+  remeasure() {
+    set((s) => ({ grid: measured(s.grid) }));
+  },
   addAt(columnIndex, rowIndex, kind, style) {
     const g = get().grid;
     const column = g.columns[columnIndex];
