@@ -328,7 +328,15 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.font = fontOf(run.style, size);
       ctx.fillStyle = h.ink;
       if (run.style === "title") {
+        // Clipped to the cells the run owns. The span stops at an occupied neighbour but
+        // the string does not, and the input was doing the clipping while typing — so the
+        // glyphs carried straight across the neighbour the moment the text was committed.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, size * run.span, size);
+        ctx.clip();
         ctx.fillText(run.text, x + inset, y + size / 2);
+        ctx.restore();
         continue;
       }
       const leading = size * m.leading;
