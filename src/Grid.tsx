@@ -327,16 +327,22 @@ export function Grid() {
      * the pointer was when the drag began.
      */
     // Whatever a menu or a rename is about.
-    const subject = acting?.id ?? naming ?? editing;
+    const subject = acting?.id ?? naming ?? editing ?? null;
     let selected: Scene["selected"] = null;
     if (subject) {
       const tile = model.current.tiles?.get(subject);
       if (tile) selected = tile;
     }
 
+    /*
+     * Focus survives a menu and a rename. Opening a menu about an agent is still being
+     * about that agent, so its connections stay lit and everything else stays back — the
+     * alternative is the lines going out and the page brightening the moment you act,
+     * which is a change that says nothing happened when something did.
+     */
     let focus: Focus | null = null;
     const spot =
-      held?.id ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
+      held?.id ?? subject ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
