@@ -350,7 +350,20 @@ export function Grid() {
             to: { ci: held.to[0], ri: held.to[1], span: shape.span, rows: shape.rows },
             hue: shape.hue,
             ok: held.ok,
-            swaps: held.moves.length > 1,
+            // Whether something would come back the other way, read from what the model
+            // has at the destination rather than from the moves — a refusal produces no
+            // moves, and a refused exchange must still draw as the exchange it refuses.
+            swaps: grid.tiles.some((other) => {
+              if (other.id === held.id) return false;
+              const oc = indexOfTrack(grid.columns, other.columnId);
+              const or_ = indexOfTrack(grid.rows, other.rowId);
+              return (
+                oc < held.to[0] + shape.span &&
+                held.to[0] < oc + (other.span ?? 1) &&
+                or_ < held.to[1] + shape.rows &&
+                held.to[1] < or_ + (other.rows ?? 1)
+              );
+            }),
           }
         : null;
     return {
