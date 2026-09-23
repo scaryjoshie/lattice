@@ -323,7 +323,7 @@ export function Grid() {
             );
           })()}
       </div>
-      {menu && <Menu x={menu.x} y={menu.y} onPick={pick} />}
+      {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
     </div>
   );
 }

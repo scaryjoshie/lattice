@@ -101,10 +101,6 @@ body {
   cursor: pointer;
 }
 
-.menu-item:hover {
-  background: var(--hover);
-}
-
 .menu-mark {
   display: grid;
   place-items: center;
@@ -127,4 +123,33 @@ body {
   color: var(--ink);
   font-family: var(--font);
   pointer-events: auto;
+}
+
+/*
+ * Present from the moment the menu opens so no keystroke is lost, and invisible until
+ * there is a query: the menu is a list until it is treated as a search.
+ */
+.menu-query {
+  display: block;
+  width: 100%;
+  height: 0;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  opacity: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+}
+
+.menu-query[data-open] {
+  height: 26px;
+  margin-bottom: 4px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--divider);
+  opacity: 1;
+}
+
+.menu-item[data-selected] {
+  background: var(--hover);
 }
