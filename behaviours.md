@@ -157,19 +157,22 @@ shadows than from an argument about it.
 
 ## What scales and what does not
 
-88. Cell size, gutter, corner radius, font size, mark size and name size all scale with the
-    camera.
+88. Cell size, font size, mark size and name size all scale with the camera. There is no
+    gutter and no corner radius in this grid; both belong to experiment 4.
 89. Rules, focus rings, chevrons, link lines and dots are a fixed number of screen pixels
     at every zoom.
-90. Rules fade out below about 8 screen pixels of cell.
+90. Rules are at full strength above about 24 screen pixels of cell and gone below 8.
 91. Names fade out below about 34.
 
 ## Colour
 
 92. Hue says which region a thing belongs to. Lightness says whether a cell is occupied.
     The mark says what occupies it.
-93. An outline means the cell is empty. A fill means it holds something.
-94. An outline is always the hue of what it outlines.
+93. **[experiment 4]** An outline means the cell is empty, a fill means it holds
+    something. Not true here: an empty cell in a region is a tint, an empty cell outside
+    one is bare page, and nothing outlines an empty cell at all.
+94. A *ring* — hover, selection, focus — is the hue of what it is around. The outlines of a
+    proposal's two regions are not: they are the move colour, by 96.
 95. A cell in no region uses the neutral hue.
 96. The move colour belongs to the act, not to anything on the grid, and is not one of the
     hues.
@@ -181,7 +184,8 @@ shadows than from an argument about it.
 99. The only things that ever animate are the crawling link dashes and the flowing
     chevrons.
 100. Both move on one shared counter, so everything in flight moves together.
-101. The frame loop runs only while something is focused or a move is being proposed.
+101. The frame loop runs only while something is focused or a move is being proposed. It
+     schedules nothing when idle.
 
 ## Gaps and contradictions
 
