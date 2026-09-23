@@ -11,7 +11,8 @@ being written down again on purpose, or it does not re-enter.
 
 | Doc | What it covers |
 |---|---|
-| [principles.md](principles.md) | Rules that keep recurring, each with the mistake it prevents |
+| [choices.md](choices.md) | The specific decisions behind the grid, as made |
+| [principles.md](principles.md) | Generalisations drawn from them. Subordinate to the above |
 | [model.md](model.md) | The data layer: terminals, programs, agents, and what the first version models |
 | [grid.md](grid.md) | The spatial model: cells, tiles, regions, what has an address |
 

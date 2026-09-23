@@ -1,5 +1,9 @@
 # Principles
 
+> These are generalisations drawn after the fact. They do not authorise anything. Where a
+> principle here and a decision in [choices.md](choices.md) disagree, the decision wins —
+> it was made about something real, and this was inferred from it.
+
 Rules that keep recurring, each with the mistake it prevents. They were all arrived at by
 making the mistake first, which is why each one has a failure attached rather than a
 justification — a principle without a failure behind it is a preference.
