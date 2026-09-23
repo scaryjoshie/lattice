@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
 import { MARKS } from "./marks.ts";
+import { type Group, Popup } from "./Popup.tsx";
 import type { TextStyle, TileKind } from "./model.ts";
 
 /**
@@ -52,86 +52,59 @@ export function Menu({
   onPick(kind: TileKind, style?: TextStyle): void;
   onClose(): void;
 }) {
-  const [query, setQuery] = useState("");
-  const [index, setIndex] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
-
-  // The heading matches too, so "agents" finds both of them.
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return GROUPS;
-    return GROUPS.map((group) => ({
-      heading: group.heading,
-      items: group.heading.includes(q)
-        ? group.items
-        : group.items.filter((item) => item.label.includes(q)),
-    })).filter((group) => group.items.length > 0);
-  }, [query]);
-
-  const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
-  const selected = Math.min(index, Math.max(flat.length - 1, 0));
-
-  const pick = (item: Item | undefined) => {
-    if (item) onPick(item.kind, item.style);
-  };
-
+  const groups: Group[] = GROUPS.map((group) => ({
+    heading: group.heading,
+    items: group.items.map((item) => ({
+      id: item.label,
+      label: item.label,
+      icon: item.kind === "text" ? <TextMark style={item.style} /> : <Mark kind={item.kind} />,
+    })),
+  }));
+  const byLabel = new Map(GROUPS.flatMap((g) => g.items).map((item) => [item.label, item]));
   return (
-    <div
-      className="menu"
-      style={{ left: x, top: y }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerUp={(e) => e.stopPropagation()}
-    >
-      <input
-        ref={input}
-        className="menu-query"
-        data-open={query.length > 0 || undefined}
-        value={query}
-        autoFocus
-        spellCheck={false}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setIndex(0);
-        }}
-        onBlur={() => input.current?.focus()}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setIndex((n) => (n + 1) % Math.max(flat.length, 1));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setIndex((n) => (n - 1 + flat.length) % Math.max(flat.length, 1));
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            pick(flat[selected]);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onClose();
-          }
-        }}
-      />
-      {groups.map((group) => (
-        <div className="menu-group" key={group.heading}>
-          <div className="menu-heading">{group.heading}</div>
-          {group.items.map((item) => (
-            <button
-              className="menu-item"
-              type="button"
-              key={item.label}
-              data-selected={flat[selected] === item || undefined}
-              onPointerEnter={() => setIndex(flat.indexOf(item))}
-              onClick={() => pick(item)}
-            >
-              <span className="menu-mark">
-                {item.kind === "text" ? <TextMark style={item.style} /> : <Mark kind={item.kind} />}
-              </span>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ))}
-      {flat.length === 0 && <div className="menu-heading">no matches</div>}
-    </div>
+    <Popup
+      x={x}
+      y={y}
+      groups={groups}
+      search
+      onClose={onClose}
+      onPick={(id) => {
+        const item = byLabel.get(id);
+        if (item) onPick(item.kind, item.style);
+      }}
+    />
+  );
+}
+
+/** What can be done to a tile that is already there. Short enough not to need searching. */
+export function TileMenu({
+  x,
+  y,
+  isText,
+  onPick,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  isText: boolean;
+  onPick(action: "rename" | "delete"): void;
+  onClose(): void;
+}) {
+  return (
+    <Popup
+      x={x}
+      y={y}
+      groups={[
+        {
+          items: [
+            { id: "rename", label: isText ? "edit" : "rename" },
+            { id: "delete", label: "delete" },
+          ],
+        },
+      ]}
+      onClose={onClose}
+      onPick={(id) => onPick(id as "rename" | "delete")}
+    />
   );
 }
 

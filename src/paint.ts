@@ -48,6 +48,8 @@ const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 export interface Cell {
   hue: number | null;
   occupied: boolean;
+  /** Which tile owns this cell, so any part of a run can be acted on. */
+  tileId?: string;
   /** For a tile larger than one cell, the whole of it — so focus can cover all of it. */
   extent?: { ci: number; ri: number; span: number; rows: number };
 }
@@ -130,10 +132,11 @@ function mark(
 ): void {
   const side = size * MARK;
   const scale = side / MARK_UNITS;
-  // A named tile sits its mark a little high to make room underneath.
-  const lift = spot.name && size > NAME_FROM ? size * 0.09 : 0;
+  // The mark sits in the same place whether or not the tile has a name. Moving it to make
+  // room made named and unnamed tiles disagree about where a mark belongs, and made the
+  // mark jump the moment a name was committed. The name fits underneath as it is.
   ctx.save();
-  ctx.translate(x + (size - side) / 2, y + (size - side) / 2 - lift);
+  ctx.translate(x + (size - side) / 2, y + (size - side) / 2);
   ctx.scale(scale, scale);
   ctx.fillStyle = hue(spot.hue).ink;
   ctx.strokeStyle = hue(spot.hue).ink;
@@ -159,7 +162,7 @@ function mark(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = hue(spot.hue).ink;
-  ctx.fillText(clip(ctx, spot.name, size * 0.84), x + size / 2, y + size * 0.74);
+  ctx.fillText(clip(ctx, spot.name, size * 0.86), x + size / 2, y + size * 0.79);
   ctx.restore();
 }
 

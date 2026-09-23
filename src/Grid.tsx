@@ -12,7 +12,7 @@ import {
   type TextRun,
 } from "./paint.ts";
 import { fontOf, METRICS, nameFont, spanFor } from "./measure.ts";
-import { Menu } from "./Menu.tsx";
+import { Menu, TileMenu } from "./Menu.tsx";
 import { useGrid } from "./store.ts";
 import { onTheme } from "./theme.ts";
 
@@ -124,9 +124,9 @@ function Namer({ id, onDone }: { id: string; onDone(): void }) {
       value={draft}
       style={{
         left: worldX(ci),
-        top: worldX(ri) + CELL * 0.62,
+        top: worldX(ri) + CELL * 0.69,
         width: CELL,
-        height: CELL * 0.24,
+        height: CELL * 0.2,
         font: nameFont(CELL),
       }}
       onChange={(e) => setDraft(e.target.value)}
@@ -158,6 +158,7 @@ export function Grid() {
   const addAt = useGrid((s) => s.addAt);
   const setText = useGrid((s) => s.setText);
   const moveTile = useGrid((s) => s.move);
+  const removeTile = useGrid((s) => s.remove);
 
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
@@ -165,6 +166,8 @@ export function Grid() {
   const [editSpan, setEditSpan] = useState(1);
   /** The tile being renamed, if any. */
   const [naming, setNaming] = useState<string | null>(null);
+  /** Right-click on something that is already there. */
+  const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
   /** The move in progress, while shift is held. */
@@ -199,6 +202,7 @@ export function Grid() {
           cells.set(`${ci + dx},${ri + dy}`, {
             hue: existing?.hue ?? null,
             occupied: true,
+            tileId: tile.id,
             // Selecting a run selects all of it, not the one cell under the pointer.
             extent: { ci, ri, span: w, rows: h },
           });
@@ -386,7 +390,7 @@ export function Grid() {
 
   const onMove = (event: React.PointerEvent) => {
     const host = viewport.current;
-    if (!host || menu || editing || naming) return;
+    if (!host || menu || editing || naming || acting) return;
     if (dragging.current) {
       const at = cellUnder(event);
       if (at) {
@@ -436,6 +440,10 @@ export function Grid() {
     }
     const host = viewport.current;
     if (editing || naming) return;
+    if (acting) {
+      setActing(null);
+      return;
+    }
     if (menu) {
       setMenu(null);
       // Pick the hover back up where the pointer already is, rather than waiting for it
@@ -460,10 +468,11 @@ export function Grid() {
   const onContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     const at = cellUnder(event);
-    const id = at && model.current.byCell.get(`${at[0]},${at[1]}`);
+    const id = at && model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
     if (id) {
       hover.current = null;
-      setNaming(id);
+      setMenu(null);
+      setActing({ x: event.clientX, y: event.clientY, id });
     }
   };
 
@@ -497,6 +506,21 @@ export function Grid() {
         {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
       </div>
       {menu && <Menu x={menu.x} y={menu.y} onPick={pick} onClose={() => setMenu(null)} />}
+      {acting && (
+        <TileMenu
+          x={acting.x}
+          y={acting.y}
+          isText={grid.tiles.find((x) => x.id === acting.id)?.kind === "text"}
+          onClose={() => setActing(null)}
+          onPick={(action) => {
+            const id = acting.id;
+            setActing(null);
+            if (action === "delete") removeTile(id);
+            else if (grid.tiles.find((x) => x.id === id)?.kind === "text") setEditing(id);
+            else setNaming(id);
+          }}
+        />
+      )}
     </div>
   );
 }
