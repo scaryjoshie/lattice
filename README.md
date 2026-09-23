@@ -11,6 +11,7 @@ being written down again on purpose, or it does not re-enter.
 
 | Doc | What it covers |
 |---|---|
+| [principles.md](principles.md) | Rules that keep recurring, each with the mistake it prevents |
 | [model.md](model.md) | The data layer: terminals, programs, agents, and what the first version models |
 | [grid.md](grid.md) | The spatial model: cells, tiles, regions, what has an address |
 
