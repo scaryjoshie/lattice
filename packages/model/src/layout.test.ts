@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { apply } from "./command.ts";
-import { footprint, type Grid, type Tile } from "./grid.ts";
+import { footprint, type Grid, proposeMove, type Tile } from "./grid.ts";
 import { layout, withText } from "./layout.ts";
 import { cellsFor, clip, fits, linesFor, spanFor, wrap } from "./text.ts";
 
@@ -75,6 +75,21 @@ describe("layout", () => {
     expect(f.span).toBe(2);
     expect(f.rows).toBe(cellsFor("note", linesFor("note", "the quick brown fox jumps over the lazy dog again and again", 2)));
     expect(f.rows).toBeGreaterThan(1);
+  });
+
+  test("a run yields: a move is judged against runs as they are, not as they would grow", () => {
+    // A title wanting five cells, cut to two by the scope beside it. Moving the scope one
+    // cell further away must not be refused by the room the title would take back.
+    const scope = { id: "infra", name: "infra", hue: 1, columnStart: "x4", columnEnd: "x6", rowStart: "y0", rowEnd: "y2" };
+    const g = world([title("t", 2, 1, "a very long title here"), host("h", 5, 1)], [scope]);
+    expect(at(g, "t").span).toBe(2);
+    const from = { ci: 4, ri: 0, span: 3, rows: 3 };
+    const v = proposeMove(g, from, { ...from, ci: 5 });
+    expect(v.ok).toBe(true);
+    const moved = apply(g, { kind: "move", from, to: { ...from, ci: 5 } }).grid;
+    expect(at(moved, "t").span).toBe(3);
+    // Onto the title's visible cells is still refused: the text is there.
+    expect(proposeMove(g, from, { ...from, ci: 2 }).ok).toBe(false);
   });
 
   test("a draft is laid out without touching the document", () => {

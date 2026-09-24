@@ -146,9 +146,10 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     the press inside the selection and no other.
 46. A move exchanges the selection's region with the region it would occupy, of the same
     size, carrying everything inside: items, and whole scopes with their contents.
-47. It is legal when both regions are well-formed (5). The destination is judged in the
-    world with the carried things lifted out, so a thing may slide over its own old
-    cells.
+47. It is legal when both regions are well-formed (5). The destination is judged with the
+    carried things lifted out, so a thing may slide over its own old cells. Lifted means
+    ignored, not removed: every other run is judged at the extent it has now, never at
+    the extent it would grow to once the carried thing is gone (81).
 48. A region overlapping its own destination is a slide, not an exchange, and is allowed
     only into space nothing else is in.
 49. Swapping two items of the same size, moving into free space, a two-cell run trading
@@ -245,7 +246,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     anything that stops blocking a run lets it breathe with no rule per case. Move a host
     away and the run grows; undo and it is cut again. Two runs in one row are bounded by
     the later one's origin and the earlier one's extent, in tile order. A cap is the only
-    stored size.
+    stored size. A run yields: anything may be placed or moved into the room a run would
+    like to grow into, and the run is cut; only the cells it shows now are held (4). Text
+    never pushes.
 82. **[proposed]** `*italic*` and `**bold**` mark emphasis inline. Emphasis changes width,
     so it changes the span a run needs.
 

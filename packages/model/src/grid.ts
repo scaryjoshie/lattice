@@ -209,31 +209,19 @@ export function scopeAt(grid: Grid, ci: number, ri: number): Scope | null {
  * selection and for both halves of a move, and it is what "you cannot cut a worktree"
  * means.
  */
-export function wellFormed(grid: Grid, r: Region): boolean {
+export function wellFormed(grid: Grid, r: Region, lifted: ReadonlySet<string> = new Set()): boolean {
   return (
     grid.tiles.every((tile) => {
+      if (lifted.has(tile.id)) return true;
       const f = footprint(grid, tile);
       return !overlaps(f, r) || covers(r, f);
     }) &&
     grid.scopes.every((scope) => {
+      if (lifted.has(scope.id)) return true;
       const b = bounds(grid, scope);
       return !overlaps(b, r) || covers(r, b) || covers(b, r);
     })
   );
-}
-
-/**
- * The world with some things lifted out of it. A proposal reasons about this, not about
- * the world as it is: what is being carried is nowhere until it lands, and asking the
- * ordinary questions of the lifted world is what stops a thing from straddling its own
- * destination.
- */
-export function without(grid: Grid, ids: ReadonlySet<string>): Grid {
-  return {
-    ...grid,
-    tiles: grid.tiles.filter((tile) => !ids.has(tile.id)),
-    scopes: grid.scopes.filter((scope) => !ids.has(scope.id)),
-  };
 }
 
 /**
@@ -601,10 +589,19 @@ export function proposeMove(
   from: Region,
   to: Region,
 ): { ok: boolean; swaps: boolean; moves: readonly Move[] } {
-  const here = owners(grid).filter((o) => covers(from, o.region));
-  // Everything else, in a world with the carried things lifted out of it.
-  const rest = without(grid, new Set(here.map((o) => o.id)));
-  const others = owners(rest);
+  const all = owners(grid);
+  const here = all.filter((o) => covers(from, o.region));
+  /*
+   * Everything else, with the carried things lifted out: what is being carried is
+   * nowhere until it lands, which is what lets a thing slide over its own old cells.
+   * Lifted by ignoring their ids, not by building a world without them, because a run
+   * is elastic: in a world without the carried, a run they had cut short grows back
+   * into the vacated cells, and the move is judged against text that is not there. A
+   * run yields to whatever lands beside it, so a move is judged against runs as they
+   * are now, never as they would grow.
+   */
+  const lifted = new Set(here.map((o) => o.id));
+  const others = all.filter((o) => !lifted.has(o.id));
   // What is inside the destination and would come back — not what merely surrounds it,
   // which is a scope the destination lies in and which stays where it is.
   const there = others.filter((o) => covers(to, o.region));
@@ -617,8 +614,8 @@ export function proposeMove(
 
   // Both regions must be well-formed: nothing partly inside either, because such a thing
   // cannot be exchanged without tearing, and no worktree is ever cut. The source is
-  // judged in the world as it is; the destination in the world without the carried.
-  if (!wellFormed(grid, from) || !wellFormed(rest, to)) return refuse;
+  // judged as it is; the destination with the carried things lifted.
+  if (!wellFormed(grid, from) || !wellFormed(grid, to, lifted)) return refuse;
 
   const shift = (o: { id: string; region: Region }, by: Region, into: Region): Move => ({
     id: o.id,
