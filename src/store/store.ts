@@ -15,6 +15,15 @@ interface Store {
   /** Returns how many tracks were prepended, which shifts every index the caller holds,
    *  and for a place the new tile's id. */
   run(command: Command): { ok: boolean; dc: number; dr: number; id?: string };
+  /**
+   * History is the grids as they were before each command, since the grid is a small
+   * immutable value and a snapshot cannot be wrong the way an inverse command can. Undo
+   * restores one; redo restores what undo replaced. A new command drops the redo side.
+   */
+  past: readonly Grid[];
+  future: readonly Grid[];
+  undo(): boolean;
+  redo(): boolean;
   remeasure(): void;
 }
 
@@ -60,9 +69,26 @@ export const useGrid = create<Store>((set, get) => ({
     return propose(get().grid, command);
   },
   run(command) {
-    const made = apply(get().grid, command);
-    if (made.ok) set({ grid: refit(made.grid) });
+    const { grid, past } = get();
+    const made = apply(grid, command);
+    if (made.ok) set({ grid: refit(made.grid), past: [...past, grid], future: [] });
     return { ok: made.ok, dc: made.dc, dr: made.dr, id: made.id };
+  },
+  past: [],
+  future: [],
+  undo() {
+    const { grid, past, future } = get();
+    const before = past[past.length - 1];
+    if (!before) return false;
+    set({ grid: before, past: past.slice(0, -1), future: [grid, ...future] });
+    return true;
+  },
+  redo() {
+    const { grid, past, future } = get();
+    const [next, ...rest] = future;
+    if (!next) return false;
+    set({ grid: next, past: [...past, grid], future: rest });
+    return true;
   },
   /**
    * Measure every run again. The seed is measured when this module is evaluated, which is
@@ -70,6 +96,6 @@ export const useGrid = create<Store>((set, get) => ({
    * face — a different width for the same words.
    */
   remeasure() {
-    set((s) => ({ grid: measured(s.grid) }));
+    set((s) => ({ grid: measured(s.grid), past: s.past.map(measured), future: s.future.map(measured) }));
   },
 }));

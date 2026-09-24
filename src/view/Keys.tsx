@@ -10,7 +10,7 @@ export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu"
 /** A chord is keys, pointer parts and words in order. */
 type Row = readonly [chord: readonly string[], means: string];
 
-const KEYS = new Set(["shift", "⌘", "enter", "esc", "↑", "↓"]);
+const KEYS = new Set(["shift", "⌘", "z", "enter", "esc", "↑", "↓"]);
 const MOUSE = { click: "left", "right-click": "right", wheel: "wheel", drag: "left" } as const;
 
 const ROWS: Record<Mode, readonly Row[]> = {
@@ -21,6 +21,7 @@ const ROWS: Record<Mode, readonly Row[]> = {
     [["shift", "click"], "add"],
     [["right-click"], "menu"],
     [["wheel"], "zoom"],
+    [["⌘", "z"], "undo"],
   ],
   selected: [
     [["shift", "click"], "open"],

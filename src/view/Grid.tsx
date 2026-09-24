@@ -96,6 +96,8 @@ export function Grid() {
   const grid = useGrid((s) => s.grid);
   const propose = useGrid((s) => s.propose);
   const run = useGrid((s) => s.run);
+  const undo = useGrid((s) => s.undo);
+  const redo = useGrid((s) => s.redo);
 
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
@@ -680,8 +682,16 @@ export function Grid() {
     };
     const onKey = (e: KeyboardEvent) => {
       set(e.shiftKey);
+      if (claimed(e.target) || document.querySelector(".opened")) return;
+      // Cmd is the application layer. Undo and redo are the document's; a selection may
+      // name something the restored grid does not have, so it is dropped.
+      if (e.type === "keydown" && e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey ? redo() : undo()) setSelection(null);
+        return;
+      }
       // An opened tile owns Escape while it is up, the way an overlay owns the pointer.
-      if (e.key === "Escape" && !claimed(e.target) && !document.querySelector(".opened")) {
+      if (e.key === "Escape") {
         if (dragging.current || stretching.current || sweeping.current) {
           // Cancel the move, the resize or the sweep: drop it and spend the release on nothing.
           dragging.current = null;
@@ -703,7 +713,7 @@ export function Grid() {
       window.removeEventListener("keyup", onKey);
       window.removeEventListener("blur", onBlur);
     };
-  }, [schedule, camera]);
+  }, [schedule, camera, undo, redo]);
 
   const onMove = (event: React.PointerEvent) => {
     pointer.current = { x: event.clientX, y: event.clientY };
