@@ -307,7 +307,11 @@ export function Grid() {
       if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         send({ type: "key", key: e.shiftKey ? "Redo" : "Undo", down: true });
-      } else if (e.key === "Escape") send({ type: "key", key: "Escape", down: true });
+      } else if (e.key === "Escape") {
+        // The grid's: say so, or the window takes it as cancel and, in fullscreen, leaves.
+        e.preventDefault();
+        send({ type: "key", key: "Escape", down: true });
+      }
     };
     const onBlur = () => send({ type: "key", key: "Shift", down: false });
     window.addEventListener("keydown", onKey);
