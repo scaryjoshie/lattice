@@ -21,36 +21,51 @@ export interface Track {
 /**
  * Two families, and they are not variants of each other.
  *
- * An *occupant* is something running: it fills a cell, and one cell is all it ever wants.
- * *Text* is content written on the canvas: it has no process, and its size is decided by
- * what it says rather than by the grid. A title grows sideways as it gets longer; a note
- * is a block you size and the words wrap inside it. Those are different geometries, which
- * is the real reason text cannot just be another kind of occupant.
+ * A *terminal* is a place: it fills one cell, and what runs in it is a fact the runtime
+ * observes, never a field here. A *browser* is a view, one cell too. A *run* is text
+ * written on the canvas: no process, and a size decided by what it says rather than by
+ * the grid. A title grows sideways; a note is a block the words wrap inside. Those are
+ * different geometries, which is the real reason text is its own record rather than an
+ * occupant with extra fields.
  */
-export type OccupantKind = "claude" | "codex" | "shell" | "browser";
 export type TextStyle = "title" | "note";
-export type TileKind = OccupantKind | "text";
+export type Family = Tile["family"];
 
-export interface Tile {
+interface Placed {
   readonly id: string;
-  readonly kind: TileKind;
   readonly columnId: string;
   readonly rowId: string;
-  /** What this one is called. Occupants only; a run is named by what it says. */
+}
+
+export interface Terminal extends Placed {
+  readonly family: "terminal";
+  /** What this one is called, if named. */
   readonly name?: string;
-  /** Text only. */
-  readonly style?: TextStyle;
-  readonly text?: string;
-  /** Cells occupied, starting at (columnId, rowId). A title is always one row tall. */
-  readonly span?: number;
-  readonly rows?: number;
+}
+
+export interface Browser extends Placed {
+  readonly family: "browser";
+  readonly name?: string;
+}
+
+export interface Run extends Placed {
+  readonly family: "text";
+  readonly style: TextStyle;
+  readonly text: string;
+  /** Cells occupied, starting at (columnId, rowId). */
+  readonly span: number;
+  readonly rows: number;
   /**
-   * Text only: a size the writer fixed by dragging an edge. A capped width is a box the
-   * words wrap inside; a capped height clips them. Uncapped, the run is as big as what it
-   * says needs, bounded by what is free.
+   * A size the writer fixed by dragging an edge. A capped width is a box the words wrap
+   * inside; a capped height clips them. Uncapped, the run is as big as what it says
+   * needs, bounded by what is free.
    */
   readonly cap?: { readonly span?: number; readonly rows?: number };
 }
+
+export type Tile = Terminal | Browser | Run;
+
+export const isRun = (tile: Tile): tile is Run => tile.family === "text";
 
 /**
  * A scope is a named region that tiles belong to — a worktree. Rectangular in the model,
@@ -141,15 +156,15 @@ export function addTile(
   grid: Grid,
   columnId: string,
   rowId: string,
-  kind: TileKind,
+  family: Family,
   id = nextId("t"),
   style?: TextStyle,
 ): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
   const tile: Tile =
-    kind === "text"
-      ? { id, kind, columnId, rowId, style: style ?? "title", text: "", span: 1, rows: 1 }
-      : { id, kind, columnId, rowId };
+    family === "text"
+      ? { id, family, columnId, rowId, style: style ?? "title", text: "", span: 1, rows: 1 }
+      : { id, family, columnId, rowId };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
 
@@ -320,8 +335,8 @@ export function footprint(grid: Grid, tile: Tile): Region {
   return {
     ci: indexOfTrack(grid.columns, tile.columnId),
     ri: indexOfTrack(grid.rows, tile.rowId),
-    span: tile.span ?? 1,
-    rows: tile.rows ?? 1,
+    span: isRun(tile) ? tile.span : 1,
+    rows: isRun(tile) ? tile.rows : 1,
   };
 }
 
@@ -362,7 +377,7 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
   if (moves.length === 0) return { grid, dc: 0, dr: 0 };
   const size = (m: Move) => {
     const tile = grid.tiles.find((x) => x.id === m.id);
-    if (tile) return { span: m.span ?? tile.span ?? 1, rows: m.rows ?? tile.rows ?? 1 };
+    if (tile) return { span: m.span ?? (isRun(tile) ? tile.span : 1), rows: m.rows ?? (isRun(tile) ? tile.rows : 1) };
     const scope = grid.scopes.find((x) => x.id === m.id);
     const b = scope ? bounds(grid, scope) : { span: 1, rows: 1 };
     return { span: m.span ?? b.span, rows: m.rows ?? b.rows };
@@ -392,9 +407,9 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
       if (!m || !columnId || !rowId) return tile;
       const moved = { ...tile, columnId, rowId };
       // A size on a run's move is the writer fixing that axis: a cap, kept until lifted.
-      if (tile.kind !== "text" || (m.span === undefined && m.rows === undefined)) return moved;
+      if (!isRun(tile) || (m.span === undefined && m.rows === undefined)) return moved;
       return {
-        ...moved,
+        ...(moved as Run),
         span: m.span ?? tile.span,
         rows: m.rows ?? tile.rows,
         cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows },
@@ -511,7 +526,7 @@ export interface Resize {
  * out of its scope or into one; inward shrinks it and the words reflow. Either way the
  * axis dragged becomes a cap.
  */
-function resizeRun(grid: Grid, tile: Tile, axis: Axis, line: number, n: number): Resize {
+function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): Resize {
   const b = footprint(grid, tile);
   const P = axis === "col" ? "ci" : "ri";
   const S = axis === "col" ? "span" : "rows";
@@ -544,7 +559,7 @@ function resizeRun(grid: Grid, tile: Tile, axis: Axis, line: number, n: number):
 }
 
 export function proposeResize(grid: Grid, ownerId: string, axis: Axis, line: number, n: number): Resize {
-  const run = grid.tiles.find((x) => x.id === ownerId && x.kind === "text");
+  const run = grid.tiles.find((x): x is Run => x.id === ownerId && isRun(x));
   if (run) return resizeRun(grid, run, axis, line, n);
   const scope = grid.scopes.find((s) => s.id === ownerId);
   if (!scope) return { ok: false, after: { ci: 0, ri: 0, span: 1, rows: 1 }, band: null, moves: [] };

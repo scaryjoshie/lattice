@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from "react";
-import { columnsFor, indexOfTrack, rowsFor } from "../model/grid.ts";
+import { columnsFor, indexOfTrack, isRun, rowsFor } from "../model/grid.ts";
 import { cellsFor, fontOf, linesFor, METRICS, spanFor } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
 import { useGrid } from "../store/store.ts";
@@ -24,13 +24,14 @@ export function Editor({
 }) {
   const grid = useGrid((s) => s.grid);
   const run = useGrid((s) => s.run);
-  const tile = grid.tiles.find((x) => x.id === id);
+  const found = grid.tiles.find((x) => x.id === id);
+  const tile = found && isRun(found) ? found : undefined;
   const [draft, setDraft] = useState(tile?.text ?? "");
 
   if (!tile) return null;
   const ci = indexOfTrack(grid.columns, tile.columnId);
   const ri = indexOfTrack(grid.rows, tile.rowId);
-  const style = tile.style ?? "title";
+  const style = tile.style;
   const m = METRICS[style];
 
   // A capped axis is the size the writer fixed; an uncapped one is what the words need.
@@ -82,7 +83,7 @@ export function Editor({
         }
         if (e.key === "Escape") {
           onDone();
-          if ((tile.text ?? "") === "") run({ kind: "remove", id });
+          if (tile.text === "") run({ kind: "remove", id });
         }
       }}
     />

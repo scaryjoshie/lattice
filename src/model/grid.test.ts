@@ -7,6 +7,7 @@ import {
   footprint,
   type Grid,
   insertColumnsAt,
+  isRun,
   proposeMove,
   proposeResize,
   push,
@@ -37,13 +38,11 @@ function grid(
   return {
     columns,
     rows,
-    tiles: tiles.map(([id, ci, ri, span, rows_]) => ({
-      id,
-      kind: span === 1 && rows_ === 1 ? "claude" : "text",
-      columnId: `x${ci}`,
-      rowId: `y${ri}`,
-      ...(span === 1 && rows_ === 1 ? {} : { style: "title" as const, text: id, span, rows: rows_ }),
-    })),
+    tiles: tiles.map(([id, ci, ri, span, rows_]): Tile =>
+      span === 1 && rows_ === 1
+        ? { id, family: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
+        : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, span, rows: rows_ },
+    ),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
       id,
       name: id,
@@ -288,7 +287,7 @@ describe("proposeResize", () => {
   });
 
   test("every legal resize of the seed keeps the invariants", () => {
-    const g0 = seed();
+    const g0 = seed().grid;
     for (const sc of g0.scopes) {
       const b = bounds(g0, sc);
       for (const axis of ["col", "row"] as const) {
@@ -314,7 +313,8 @@ describe("proposeResize", () => {
     expect(at(applied(g1, out.moves).grid, "a")).toEqual(region(5, 1));
     const inward = proposeResize(g1, "run", "col", 4, -1);
     expect(inward.ok).toBe(true);
-    expect(applied(g1, inward.moves).grid.tiles.find((x) => x.id === "run")?.cap).toEqual({ span: 1, rows: undefined });
+    const shrunk = applied(g1, inward.moves).grid.tiles.find((x) => x.id === "run");
+    expect(shrunk && isRun(shrunk) ? shrunk.cap : null).toEqual({ span: 1, rows: undefined });
     expect(proposeResize(g1, "run", "col", 3, 1).ok).toBe(false);
   });
 
@@ -328,7 +328,7 @@ describe("proposeResize", () => {
   });
 
   test("a corner is two resizes, the second on the grid the first leaves", () => {
-    const g0 = seed();
+    const g0 = seed().grid;
     const auth = g0.scopes[0]!;
     const b = bounds(g0, auth);
     const col = proposeResize(g0, auth.id, "col", b.ci + 1, -3);

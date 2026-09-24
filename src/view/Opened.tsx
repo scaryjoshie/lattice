@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { OccupantKind } from "../model/grid.ts";
 
 /**
  * A tile opened: the same rectangle, drawn bigger. The panel lives at its full size and is
@@ -18,14 +17,12 @@ export interface Rect {
 }
 
 export function Opened({
-  kind,
   name,
   from,
   to,
   onLeave,
   onClose,
 }: {
-  kind: OccupantKind;
   name?: string;
   from: Rect;
   to: Rect;

@@ -1,4 +1,6 @@
-import { type Grid, type Link, nextId, type Scope, type Tile, type TileKind } from "../model/grid.ts";
+import { type Grid, type Link, nextId, type Scope, type Tile } from "../model/grid.ts";
+import type { ProgramId } from "../providers/descriptors.ts";
+import type { Facts } from "../runtime/facts.ts";
 
 /**
  * A grid to look at. Nothing in it is real: the scopes are not worktrees, the occupants
@@ -6,7 +8,7 @@ import { type Grid, type Link, nextId, type Scope, type Tile, type TileKind } fr
  * while the daemon does not exist, and it is the only file that knows what is on it.
  * The runs' spans here are placeholders; the store measures them from their words.
  */
-export function seed(): Grid {
+export function seed(): { grid: Grid; facts: Facts } {
   const columns = Array.from({ length: 18 }, () => ({ id: nextId("c") }));
   const rows = Array.from({ length: 11 }, () => ({ id: nextId("r") }));
   const col = (i: number) => columns[i]!.id;
@@ -27,7 +29,7 @@ export function seed(): Grid {
   ];
 
 
-  const cells: [number, number, TileKind][] = [
+  const cells: [number, number, ProgramId][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
     [4, 7, "claude"], [5, 7, "claude"], [5, 8, "codex"],
@@ -37,7 +39,7 @@ export function seed(): Grid {
   const tiles: Tile[] = [
     ...texts.map(([c, r, span, text]) => ({
       id: nextId("t"),
-      kind: "text" as const,
+      family: "text" as const,
       style: "title" as const,
       columnId: col(c),
       rowId: row(r),
@@ -45,14 +47,20 @@ export function seed(): Grid {
       span,
       rows: 1,
     })),
-    ...cells.map(([c, r, kind]) => ({
+    ...cells.map(([c, r]) => ({
       id: nextId("t"),
-      kind,
+      family: "terminal" as const,
       columnId: col(c),
       rowId: row(r),
     })),
   ];
-  const agent = (n: number) => tiles.filter((x) => x.kind !== "text")[n]?.id ?? "";
+  const terminals = tiles.filter((x) => x.family === "terminal");
+  const agent = (n: number) => terminals[n]?.id ?? "";
+  // What the mock says is running in each terminal. A shell has no entry.
+  const programs: Record<string, ProgramId> = {};
+  cells.forEach(([, , program], n) => {
+    if (program !== "shell") programs[agent(n)] = program;
+  });
   const links: Link[] = [
     { from: agent(0), to: agent(3) },
     { from: agent(0), to: agent(5) },
@@ -60,5 +68,8 @@ export function seed(): Grid {
     { from: agent(5), to: agent(6) },
     { from: agent(1), to: agent(9) },
   ];
-  return { columns, rows, tiles, scopes, links };
+  return { grid: { columns, rows, tiles, scopes, links }, facts: { programs } };
 }
+
+/** The one seed the stores share: made once, so the facts name the grid's terminals. */
+export const seeded = seed();

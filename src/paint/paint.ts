@@ -87,7 +87,7 @@ function mark(
   ctx.strokeStyle = hue(spot.hue).ink;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (const stroke of MARKS[spot.kind]) {
+  for (const stroke of MARKS[spot.mark]) {
     const shape = path(stroke.d);
     if (stroke.width === undefined) {
       ctx.fill(shape, "evenodd");

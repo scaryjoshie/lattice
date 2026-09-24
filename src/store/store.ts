@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { apply, type Command, propose, type Verdict } from "../model/command.ts";
-import { type Grid, indexOfTrack, rowsFor } from "../model/grid.ts";
-import { seed } from "../mock/seed.ts";
+import { type Grid, indexOfTrack, isRun, rowsFor } from "../model/grid.ts";
+import { seeded } from "../mock/seed.ts";
 import { cellsFor, linesFor, spanFor } from "../paint/measure.ts";
 
 /**
@@ -37,8 +37,8 @@ function measured(grid: Grid): Grid {
   return {
     ...grid,
     tiles: grid.tiles.map((tile) =>
-      tile.kind === "text" && tile.text && tile.cap?.span === undefined
-        ? { ...tile, span: spanFor(tile.style ?? "title", tile.text) }
+      isRun(tile) && tile.text && tile.cap?.span === undefined
+        ? { ...tile, span: spanFor(tile.style, tile.text) }
         : tile,
     ),
   };
@@ -53,19 +53,19 @@ function refit(grid: Grid): Grid {
   return {
     ...grid,
     tiles: grid.tiles.map((tile) => {
-      if (tile.kind !== "text" || tile.cap?.span === undefined || tile.cap.rows !== undefined) return tile;
-      const style = tile.style ?? "title";
-      const span = tile.span ?? 1;
+      if (!isRun(tile) || tile.cap?.span === undefined || tile.cap.rows !== undefined) return tile;
+      const style = tile.style;
+      const span = tile.span;
       const ci = indexOfTrack(grid.columns, tile.columnId);
       const ri = indexOfTrack(grid.rows, tile.rowId);
-      const want = cellsFor(style, linesFor(style, tile.text ?? "", span));
+      const want = cellsFor(style, linesFor(style, tile.text, span));
       return { ...tile, rows: rowsFor(grid, tile.id, ci, ri, span, want) };
     }),
   };
 }
 
 export const useGrid = create<Store>((set, get) => ({
-  grid: measured(seed()),
+  grid: measured(seeded.grid),
   propose(command) {
     return propose(get().grid, command);
   },

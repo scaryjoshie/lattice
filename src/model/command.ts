@@ -8,8 +8,8 @@ import {
   proposeMove,
   proposeResize,
   removeTile,
+  type Family,
   type TextStyle,
-  type TileKind,
 } from "./grid.ts";
 import type { Region } from "./region.ts";
 
@@ -25,7 +25,7 @@ import type { Region } from "./region.ts";
 export type Command =
   | { kind: "move"; from: Region; to: Region }
   | { kind: "resize"; owner: string; col?: Edge; row?: Edge }
-  | { kind: "place"; ci: number; ri: number; tile: TileKind; style?: TextStyle; id?: string }
+  | { kind: "place"; ci: number; ri: number; family: Family; style?: TextStyle; id?: string }
   | { kind: "remove"; id: string }
   | { kind: "setText"; id: string; text: string; span: number; rows: number }
   | { kind: "setName"; id: string; name: string };
@@ -126,7 +126,7 @@ export function apply(grid: Grid, command: Command): Applied {
       if (!column || !row) return same;
       // Named by the caller when what follows must refer to it, else here.
       const id = command.id ?? nextId("t");
-      return { ok: true, grid: addTile(made.grid, column.id, row.id, command.tile, id, command.style), dc: made.dc, dr: made.dr, id };
+      return { ok: true, grid: addTile(made.grid, column.id, row.id, command.family, id, command.style), dc: made.dc, dr: made.dr, id };
     }
     case "remove":
       return { ok: true, grid: removeTile(grid, command.id), dc: 0, dr: 0 };

@@ -1,5 +1,7 @@
 import { type Command, propose } from "../model/command.ts";
-import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, type TileKind, wellFormed } from "../model/grid.ts";
+import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, wellFormed } from "../model/grid.ts";
+import type { ProgramId } from "../providers/descriptors.ts";
+import type { RuntimeCommand } from "../runtime/facts.ts";
 import { contains, type Region } from "../model/region.ts";
 import type { Gesture, Selection, Session, SessionCommand } from "./session.ts";
 import { sameTarget, type Target } from "./target.ts";
@@ -32,7 +34,7 @@ export type Input =
   | { type: "leave" }
   | { type: "key"; key: "Escape" | "Shift" | "Undo" | "Redo"; down: boolean }
   /** What the overlays report back. */
-  | { type: "choose"; tile: TileKind; style?: TextStyle }
+  | { type: "choose"; choice: Choice }
   | { type: "act"; action: "rename" | "delete" }
   | { type: "shape"; span: number; rows: number }
   | { type: "done" }
@@ -40,7 +42,13 @@ export type Input =
   | { type: "leaving" }
   | { type: "closed" };
 
-export type Effect = Command | SessionCommand | { kind: "undo" } | { kind: "redo" };
+export type Effect = Command | SessionCommand | RuntimeCommand | { kind: "undo" } | { kind: "redo" };
+
+/** What the add menu offers: a family to place, and for a terminal, what to start in it. */
+export type Choice =
+  | { family: "text"; style: TextStyle }
+  | { family: "browser" }
+  | { family: "terminal"; program: ProgramId };
 
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 export function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
@@ -125,16 +133,20 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       // typed. Anything else is simply placed. The tile is named here so the commands
       // that follow can refer to it before it exists.
       const id = nextId("t");
-      const place: Command = { kind: "place", ci, ri, tile: input.tile, style: input.style, id };
-      return input.tile === "text"
-        ? [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })]
-        : [overlay(null), place];
+      const { choice } = input;
+      const place: Command = { kind: "place", ci, ri, family: choice.family, style: choice.family === "text" ? choice.style : undefined, id };
+      if (choice.family === "text") {
+        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })];
+      }
+      // A terminal is placed as a terminal; what runs in it is the runtime's to start.
+      const start: Effect[] = choice.family === "terminal" && choice.program !== "shell" ? [{ kind: "start", terminal: id, program: choice.program }] : [];
+      return [overlay(null), place, ...start];
     }
     case "act": {
       if (session.overlay?.kind !== "tile") return [];
       const { id } = session.overlay;
       if (input.action === "delete") return [overlay(null), { kind: "remove", id }, select(null)];
-      const isText = grid.tiles.find((t) => t.id === id)?.kind === "text";
+      const isText = grid.tiles.find((t) => t.id === id)?.family === "text";
       return isText
         ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })]
         : [overlay({ kind: "name", id })];
@@ -266,7 +278,7 @@ function click(grid: Grid, session: Session, input: Extract<Input, { type: "rele
     }
     if (id) {
       const tile = grid.tiles.find((t) => t.id === id);
-      if (!tile || tile.kind === "text") return [];
+      if (!tile || tile.family === "text") return [];
       return [point(null), { kind: "open", opened: { id, leaving: false } }];
     }
     return [point(null), overlay({ kind: "add", at: input.client, ci: cell[0], ri: cell[1] })];

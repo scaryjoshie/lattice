@@ -1,10 +1,14 @@
 import { MARKS } from "../paint/marks.ts";
 import { type Group, Popup } from "./Popup.tsx";
-import type { TextStyle, TileKind } from "../model/grid.ts";
+import type { TextStyle } from "../model/grid.ts";
+import { type MarkId, PROGRAMS } from "../providers/descriptors.ts";
+import type { Choice } from "../session/react.ts";
 
 /**
- * What can go in a cell, grouped by what a thing is rather than by what it does. This is
- * the only place the families are named, so adding a kind is one row.
+ * What can go in a cell, grouped by what a thing is rather than by what it does. Text and
+ * the browser are families of the grid; the agents and the plain terminal are programs
+ * from the descriptor table, so adding a provider adds a row here without this file
+ * changing.
  *
  * Typing filters. The input is there from the moment the menu opens so that keystrokes are
  * never lost, but stays invisible until there is something to show — the menu is a list
@@ -12,32 +16,30 @@ import type { TextStyle, TileKind } from "../model/grid.ts";
  */
 
 interface Item {
-  kind: TileKind;
   label: string;
-  style?: TextStyle;
+  choice: Choice;
+  mark: MarkId | TextStyle;
 }
 
+const programs = Object.values(PROGRAMS);
 const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
   {
     heading: "text",
     items: [
-      { kind: "text", label: "title", style: "title" },
-      { kind: "text", label: "note", style: "note" },
+      { label: "title", choice: { family: "text", style: "title" }, mark: "title" },
+      { label: "note", choice: { family: "text", style: "note" }, mark: "note" },
     ],
   },
   {
     heading: "utilities",
     items: [
-      { kind: "shell", label: "terminal" },
-      { kind: "browser", label: "browser" },
+      ...programs.filter((p) => !p.agent).map((p) => ({ label: p.label, choice: { family: "terminal", program: p.id } as const, mark: p.mark })),
+      { label: "browser", choice: { family: "browser" }, mark: "browser" },
     ],
   },
   {
     heading: "agents",
-    items: [
-      { kind: "claude", label: "claude code" },
-      { kind: "codex", label: "codex" },
-    ],
+    items: programs.filter((p) => p.agent).map((p) => ({ label: p.label, choice: { family: "terminal", program: p.id } as const, mark: p.mark })),
   },
 ];
 
@@ -49,7 +51,7 @@ export function Menu({
 }: {
   x: number;
   y: number;
-  onPick(kind: TileKind, style?: TextStyle): void;
+  onPick(choice: Choice): void;
   onClose(): void;
 }) {
   const groups: Group[] = GROUPS.map((group) => ({
@@ -57,7 +59,7 @@ export function Menu({
     items: group.items.map((item) => ({
       id: item.label,
       label: item.label,
-      icon: item.kind === "text" ? <TextMark style={item.style} /> : <Mark kind={item.kind} />,
+      icon: item.mark === "title" || item.mark === "note" ? <TextMark style={item.mark} /> : <Mark mark={item.mark} />,
     })),
   }));
   const byLabel = new Map(GROUPS.flatMap((g) => g.items).map((item) => [item.label, item]));
@@ -70,7 +72,7 @@ export function Menu({
       onClose={onClose}
       onPick={(id) => {
         const item = byLabel.get(id);
-        if (item) onPick(item.kind, item.style);
+        if (item) onPick(item.choice);
       }}
     />
   );
@@ -109,10 +111,10 @@ export function TileMenu({
 }
 
 /** The same path data the canvas draws, rendered as SVG for the menu. */
-function Mark({ kind }: { kind: Exclude<TileKind, "text"> }) {
+function Mark({ mark }: { mark: MarkId }) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
-      {MARKS[kind].map((stroke) => (
+      {MARKS[mark].map((stroke) => (
         <path
           key={stroke.d}
           d={stroke.d}

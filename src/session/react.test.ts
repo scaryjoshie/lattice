@@ -11,9 +11,9 @@ function world(): Grid {
     columns,
     rows,
     tiles: [
-      { id: "a", kind: "claude", columnId: "x3", rowId: "y2" },
-      { id: "run", kind: "text", style: "title", text: "auth", columnId: "x2", rowId: "y1", span: 2, rows: 1 },
-      { id: "b", kind: "shell", columnId: "x8", rowId: "y4" },
+      { id: "a", family: "terminal", columnId: "x3", rowId: "y2" },
+      { id: "run", family: "text", style: "title", text: "auth", columnId: "x2", rowId: "y1", span: 2, rows: 1 },
+      { id: "b", family: "terminal", columnId: "x8", rowId: "y4" },
     ],
     scopes: [{ id: "auth", name: "auth", hue: 0, columnStart: "x2", columnEnd: "x4", rowStart: "y1", rowEnd: "y4" }],
     links: [],
@@ -144,7 +144,7 @@ describe("overlays", () => {
   test("choosing text places a named run and opens it for typing as the selection", () => {
     const g = world();
     const open = drive(g, [{ type: "context", cell: [6, 6], client: { x: 0, y: 0 } }]).session;
-    const { session, commands } = drive(g, [{ type: "choose", tile: "text", style: "note" }], open);
+    const { session, commands } = drive(g, [{ type: "choose", choice: { family: "text", style: "note" } }], open);
     expect(commands).toHaveLength(1);
     const place = commands[0];
     expect(place?.kind).toBe("place");

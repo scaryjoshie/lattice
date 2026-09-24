@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
-import { footprint, type OccupantKind } from "../model/grid.ts";
+import { footprint } from "../model/grid.ts";
 import { paint } from "../paint/paint.ts";
 import { onTheme } from "../paint/theme.ts";
 import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
 import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
 import type { Target } from "../session/target.ts";
+import { useRuntime } from "../store/runtime.ts";
 import { useSession } from "../store/session.ts";
 import { useGrid } from "../store/store.ts";
 import { useCamera } from "./camera.ts";
@@ -78,7 +79,7 @@ export function Grid() {
     if (!ctx) return;
     const box = host.getBoundingClientRect();
     const cursor = pointer.current ? { x: pointer.current.x - box.left, y: pointer.current.y - box.top } : null;
-    const scene = sceneOf(useGrid.getState().grid, useSession.getState().session, { camera, width, height, dpr, cursor });
+    const scene = sceneOf(useGrid.getState().grid, useRuntime.getState().facts, useSession.getState().session, { camera, width, height, dpr, cursor });
     last.current = scene;
     paint(ctx, scene, dash.current);
     running.current = animating(scene);
@@ -137,7 +138,7 @@ export function Grid() {
   // Anything that changes the grid or the session wants a paint, on the same frame as
   // anything else that does.
   useEffect(() => {
-    const stop = [useGrid.subscribe(() => schedule(camera.current)), useSession.subscribe(() => schedule(camera.current))];
+    const stop = [useGrid, useSession, useRuntime].map((store) => store.subscribe(() => schedule(camera.current)));
     schedule(camera.current);
     return () => stop.forEach((f) => f());
   }, [schedule, camera]);
@@ -236,6 +237,10 @@ export function Grid() {
         case "open":
         case "shift":
           useSession.getState().apply(effect);
+          break;
+        case "start":
+        case "stop":
+          useRuntime.getState().observe(effect);
           break;
         case "undo":
           useGrid.getState().undo();
@@ -379,8 +384,7 @@ export function Grid() {
       </div>
       {opened && openedTile && rects && (
         <Opened
-          kind={openedTile.kind as OccupantKind}
-          name={openedTile.name}
+          name={openedTile.family === "text" ? undefined : openedTile.name}
           from={rects.from}
           to={rects.to}
           onLeave={() => send({ type: "leaving" })}
@@ -392,7 +396,7 @@ export function Grid() {
         <Menu
           x={overlay.at.x}
           y={overlay.at.y}
-          onPick={(tile, style) => send({ type: "choose", tile, style })}
+          onPick={(choice) => send({ type: "choose", choice })}
           onClose={() => send({ type: "dismiss" })}
         />
       )}
@@ -400,7 +404,7 @@ export function Grid() {
         <TileMenu
           x={overlay.at.x}
           y={overlay.at.y}
-          isText={grid.tiles.find((x) => x.id === overlay.id)?.kind === "text"}
+          isText={grid.tiles.find((x) => x.id === overlay.id)?.family === "text"}
           onClose={() => send({ type: "dismiss" })}
           onPick={(action) => send({ type: "act", action })}
         />

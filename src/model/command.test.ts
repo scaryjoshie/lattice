@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { apply, propose } from "./command.ts";
-import { bounds, footprint, type Grid } from "./grid.ts";
+import { bounds, footprint, type Grid, type Terminal } from "./grid.ts";
 import type { Region } from "./region.ts";
 
 /** A small world: one scope with a tile in it, and a loose tile beside. */
@@ -11,8 +11,8 @@ function world(): Grid {
     columns,
     rows,
     tiles: [
-      { id: "a", kind: "claude", columnId: "x3", rowId: "y2" },
-      { id: "b", kind: "shell", columnId: "x7", rowId: "y2" },
+      { id: "a", family: "terminal", columnId: "x3", rowId: "y2" },
+      { id: "b", family: "terminal", columnId: "x7", rowId: "y2" },
     ],
     scopes: [{ id: "auth", name: "auth", hue: 0, columnStart: "x2", columnEnd: "x4", rowStart: "y1", rowEnd: "y4" }],
     links: [],
@@ -51,9 +51,9 @@ describe("commands", () => {
 
   test("a refused resize still says what it would have made", () => {
     const g: Grid = { ...world(), tiles: [
-      { id: "a", kind: "claude", columnId: "x2", rowId: "y2" },
-      { id: "b", kind: "claude", columnId: "x3", rowId: "y2" },
-      { id: "c", kind: "claude", columnId: "x4", rowId: "y2" },
+      { id: "a", family: "terminal", columnId: "x2", rowId: "y2" },
+      { id: "b", family: "terminal", columnId: "x3", rowId: "y2" },
+      { id: "c", family: "terminal", columnId: "x4", rowId: "y2" },
     ] };
     const v = propose(g, { kind: "resize", owner: "auth", col: { line: 5, n: -1 } });
     expect(v.ok).toBe(false);
@@ -63,8 +63,8 @@ describe("commands", () => {
 
   test("place makes tracks before the first, and reports the shift and the id", () => {
     const g = world();
-    expect(propose(g, { kind: "place", ci: 3, ri: 2, tile: "codex" }).ok).toBe(false);
-    const done = apply(g, { kind: "place", ci: -2, ri: 0, tile: "codex" });
+    expect(propose(g, { kind: "place", ci: 3, ri: 2, family: "terminal" }).ok).toBe(false);
+    const done = apply(g, { kind: "place", ci: -2, ri: 0, family: "terminal" });
     expect(done.ok).toBe(true);
     expect(done.dc).toBe(2);
     expect(done.id).toBeDefined();
@@ -76,7 +76,7 @@ describe("commands", () => {
     const g = world();
     expect(apply(g, { kind: "remove", id: "zz" }).ok).toBe(false);
     expect(apply(g, { kind: "remove", id: "b" }).grid.tiles.map((t) => t.id)).toEqual(["a"]);
-    expect(apply(g, { kind: "setName", id: "a", name: "  ada  " }).grid.tiles[0]?.name).toBe("ada");
-    expect(apply(g, { kind: "setName", id: "a", name: "  " }).grid.tiles[0]?.name).toBeUndefined();
+    expect((apply(g, { kind: "setName", id: "a", name: "  ada  " }).grid.tiles[0] as Terminal).name).toBe("ada");
+    expect((apply(g, { kind: "setName", id: "a", name: "  " }).grid.tiles[0] as Terminal).name).toBeUndefined();
   });
 });

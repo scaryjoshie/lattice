@@ -1,4 +1,6 @@
-import { bounds, close, type Grid, indexOfTrack, scopeAt, wellFormed } from "../model/grid.ts";
+import { bounds, close, type Grid, indexOfTrack, isRun, scopeAt, wellFormed } from "../model/grid.ts";
+import { type MarkId, PROGRAMS } from "../providers/descriptors.ts";
+import { type Facts, programOf } from "../runtime/facts.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { invalid, reach } from "../session/react.ts";
 import type { Session } from "../session/session.ts";
@@ -42,7 +44,7 @@ export interface TextRun {
 export interface Occupant {
   ci: number;
   ri: number;
-  kind: "claude" | "codex" | "shell" | "browser";
+  mark: MarkId;
   name?: string;
   hue: number | null;
 }
@@ -108,7 +110,7 @@ export interface View {
   cursor: { x: number; y: number } | null;
 }
 
-export function sceneOf(grid: Grid, session: Session, view: View): Scene {
+export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View): Scene {
   const { selection, overlay, gesture, pointing, shift } = session;
   const editing = overlay?.kind === "edit" ? overlay : null;
   const naming = overlay?.kind === "name" ? overlay.id : null;
@@ -151,7 +153,8 @@ export function sceneOf(grid: Grid, session: Session, view: View): Scene {
   for (const tile of grid.tiles) {
     const [ci, ri] = placed(tile);
     const edited = editing?.id === tile.id;
-    const extent: Region = { ci, ri, span: edited ? editing!.span : (tile.span ?? 1), rows: edited ? editing!.rows : (tile.rows ?? 1) };
+    const run = isRun(tile) ? tile : null;
+    const extent: Region = { ci, ri, span: edited ? editing!.span : (run?.span ?? 1), rows: edited ? editing!.rows : (run?.rows ?? 1) };
     const hue = hueAt(tile);
     tiles.set(tile.id, { ...extent, hue });
     if (!edited) {
@@ -159,11 +162,13 @@ export function sceneOf(grid: Grid, session: Session, view: View): Scene {
         cells.set(`${c},${r}`, { hue: cells.get(`${c},${r}`)?.hue ?? null, occupied: true, tileId: tile.id, extent });
       }
     }
-    if (tile.kind === "text") {
+    if (isRun(tile)) {
       // While a run is typed the input draws its glyphs, but its cells stay unruled.
-      texts.push({ ...extent, style: tile.style ?? "title", text: edited ? "" : (tile.text ?? ""), hue });
+      texts.push({ ...extent, style: tile.style, text: edited ? "" : tile.text, hue });
     } else {
-      const spot: Occupant = { ci, ri, kind: tile.kind, name: naming === tile.id ? undefined : tile.name, hue };
+      // The mark is what is observed to be running there, or the browser's own.
+      const mark: MarkId = tile.family === "browser" ? "browser" : PROGRAMS[programOf(facts, tile.id)].mark;
+      const spot: Occupant = { ci, ri, mark, name: naming === tile.id ? undefined : tile.name, hue };
       occupied.push(spot);
       spots.set(tile.id, spot);
     }
@@ -215,7 +220,7 @@ export function sceneOf(grid: Grid, session: Session, view: View): Scene {
   const selectedTile = selection && "tile" in selection ? grid.tiles.find((x) => x.id === selection.tile) : undefined;
   const resizable: Scene["resizable"] = selectedScope
     ? { id: selectedScope.id, region: placedScope(selectedScope), edgesOnly: false }
-    : selectedTile?.kind === "text" && tiles.get(selectedTile.id)
+    : selectedTile && isRun(selectedTile) && tiles.get(selectedTile.id)
       ? { id: selectedTile.id, region: tiles.get(selectedTile.id) as Region, edgesOnly: true }
       : null;
 
@@ -310,6 +315,6 @@ export function modeOf(grid: Grid, session: Session): Mode {
   if (!selection) return "idle";
   if (invalid(grid, selection)) return "invalid";
   if ("scope" in selection) return "scope";
-  if ("tile" in selection && grid.tiles.find((t) => t.id === selection.tile)?.kind === "text") return "scope";
+  if ("tile" in selection && grid.tiles.find((t) => t.id === selection.tile)?.family === "text") return "scope";
   return "selected";
 }

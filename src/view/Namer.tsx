@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { indexOfTrack } from "../model/grid.ts";
+import { indexOfTrack, isRun } from "../model/grid.ts";
 import { nameFont } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
 import { useGrid } from "../store/store.ts";
@@ -12,7 +12,8 @@ import { useGrid } from "../store/store.ts";
 export function Namer({ id, onDone }: { id: string; onDone(): void }) {
   const grid = useGrid((s) => s.grid);
   const run = useGrid((s) => s.run);
-  const tile = grid.tiles.find((x) => x.id === id);
+  const found = grid.tiles.find((x) => x.id === id);
+  const tile = found && !isRun(found) ? found : undefined;
   const [draft, setDraft] = useState(tile?.name ?? "");
   if (!tile) return null;
   const ci = indexOfTrack(grid.columns, tile.columnId);
