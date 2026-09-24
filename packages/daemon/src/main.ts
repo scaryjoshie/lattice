@@ -40,7 +40,10 @@ if (import.meta.main) {
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
-  // A child of the app: when the parent goes away, so does this.
-  process.stdin.on("end", stop);
-  process.stdin.resume();
+  // A child of the app: when the parent goes away, so does this. The parent says it is
+  // one by piping stdin and setting LATTICE_PARENT; run by hand, the daemon stays up.
+  if (process.env.LATTICE_PARENT) {
+    process.stdin.on("end", stop);
+    process.stdin.resume();
+  }
 }

@@ -102,10 +102,13 @@ function Token({ k }: { k: string }) {
   return <span className="keys-verb">{k}</span>;
 }
 
-export function Keys({ mode, hidden }: { mode: Mode; hidden?: boolean }) {
+export function Keys({ mode, hidden, offline }: { mode: Mode; hidden?: boolean; offline?: boolean }) {
+  // With no daemon there is nothing to do to the grid, and the panel says so in place of
+  // the keys rather than listing keys that would do nothing.
+  const rows: readonly Row[] = offline ? [[["daemon"], "offline"]] : ROWS[mode];
   return (
     <div className="keys" aria-hidden="true" data-hidden={hidden || undefined}>
-      {ROWS[mode].map(([chord, means]) => (
+      {rows.map(([chord, means]) => (
         <div className="keys-row" key={means + chord.join()}>
           <span className="keys-chord">
             {chord.map((k, i) => (

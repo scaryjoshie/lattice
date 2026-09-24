@@ -1,20 +1,22 @@
 import { create } from "zustand";
-import { seeded } from "../mock/seed.ts";
-import { type Facts, observe, type RuntimeCommand } from "../runtime/facts.ts";
+import type { Facts, RuntimeCommand } from "../runtime/facts.ts";
+import { client } from "./client.ts";
 
 /**
- * What the runtime has observed, held beside the document. Runtime commands go here and
- * come back as facts; nothing about them enters the grid or its history.
+ * What the runtime has observed, as the daemon last sent it. A runtime command is a
+ * request; the facts come back as a notification. Nothing about them enters the grid.
  */
 interface Store {
   facts: Facts;
   observe(command: RuntimeCommand): void;
 }
 
-export const useRuntime = create<Store>((set) => ({
-  // The mock's facts, until a daemon observes anything.
-  facts: seeded.facts,
+export const useRuntime = create<Store>(() => ({
+  facts: { hosting: {} },
   observe(command) {
-    set((s) => ({ facts: observe(s.facts, command) }));
+    const request = command.kind === "start" ? client.call("start", { host: command.host, occupant: command.occupant }) : client.call("stop", { host: command.host });
+    request.catch(() => {});
   },
 }));
+
+client.on("facts", ({ facts }) => useRuntime.setState({ facts: facts as Facts }));

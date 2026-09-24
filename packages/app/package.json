@@ -14,7 +14,8 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zustand": "^5.0.15",
-    "@lattice/model": "workspace:*"
+    "@lattice/model": "workspace:*",
+    "@lattice/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/d3-selection": "^3.0.12",

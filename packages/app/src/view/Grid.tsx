@@ -55,6 +55,7 @@ export function Grid() {
   // React draws the overlays from these and nothing else. Pointing and gestures change at
   // pointer speed and never pass through a render.
   const grid = useGrid((s) => s.grid);
+  const connected = useGrid((s) => s.connected);
   const overlay = useSession((s) => s.session.overlay);
   const opened = useSession((s) => s.session.opened);
   const mode = useSession((s) => modeOf(grid, s.session));
@@ -226,9 +227,11 @@ export function Grid() {
 
   /* Inputs and effects ----------------------------------------------------- */
 
-  /** Do what `react` decided. Document commands run; session commands apply; the view
-   *  follows a run that prepended tracks by shifting the camera and the session's indices. */
-  const dispatch = (effects: Effect[]) => {
+  /** Do what `react` decided, in order. Document commands go to the daemon and are awaited,
+   *  so what follows one sees the grid it produced; session commands apply at once; the
+   *  view follows a run that prepended tracks by shifting the camera and the session's
+   *  indices. */
+  const dispatch = async (effects: Effect[]) => {
     for (const effect of effects) {
       switch (effect.kind) {
         case "select":
@@ -249,12 +252,12 @@ export function Grid() {
           // Each history entry carries the selection it was made with, as a mark the
           // document store never reads. Undo restores it along with the grid.
           const selection = useSession.getState().session.selection;
-          const back = useGrid.getState()[effect.kind](selection);
+          const back = await useGrid.getState()[effect.kind](selection);
           if (back.ok) useSession.getState().apply({ kind: "select", selection: (back.mark as Selection | null | undefined) ?? null });
           break;
         }
         default: {
-          const done = useGrid.getState().run(effect, useSession.getState().session.selection);
+          const done = await useGrid.getState().run(effect, useSession.getState().session.selection);
           if (done.ok && (done.dc || done.dr)) {
             shiftView(-done.dc * CELL, -done.dr * CELL);
             useSession.getState().apply({ kind: "shift", dc: done.dc, dr: done.dr });
@@ -275,11 +278,12 @@ export function Grid() {
 
   const send = (input: Input) => {
     const before = useSession.getState().session;
-    dispatch(react(useGrid.getState().grid, before, input));
-    // Whatever closed an overlay, the pointer is still somewhere, and that is pointed at
-    // again at once rather than when it next moves.
-    const after = useSession.getState().session;
-    if (before.overlay && !after.overlay && !after.gesture && pointer.current) repoint(pointer.current.x, pointer.current.y);
+    void dispatch(react(useGrid.getState().grid, before, input)).then(() => {
+      // Whatever closed an overlay, the pointer is still somewhere, and that is pointed at
+      // again at once rather than when it next moves.
+      const after = useSession.getState().session;
+      if (before.overlay && !after.overlay && !after.gesture && pointer.current) repoint(pointer.current.x, pointer.current.y);
+    });
   };
 
   /** A pointer event in grid terms: the target, the cell, and the point in cell units. */
@@ -400,7 +404,7 @@ export function Grid() {
           onClose={() => send({ type: "closed" })}
         />
       )}
-      <Keys mode={mode} hidden={opened !== null && !opened.leaving} />
+      <Keys mode={mode} hidden={opened !== null && !opened.leaving} offline={!connected} />
       {overlay?.kind === "add" && (
         <Menu
           x={overlay.at.x}

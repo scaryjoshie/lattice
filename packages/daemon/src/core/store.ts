@@ -1,3 +1,4 @@
+import { chmodSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import type { Grid } from "@lattice/model";
 
@@ -17,6 +18,8 @@ export class Store {
 
   constructor(path: string) {
     this.db = new Database(path, { create: true });
+    // Owner-only, like everything in the home: SQLite creates with the process umask.
+    chmodSync(path, 0o600);
     this.db.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     const version = (this.db.query("pragma user_version").get() as { user_version: number }).user_version;
     for (let i = version; i < MIGRATIONS.length; i++) {
