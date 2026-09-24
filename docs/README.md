@@ -26,6 +26,7 @@ For a reviewing agent, start at [ONBOARDING.md](ONBOARDING.md). The code is in
 | [runtime.md](runtime.md) | The daemon, what it persists, the agent service, what is lifted from modelbus |
 | [projects.md](projects.md) | Projects, repos and worktrees: observed from git, never owned |
 | [organization.md](organization.md) | Packages for two processes, providers as descriptor and adapter, preferences, `~/.lattice`, secrets |
+| [daemon.md](daemon.md) | Proposal: the daemon's transport, protocol, layout, persistence and build order |
 | [shipping.md](shipping.md) | Tauri, signing, the sidecar, what installing mandates |
 | [working.md](working.md) | The practices, and the mechanism that enforces each |
 
