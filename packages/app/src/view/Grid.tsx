@@ -85,10 +85,11 @@ export function Grid() {
     paint(ctx, scene, dash.current);
     running.current = animating(scene);
     // The tile layer rides the same transform, written directly for the same reason the
-    // canvas is: nothing here should pass through a render.
+    // canvas is: nothing here should pass through a render. The cursor likewise.
     if (layer.current) {
       layer.current.style.transform = `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.k})`;
     }
+    if (host.style.cursor !== scene.cursor) host.style.cursor = scene.cursor;
   }, []);
 
   /**

@@ -94,6 +94,9 @@ export interface Scene {
   lines: { region: Region; hue: number | null; c: number | null; r: number | null; cursor: { x: number; y: number } | null } | null;
   /** A resize being proposed: bounds after, the cells made or unmade, whether it may. */
   growing: (Region & { ok: boolean; bands: readonly Region[] }) | null;
+  /** What the pointer is over, as the cursor should say it: a grab inside the selection, a
+   *  resize on a line, else nothing special. */
+  cursor: "default" | "grab" | "grabbing" | "col-resize" | "row-resize" | "nwse-resize" | "nesw-resize" | "move";
   /** For the view's hit tests. */
   selectedScope: string | null;
   resizable: { id: string; region: Region; edgesOnly: boolean } | null;
@@ -226,6 +229,10 @@ export function sceneOf(document: Grid, facts: Facts, session: Session, view: Vi
 
   // Everything about the pointer comes from the one target.
   const cell = pointing?.kind === "cell" ? pointing : null;
+  // Inside the selection the selection is the thing pointed at, so nothing in it is
+  // hovered: no ring, no focus. A press there moves the whole; the cursor says so.
+  const within = cell !== null && selected !== null && !selected.invalid && contains(selected, cell.ci, cell.ri);
+  const hovered = within ? null : cell;
   const onHandle = pointing?.kind === "handle" ? pointing.scope : null;
   const line = stretch ? stretch.at : pointing?.kind === "line" ? pointing : null;
   const lines: Scene["lines"] =
@@ -258,7 +265,7 @@ export function sceneOf(document: Grid, facts: Facts, session: Session, view: Vi
    * A carried occupant's lines stay anchored where it was picked up.
    */
   const subject = carrying?.id ?? acted ?? (selection && "tile" in selection ? selection.tile : null);
-  const spot = subject ?? (cell && byCell.get(`${cell.ci},${cell.ri}`));
+  const spot = subject ?? (hovered && byCell.get(`${hovered.ci},${hovered.ri}`));
   let focus: Focus | null = null;
   const here = spot ? spots.get(spot) : undefined;
   if (spot && here) {
@@ -288,17 +295,46 @@ export function sceneOf(document: Grid, facts: Facts, session: Session, view: Vi
     selected,
     proposal,
     // The hovered cell, unless something already says more about it.
-    hover: cell && !extending && !(focus && focus.ci === cell.ci && focus.ri === cell.ri) ? [cell.ci, cell.ri] : null,
+    hover: hovered && !extending && !(focus && focus.ci === hovered.ci && focus.ri === hovered.ri) ? [hovered.ci, hovered.ri] : null,
     shift,
     extending,
     handles,
     pointing: pointedScope,
     lines,
     growing,
+    cursor: cursorOf(session, line, resizable, within),
     selectedScope: selectedScope?.id ?? null,
     resizable,
     tiles,
   };
+}
+
+/**
+ * What the cursor says. Inside the selection, without shift, a press moves it: a hand. With
+ * shift, shift-click acts or extends: the arrow. On a lit line, the resize it would do.
+ * While carrying, the hand closes. Nothing else changes the cursor.
+ */
+function cursorOf(
+  session: Session,
+  line: { c: number | null; r: number | null } | null,
+  resizable: Scene["resizable"],
+  within: boolean,
+): Scene["cursor"] {
+  const g = session.gesture;
+  if (g?.kind === "carry") return "grabbing";
+  if (g?.kind === "stretch" || (line && resizable)) {
+    const l = g?.kind === "stretch" ? { c: g.c, r: g.r } : line!;
+    if (l.c !== null && l.r !== null) {
+      const r = resizable?.region;
+      const corner = r && (l.c === r.ci || l.c === r.ci + r.span) && (l.r === r.ri || l.r === r.ri + r.rows);
+      if (!corner) return "move";
+      const nw = (l.c === r!.ci) === (l.r === r!.ri);
+      return nw ? "nwse-resize" : "nesw-resize";
+    }
+    return l.c !== null ? "col-resize" : "row-resize";
+  }
+  if (within && !session.overlay) return session.shift ? "default" : "grab";
+  return "default";
 }
 
 /** Whether anything in a scene is animating: crawling dashes, flowing chevrons, a preview. */

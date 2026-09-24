@@ -47,10 +47,13 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     crawling dashed lines to every occupant it is linked to, leaving from its edge and
     ending in a dot at each end. Every occupant does this, linked or not; the add menu
     distinguishes agents from utilities and the canvas does not.
-12. An empty cell inside the selection draws no hover ring: the selection is already the
-    thing pointed at. An item inside it still does.
-13. While something is selected, hovering another occupant rings it but does not move the
-    veil to it.
+12. Nothing inside the selection is hovered: no ring on a cell or an item, no veil, no
+    links. The selection is already the thing pointed at, and a press there moves the
+    whole of it. Inside a valid selection the cursor is a grab hand, or the arrow while
+    shift is held, since shift-click there acts rather than moves; while carrying, the
+    hand closes.
+13. While something is selected, hovering an occupant outside it rings it but does not
+    move the veil to it.
 14. Leaving the viewport clears the hover.
 15. Hover is off while a menu is open, a run is being edited, a name is being typed,
     anything is being dragged, a rectangle is being swept, a gridline is lit, or a scope's
@@ -194,7 +197,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     within 4 pixels of their crossing. A run offers its edges only.
 66. A held line is lit across the whole thing at the focus weight, with a grip under the
     pointer that follows it: a pill along a line, a cross at a crossing, two arms into
-    the corner at a corner. No cell is hovered while a line is lit.
+    the corner at a corner. No cell is hovered while a line is lit, and the cursor says
+    which resize it is: across for a column line, down for a row line, diagonal at a
+    corner, four-way at a crossing.
 67. Dragging a line by whole cells moves it. An interior line of a scope only inserts:
     that many empty tracks appear at the line, the part on the far side shifts, and the
     scope grows at that edge. An edge inserts outward the same way.
