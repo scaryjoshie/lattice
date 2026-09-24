@@ -5,7 +5,7 @@
  * and anything else as a plain word.
  */
 
-export type Mode = "idle" | "selected" | "invalid" | "moving" | "menu" | "list" | "typing";
+export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu" | "list" | "typing";
 
 /** A chord is keys, pointer parts and words in order. */
 type Row = readonly [chord: readonly string[], means: string];
@@ -16,17 +16,25 @@ const MOUSE = { click: "left", "right-click": "right", wheel: "wheel", drag: "le
 const ROWS: Record<Mode, readonly Row[]> = {
   idle: [
     [["click"], "select"],
+    [["drag"], "pan"],
+    [["shift", "drag"], "select area"],
     [["shift", "click"], "add"],
     [["right-click"], "menu"],
-    [["shift", "drag"], "move"],
-    [["drag"], "pan"],
     [["wheel"], "zoom"],
   ],
   selected: [
     [["drag"], "move"],
+    [["shift", "drag"], "extend"],
     [["shift", "click"], "extend"],
     [["click"], "deselect"],
     [["right-click"], "menu"],
+    [["esc"], "clear"],
+  ],
+  scope: [
+    [["drag"], "move"],
+    [["drag", "line"], "resize"],
+    [["shift", "drag"], "extend"],
+    [["click"], "deselect"],
     [["esc"], "clear"],
   ],
   invalid: [

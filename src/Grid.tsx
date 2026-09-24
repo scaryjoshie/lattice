@@ -7,7 +7,11 @@ import {
   proposeMove,
   columnsFor,
   rowsFor,
+  applied,
   bounds,
+  proposeResize,
+  type Axis,
+  type Grid,
   close,
   footprint,
   wellFormed,
@@ -70,14 +74,15 @@ function Editor({
   const style = tile.style ?? "title";
   const m = METRICS[style];
 
-  const span = columnsFor(grid, id, ci, ri, spanFor(style, draft || " "));
+  // A capped axis is the size the writer fixed; an uncapped one is what the words need.
+  const span = columnsFor(grid, id, ci, ri, tile.cap?.span ?? spanFor(style, draft || " "));
   /*
    * Wrapping is what running out of room means. If the words need more width than there
    * is, they go down instead — as far as there is room below at that width, and no
    * further, at which point the paint cuts them with an ellipsis.
    */
   // In cells, not lines: a note fits several lines in a cell, a title exactly one.
-  const rows = rowsFor(grid, id, ci, ri, span, cellsFor(style, linesFor(style, draft, span)));
+  const rows = rowsFor(grid, id, ci, ri, span, tile.cap?.rows ?? cellsFor(style, linesFor(style, draft, span)));
   // The canvas owns the surface and the ruling even while typing; the input contributes
   // only a caret and glyphs, so it has to say how far it currently reaches.
   // Both, not just the width: the canvas leaves a run's cells unruled while it is being
@@ -166,6 +171,27 @@ function Namer({ id, onDone }: { id: string; onDone(): void }) {
   );
 }
 
+/**
+ * A selection, with a region that is exactly a scope's bounds read as that scope. Selecting
+ * a worktree's cells is selecting the worktree; there is no second way to mean it.
+ */
+function selectionOf(grid: Grid, region: Region): { scope: string } | { region: Region } {
+  const scope = grid.scopes.find((s) => {
+    const b = bounds(grid, s);
+    return b.ci === region.ci && b.ri === region.ri && b.span === region.span && b.rows === region.rows;
+  });
+  return scope ? { scope: scope.id } : { region };
+}
+
+/** How near a gridline the pointer must be to take hold of it, and how near a crossing to
+ *  hold both of its lines, in screen pixels. */
+const LINE_HIT = 9;
+const INNER_HIT = 5;
+const CROSS_HIT = 4;
+
+/** The scope handle's hit area, in screen pixels. Drawn smaller; a target should be generous. */
+const HANDLE_HIT = 24;
+
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
   const c0 = Math.min(r.ci, ci);
@@ -187,6 +213,8 @@ export function Grid() {
   const shift = useRef(false);
   /** Where the pointer last was, so hover can be picked back up when a menu closes. */
   const pointer = useRef<{ x: number; y: number } | null>(null);
+  /** The scope whose handle the pointer is on, if any. A ref like hover. */
+  const hot = useRef<string | null>(null);
 
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
@@ -206,7 +234,9 @@ export function Grid() {
    * a tile is shorthand for selecting the region it owns — but a tile is remembered by id
    * so the selection follows it rather than the cells it happened to be on.
    */
-  const [selection, setSelection] = useState<{ tile: string } | { region: Region } | null>(null);
+  const [selection, setSelection] = useState<
+    { tile: string } | { scope: string } | { region: Region } | null
+  >(null);
   /** Where a press started, so a drag that pans is not also read as a click. */
   const pressed = useRef<{ x: number; y: number } | null>(null);
   /**
@@ -232,6 +262,24 @@ export function Grid() {
     grab: [number, number];
   } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
+  /** A gridline of the selected scope being dragged: which line, and where it started. */
+  const stretching = useRef<{ owner: string; c: number | null; r: number | null; wx: number; wy: number } | null>(null);
+  /** A rectangle being swept out with shift held: where it started, as a region. */
+  const sweeping = useRef<Region | null>(null);
+  const [sweep, setSweep] = useState<Region | null>(null);
+  /** The resize in progress, as the scene needs it. */
+  const [grow, setGrow] = useState<{
+    after: Region;
+    ok: boolean;
+    moves: readonly Move[];
+    /** The cells being made, or for a shrink, unmade. */
+    bands: readonly Region[];
+    /** Where the dragged lines are now. */
+    c: number | null;
+    r: number | null;
+  } | null>(null);
+  /** The gridlines of the selected scope the pointer is on. A ref like hover. */
+  const lineHot = useRef<{ c: number | null; r: number | null } | null>(null);
   const [held, setHeld] = useState<{
     id: string | null;
     from: Region;
@@ -257,7 +305,9 @@ export function Grid() {
      * exists: the cell a tile left is empty, and empty cells already know how to look.
      */
     const carry = held?.ok ? held : null;
-    const proposed = new Map(carry?.moves.map((m) => [m.id, m]) ?? []);
+    // Whichever proposal is live, a move or a resize, says where things would be.
+    const live = carry ?? (grow?.ok ? grow : null);
+    const proposed = new Map(live?.moves.map((m) => [m.id, m]) ?? []);
     const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
       const m = proposed.get(tile.id);
       if (m) return [m.ci, m.ri];
@@ -267,7 +317,7 @@ export function Grid() {
     const placedScope = (scope: (typeof grid.scopes)[number]): Region => {
       const b = bounds(grid, scope);
       const m = proposed.get(scope.id);
-      return m ? { ...b, ci: m.ci, ri: m.ri } : b;
+      return m ? { ci: m.ci, ri: m.ri, span: m.span ?? b.span, rows: m.rows ?? b.rows } : b;
     };
 
     /*
@@ -287,7 +337,15 @@ export function Grid() {
     const plates: Plate[] = [];
     for (const scope of grid.scopes) {
       const b = placedScope(scope);
-      plates.push({ hue: scope.hue, c0: b.ci, c1: b.ci + b.span - 1, r0: b.ri, r1: b.ri + b.rows - 1 });
+      plates.push({
+        id: scope.id,
+        name: scope.name,
+        hue: scope.hue,
+        c0: b.ci,
+        c1: b.ci + b.span - 1,
+        r0: b.ri,
+        r1: b.ri + b.rows - 1,
+      });
       for (const [ci, ri] of cellsOf(b)) cells.set(`${ci},${ri}`, { hue: scope.hue, occupied: false });
     }
     for (const tile of grid.tiles) {
@@ -389,16 +447,19 @@ export function Grid() {
       : menu
         ? { ci: menu.ci, ri: menu.ri, span: 1, rows: 1, hue: scopeAt(grid, menu.ci, menu.ri)?.hue ?? null }
         : null;
-    const corners = held === null;
+    const corners = held === null && grow === null;
+    const selectedScope = selection && "scope" in selection ? grid.scopes.find((s) => s.id === selection.scope) : undefined;
     const selected: Scene["selected"] =
       selection && "tile" in selection
         ? (() => {
             const shape = tiles.get(selection.tile);
             return shape ? { ...shape, invalid: false, corners } : null;
           })()
-        : region
-          ? { ...region, hue: scopeAt(grid, region.ci, region.ri)?.hue ?? null, invalid: !usable(region), corners }
-          : null;
+        : selectedScope
+          ? { ...placedScope(selectedScope), hue: selectedScope.hue, invalid: false, corners }
+          : region
+            ? { ...region, hue: scopeAt(grid, region.ci, region.ri)?.hue ?? null, invalid: !usable(region), corners }
+            : null;
 
     const heldTile = held?.id ? grid.tiles.find((x) => x.id === held.id) : undefined;
     const proposal = held
@@ -424,9 +485,23 @@ export function Grid() {
       subject,
       about,
       selected,
+      selectedScope: selectedScope?.id ?? null,
+      /** What the lit gridlines belong to: the selected scope with every line, or the
+       *  selected run with its edges only. */
+      resizable: selectedScope
+        ? { id: selectedScope.id, region: placedScope(selectedScope), edgesOnly: false }
+        : selection && "tile" in selection && grid.tiles.find((x) => x.id === selection.tile)?.kind === "text" && tiles.get(selection.tile)
+          ? { id: selection.tile, region: tiles.get(selection.tile) as Region, edgesOnly: true }
+          : null,
+      /** The rectangle being swept, closed, if shift-drag is in progress. */
+      sweep,
+      /** The resize being proposed: the scope's new bounds, the cells it makes, whether it may. */
+      growing: grow ? { ...grow.after, ok: grow.ok, bands: grow.bands } : null,
+      /** Where the dragged lines are, while a resize is in flight. */
+      growLines: grow ? { c: grow.c, r: grow.r } : null,
       usable,
     };
-  }, [grid, editing, editShape, naming, acting, menu, selection, held]);
+  }, [grid, editing, editShape, naming, acting, menu, selection, held, grow, sweep]);
 
   const model = useRef(scene);
   model.current = scene;
@@ -450,12 +525,45 @@ export function Grid() {
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const { cells, plates, occupied, texts, spots, byCell, links, carried, proposal, subject, about, selected, usable } =
-      model.current;
+    const {
+      cells, plates, occupied, texts, spots, byCell, links, carried, proposal, subject, about, selected, selectedScope, growing, usable,
+    } = model.current;
+
+    // The gridlines of the selected scope the pointer is on, lit as what a drag would move;
+    // during a drag, where they have got to. The pointer's own position, so the grip can
+    // be drawn under it.
+    const held_ = model.current.growLines ?? lineHot.current;
+    const owner = model.current.resizable;
+    const box = host.getBoundingClientRect();
+    const cursor = pointer.current ? { x: pointer.current.x - box.left, y: pointer.current.y - box.top } : null;
+    const lines: Scene["lines"] =
+      owner && held_
+        ? { region: owner.region, hue: selected?.hue ?? null, c: held_.c, r: held_.r, cursor }
+        : null;
+
+    // A scope's handle shows while the pointer is inside it or on the handle itself, and
+    // goes once the scope is selected: the brackets say it then. The name shows on the
+    // handle while the pointer is on it.
+    const handles: Scene["handles"] = plates
+      .filter(
+        (p) =>
+          p.id !== selectedScope &&
+          (p.id === hot.current ||
+            (hover.current !== null &&
+              hover.current[0] >= p.c0 && hover.current[0] <= p.c1 &&
+              hover.current[1] >= p.r0 && hover.current[1] <= p.r1)),
+      )
+      .map((p) => ({ ci: p.c0, ri: p.r0, hue: p.hue, name: p.id === hot.current ? p.name : null }));
+    const hotPlate = hot.current ? plates.find((p) => p.id === hot.current) : undefined;
+    const pointing: Scene["pointing"] = hotPlate
+      ? { ci: hotPlate.c0, ri: hotPlate.r0, span: hotPlate.c1 - hotPlate.c0 + 1, rows: hotPlate.r1 - hotPlate.r0 + 1, hue: hotPlate.hue }
+      : null;
 
     // With something selected, shift previews the rectangle a shift-click would select.
-    const extending: Scene["extending"] =
-      shift.current && selected && hover.current && !proposal && !contains(selected, ...hover.current)
+    const sweptRegion = model.current.sweep;
+    const extending: Scene["extending"] = sweptRegion
+      ? { ...sweptRegion, hue: selected?.hue ?? scopeAt(gridRef.current, sweptRegion.ci, sweptRegion.ri)?.hue ?? null, invalid: !usable(sweptRegion) }
+      : shift.current && selected && hover.current && !proposal && !contains(selected, ...hover.current)
         ? (() => {
             const r = close(gridRef.current, reach(selected, hover.current));
             return { ...r, hue: selected.hue, invalid: !usable(r) };
@@ -511,6 +619,10 @@ export function Grid() {
         hover: hover.current,
         shift: shift.current,
         extending,
+        handles,
+        pointing,
+        lines,
+        growing,
       },
       dash.current,
     );
@@ -550,7 +662,64 @@ export function Grid() {
     [draw],
   );
 
-  /** Whether a press lands inside the selection, which makes it a move rather than a pan. */
+  /** The gridlines of the selected scope under a screen point: a column line, a row line,
+   *  or both at a corner. Edges count; the boundary is a line like any other. */
+  const linesUnder = (px: number, py: number): { c: number | null; r: number | null } | null => {
+    const owner = model.current.resizable;
+    if (!owner) return null;
+    const { region: o, edgesOnly } = owner;
+    const { x, y, k } = camera.current;
+    const x0 = worldX(o.ci) * k + x;
+    const x1 = worldX(o.ci + o.span) * k + x;
+    const y0 = worldX(o.ri) * k + y;
+    const y1 = worldX(o.ri + o.rows) * k + y;
+    if (px < x0 - LINE_HIT || px > x1 + LINE_HIT || py < y0 - LINE_HIT || py > y1 + LINE_HIT) return null;
+    let c: number | null = null;
+    let r: number | null = null;
+    let dc = Infinity;
+    let dr = Infinity;
+    // A run offers its edges only; a scope every line. An edge is easy to catch; an
+    // interior line takes more precision, or moving about inside a scope would light
+    // lines everywhere and the cell under the pointer would never get its say.
+    const step = (len: number) => (edgesOnly ? len : 1);
+    const reachC = (ci: number) => (ci === o.ci || ci === o.ci + o.span ? LINE_HIT : INNER_HIT);
+    const reachR = (ri: number) => (ri === o.ri || ri === o.ri + o.rows ? LINE_HIT : INNER_HIT);
+    for (let ci = o.ci; ci <= o.ci + o.span; ci += step(o.span)) {
+      const d = Math.abs(px - (worldX(ci) * k + x));
+      if (d <= reachC(ci) && d < dc) [c, dc] = [ci, d];
+    }
+    for (let ri = o.ri; ri <= o.ri + o.rows; ri += step(o.rows)) {
+      const d = Math.abs(py - (worldX(ri) * k + y));
+      if (d <= reachR(ri) && d < dr) [r, dr] = [ri, d];
+    }
+    if (c === null && r === null) return null;
+    // Two lines at once at a corner, which is what a corner is for, and at an interior
+    // crossing only when the pointer is close to the crossing point itself — otherwise the
+    // nearer line alone, or a horizontal drag would drift a row along with it.
+    const corner = (c === o.ci || c === o.ci + o.span) && (r === o.ri || r === o.ri + o.rows);
+    if (c !== null && r !== null && !corner && (dc > CROSS_HIT || dr > CROSS_HIT)) {
+      if (dc <= dr) r = null;
+      else c = null;
+    }
+    return { c, r };
+  };
+
+  /** The scope whose corner handle is under a screen point, if any. */
+  const handleUnder = (px: number, py: number): string | null => {
+    const { x, y, k } = camera.current;
+    const half = HANDLE_HIT / 2;
+    for (const plate of model.current.plates) {
+      if (plate.id === model.current.selectedScope) continue;
+      const hx = worldX(plate.c0) * k + x;
+      const hy = worldX(plate.r0) * k + y;
+      if (Math.abs(px - hx) <= half && Math.abs(py - hy) <= half) return plate.id;
+    }
+    return null;
+  };
+
+  /** Whether a press lands inside the selection, which makes it a move rather than a pan.
+   *  A press anywhere else, tile or not, is the camera's: the grid needs places to pan
+   *  from, and every tile being a handle would leave none. */
   const inSelection = (event: { clientX: number; clientY: number }): boolean => {
     const host = viewport.current;
     const r = model.current.selected;
@@ -566,7 +735,9 @@ export function Grid() {
   const { camera, shift: shiftView } = useCamera(
     viewport,
     schedule,
-    (event) => overlay || (event.type === "mousedown" && !event.shiftKey && inSelection(event)),
+    (event) =>
+      overlay ||
+      (event.type === "mousedown" && !event.shiftKey && (lineHot.current !== null || inSelection(event))),
   );
 
   // The dashes crawl, which is what makes a live connection look live. The loop exists
@@ -608,11 +779,15 @@ export function Grid() {
     const onKey = (e: KeyboardEvent) => {
       set(e.shiftKey);
       if (e.key === "Escape" && !claimed(e.target)) {
-        if (dragging.current) {
-          // Cancel the move: drop the proposal and spend the release on nothing.
+        if (dragging.current || stretching.current || sweeping.current) {
+          // Cancel the move, the resize or the sweep: drop it and spend the release on nothing.
           dragging.current = null;
+          stretching.current = null;
+          sweeping.current = null;
           pressed.current = null;
           setHeld(null);
+          setGrow(null);
+          setSweep(null);
         } else setSelection(null);
       }
     };
@@ -632,6 +807,41 @@ export function Grid() {
     if (claimed(event.target)) return;
     const host = viewport.current;
     if (!host || menu || editing || naming || acting) return;
+    if (stretching.current) {
+      const s = stretching.current;
+      const box = host.getBoundingClientRect();
+      const { x, y, k } = camera.current;
+      const wx = (event.clientX - box.left - x) / k;
+      const wy = (event.clientY - box.top - y) / k;
+      const nc = s.c === null ? 0 : Math.round((wx - s.wx) / CELL);
+      const nr = s.r === null ? 0 : Math.round((wy - s.wy) / CELL);
+      // A corner is two resizes, the second proposed on the grid the first would leave.
+      const g0 = gridRef.current;
+      const col = s.c === null ? null : proposeResize(g0, s.owner, "col", s.c, nc);
+      const g1 = col ? applied(g0, col.moves) : g0;
+      const row = s.r === null ? null : proposeResize(g1, s.owner, "row", s.r, nr);
+      const moves = [...(col?.moves ?? []), ...(row?.moves ?? [])];
+      const ok = (col?.ok ?? true) && (row?.ok ?? true);
+      const after = row?.after ?? col?.after ?? null;
+      // A column band spans the rows the scope will have, so a corner's new cells are
+      // all shown, including the block where the two bands meet.
+      const bands: Region[] = [];
+      if (col?.band && after) bands.push({ ...col.band, ri: after.ri, rows: after.rows });
+      if (row?.band) bands.push(row.band);
+      hover.current = null;
+      if (after) setGrow({ after, ok, moves, bands, c: s.c === null ? null : s.c + nc, r: s.r === null ? null : s.r + nr });
+      schedule(camera.current);
+      return;
+    }
+    if (sweeping.current) {
+      const at = cellUnder(event);
+      if (at) {
+        hover.current = null;
+        setSweep(close(gridRef.current, reach(sweeping.current, at)));
+        schedule(camera.current);
+      }
+      return;
+    }
     if (dragging.current) {
       const at = cellUnder(event);
       if (at) {
@@ -645,11 +855,20 @@ export function Grid() {
       return;
     }
     const box = host.getBoundingClientRect();
-    const next = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
+    const px = event.clientX - box.left;
+    const py = event.clientY - box.top;
+    const onHandle = handleUnder(px, py);
+    const onLines = linesUnder(px, py);
+    const next = cellAt(camera.current, px, py);
     const prev = hover.current;
-    if (prev === next) return;
-    if (prev && next && prev[0] === next[0] && prev[1] === next[1]) return;
+    const moved = !(prev && prev[0] === next[0] && prev[1] === next[1]);
+    const sameLines =
+      onLines === lineHot.current ||
+      (onLines !== null && lineHot.current !== null && onLines.c === lineHot.current.c && onLines.r === lineHot.current.r);
+    if (!moved && onHandle === hot.current && sameLines && !onLines) return;
     hover.current = next;
+    hot.current = onHandle;
+    lineHot.current = onLines;
     schedule(camera.current);
   };
 
@@ -667,12 +886,23 @@ export function Grid() {
     if (dismissing.current) return;
     const at = cellUnder(event);
     if (!at) return;
+    const owner = model.current.resizable;
+    if (lineHot.current && owner && !event.shiftKey) {
+      // Taking hold of a gridline of the selected scope or run. The line's world position
+      // is where the drag is measured from.
+      const { c, r } = lineHot.current;
+      stretching.current = { owner: owner.id, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r) };
+      (event.target as Element).setPointerCapture?.(event.pointerId);
+      return;
+    }
     const selected = model.current.selected;
-    let from: Region | null = null;
-    let id: string | null = null;
     const inside = selected !== null && contains(selected, at[0], at[1]);
-    if (event.shiftKey && selected && !inside) {
-      // Shift outside the selection extends it, on the release. Nothing to pick up.
+    if (event.shiftKey) {
+      // Shift and drag sweeps a rectangle: from the cell if nothing is selected, and from
+      // the selection if something is, which is extending it. A shift-click is decided
+      // on the release, as before.
+      sweeping.current = selected && !selected.invalid ? selected : { ci: at[0], ri: at[1], span: 1, rows: 1 };
+      (event.target as Element).setPointerCapture?.(event.pointerId);
       return;
     }
     if (inside && selected.invalid) {
@@ -681,20 +911,11 @@ export function Grid() {
       // click on the cell.
       return;
     }
-    if (inside) {
-      // A press inside the selection, shift or not, carries the selection. The camera has
-      // already yielded the plain one.
-      from = selected;
-      id = selection && "tile" in selection ? selection.tile : null;
-    } else if (event.shiftKey) {
-      // Shift picks up whatever is under the pointer, text included.
-      const tileId = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-      const tile = tileId ? gridRef.current.tiles.find((x) => x.id === tileId) : undefined;
-      if (!tile) return;
-      from = footprint(gridRef.current, tile);
-      id = tile.id;
-    }
-    if (!from) return;
+    // Only a press inside the selection carries anything. The camera has yielded it.
+    // Anywhere else a plain drag pans, tile or not, so there is always somewhere to pan from.
+    if (!inside) return;
+    const from = selected;
+    const id = selection && "tile" in selection ? selection.tile : null;
     dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
     (event.target as Element).setPointerCapture?.(event.pointerId);
   };
@@ -704,6 +925,29 @@ export function Grid() {
     const start = pressed.current;
     pressed.current = null;
     const moved = !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3;
+    if (sweeping.current) {
+      const anchor = sweeping.current;
+      sweeping.current = null;
+      setSweep(null);
+      if (moved) {
+        const at = cellUnder(event);
+        if (at) setSelection(selectionOf(gridRef.current, close(gridRef.current, reach(anchor, at))));
+        return;
+      }
+    }
+    if (stretching.current) {
+      stretching.current = null;
+      const g = grow;
+      setGrow(null);
+      if (g?.ok && g.moves.length > 0) {
+        const { dc, dr } = applyMoves(g.moves);
+        if (dc || dr) {
+          shiftView(-dc * CELL, -dr * CELL);
+          hover.current = null;
+        }
+      }
+      return;
+    }
     if (dragging.current) {
       const at = cellUnder(event);
       const carry = dragging.current;
@@ -721,7 +965,9 @@ export function Grid() {
             hover.current = null;
           }
           // A selected tile follows itself; a selected region has to be told where it went.
-          if (carry.id === null) setSelection({ region: { ...to, ci: to.ci + dc, ri: to.ri + dr } });
+          if (carry.id === null && !(selection && "scope" in selection)) {
+            setSelection(selectionOf(gridRef.current, { ...to, ci: to.ci + dc, ri: to.ri + dr }));
+          }
         }
         return;
       }
@@ -752,7 +998,7 @@ export function Grid() {
       // will be opening it, which does not exist yet.
       const anchor = model.current.selected;
       if (anchor && !contains(anchor, ci, ri)) {
-        setSelection({ region: close(gridRef.current, reach(anchor, [ci, ri])) });
+        setSelection(selectionOf(gridRef.current, close(gridRef.current, reach(anchor, [ci, ri]))));
         return;
       }
       if (id) return;
@@ -760,13 +1006,19 @@ export function Grid() {
       setMenu({ x: event.clientX, y: event.clientY, ci, ri });
       return;
     }
-    // Click selects, and clicking what is already selected clears it.
-    setSelection((was) => {
-      if (id) return was && "tile" in was && was.tile === id ? null : { tile: id };
-      const same =
-        was && "region" in was && was.region.ci === ci && was.region.ri === ri && was.region.span === 1 && was.region.rows === 1;
-      return same ? null : { region: { ci, ri, span: 1, rows: 1 } };
-    });
+    // Click selects, and clicking what is already selected clears it. A scope's corner
+    // handle selects the scope; anywhere else inside it selects the cell.
+    const scope = handleUnder(event.clientX - box.left, event.clientY - box.top);
+    if (scope) {
+      setSelection({ scope });
+      return;
+    }
+    const current = model.current.selected;
+    if (current && contains(current, ci, ri)) {
+      setSelection(null);
+      return;
+    }
+    setSelection(id ? { tile: id } : selectionOf(gridRef.current, { ci, ri, span: 1, rows: 1 }));
   };
 
   const onContextMenu = (event: React.MouseEvent) => {
@@ -829,11 +1081,15 @@ export function Grid() {
         ? "list"
         : held
           ? "moving"
-          : scene.selected
-            ? scene.selected.invalid
-              ? "invalid"
-              : "selected"
-            : "idle";
+          : grow
+            ? "moving"
+            : scene.selected
+              ? scene.selected.invalid
+                ? "invalid"
+                : scene.resizable
+                  ? "scope"
+                  : "selected"
+              : "idle";
 
   return (
     <div

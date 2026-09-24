@@ -51,7 +51,7 @@ export interface Theme {
 export const light: Theme = {
   name: "light",
   page: "#f5f5f6",
-  veil: "rgba(245, 245, 246, 0.82)",
+  veil: "rgba(245, 245, 246, 0.68)",
   warn: "#c9524e",
   flow: "#d5751f",
   neutral: { tint: "#eeeef1", fill: "#c6c9d2", line: "#ebebef", edge: "#868b9a", ink: "#5f6270" },
@@ -74,7 +74,7 @@ export const light: Theme = {
 export const dark: Theme = {
   name: "dark",
   page: "#131317",
-  veil: "rgba(19, 19, 23, 0.82)",
+  veil: "rgba(19, 19, 23, 0.68)",
   warn: "#d76b66",
   flow: "#e0913f",
   neutral: { tint: "#1c1c22", fill: "#33343d", line: "#232329", edge: "#71747f", ink: "#a4a7b2" },

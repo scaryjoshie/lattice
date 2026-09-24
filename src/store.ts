@@ -1,6 +1,19 @@
 import { create } from "zustand";
-import { spanFor } from "./measure.ts";
-import { addTile, bounds, ensureTracks, type Grid, type Move, nextId, seed, type TextStyle, type TileKind } from "./model.ts";
+import { cellsFor, linesFor, spanFor } from "./measure.ts";
+import {
+  addTile,
+  applied,
+  bounds,
+  ensureTracks,
+  type Grid,
+  indexOfTrack,
+  type Move,
+  nextId,
+  rowsFor,
+  seed,
+  type TextStyle,
+  type TileKind,
+} from "./model.ts";
 
 /** The model, and nothing else. Camera state deliberately does not live here. */
 interface Store {
@@ -32,10 +45,30 @@ function measured(grid: Grid): Grid {
   return {
     ...grid,
     tiles: grid.tiles.map((tile) =>
-      tile.kind === "text" && tile.text
+      tile.kind === "text" && tile.text && tile.cap?.span === undefined
         ? { ...tile, span: spanFor(tile.style ?? "title", tile.text) }
         : tile,
     ),
+  };
+}
+
+/**
+ * A run whose width is capped and whose height is not is as tall as its words wrap to at
+ * that width, bounded by what is free below. Recomputed after anything that may have
+ * changed a width, since only the editor otherwise knows how tall a run is.
+ */
+function refit(grid: Grid): Grid {
+  return {
+    ...grid,
+    tiles: grid.tiles.map((tile) => {
+      if (tile.kind !== "text" || tile.cap?.span === undefined || tile.cap.rows !== undefined) return tile;
+      const style = tile.style ?? "title";
+      const span = tile.span ?? 1;
+      const ci = indexOfTrack(grid.columns, tile.columnId);
+      const ri = indexOfTrack(grid.rows, tile.rowId);
+      const want = cellsFor(style, linesFor(style, tile.text ?? "", span));
+      return { ...tile, rows: rowsFor(grid, tile.id, ci, ri, span, want) };
+    }),
   };
 }
 
@@ -88,15 +121,16 @@ export const useGrid = create<Store>((set, get) => ({
     if (moves.length === 0) return still;
     // Tracks for every destination first, so no move is ever dropped for lack of one.
     const before = get().grid;
-    const shape = (id: string) => {
-      const tile = before.tiles.find((x) => x.id === id);
+    const shape = (m: Move) => {
+      const tile = before.tiles.find((x) => x.id === m.id);
       if (tile) return { span: tile.span ?? 1, rows: tile.rows ?? 1 };
-      const scope = before.scopes.find((x) => x.id === id);
-      return scope ? bounds(before, scope) : { span: 1, rows: 1 };
+      const scope = before.scopes.find((x) => x.id === m.id);
+      const b = scope ? bounds(before, scope) : { span: 1, rows: 1 };
+      return { span: m.span ?? b.span, rows: m.rows ?? b.rows };
     };
     const reach = moves.reduce(
       (r, m) => {
-        const s = shape(m.id);
+        const s = shape(m);
         return {
           ci: Math.min(r.ci, m.ci),
           ri: Math.min(r.ri, m.ri),
@@ -108,32 +142,7 @@ export const useGrid = create<Store>((set, get) => ({
     );
     const made = ensureTracks(before, { ci: reach.ci, ri: reach.ri, span: reach.c1 - reach.ci, rows: reach.r1 - reach.ri });
     const g = made.grid;
-    const at = new Map(moves.map((m) => [m.id, { ...m, ci: m.ci + made.dc, ri: m.ri + made.dr }]));
-    const track = (tracks: Grid["columns"], i: number) => tracks[i]?.id;
-    set({
-      grid: {
-        ...g,
-        tiles: g.tiles.map((tile) => {
-          const m = at.get(tile.id);
-          const columnId = m && track(g.columns, m.ci);
-          const rowId = m && track(g.rows, m.ri);
-          return columnId && rowId ? { ...tile, columnId, rowId } : tile;
-        }),
-        // A scope moves whole: its four edges shift by the same amount its tiles did.
-        scopes: g.scopes.map((scope) => {
-          const m = at.get(scope.id);
-          if (!m) return scope;
-          const b = bounds(g, scope);
-          const columnStart = track(g.columns, m.ci);
-          const columnEnd = track(g.columns, m.ci + b.span - 1);
-          const rowStart = track(g.rows, m.ri);
-          const rowEnd = track(g.rows, m.ri + b.rows - 1);
-          return columnStart && columnEnd && rowStart && rowEnd
-            ? { ...scope, columnStart, columnEnd, rowStart, rowEnd }
-            : scope;
-        }),
-      },
-    });
+    set({ grid: refit(applied(g, moves.map((m) => ({ ...m, ci: m.ci + made.dc, ri: m.ri + made.dr })))) });
     return { dc: made.dc, dr: made.dr };
   },
 }));

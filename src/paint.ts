@@ -1,6 +1,6 @@
 import { CELL, type Camera, visible, worldX } from "./geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
-import { clip as clip_, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
+import { clip as clip_, FONT, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import type { OccupantKind, TextStyle } from "./model.ts";
 import { cells as cellsOf, contains, type Region } from "./region.ts";
 import { hue, theme } from "./theme.ts";
@@ -30,6 +30,17 @@ const RULE = 1;
 const FOCUS_EDGE = 2.5;
 /** The arm of a selection's corner bracket, in screen pixels. */
 const CORNER = 10;
+/** A lit gridline's weight, the grip's thickness and length, and the hatch spacing of new
+ *  cells — all in screen pixels. */
+const LINE_LIT = 3.5;
+const GRIP = 11;
+const GRIP_LEN = 44;
+const HATCH = 9;
+
+/** A scope's handle: a square centred on its top-left corner, in screen pixels. */
+const HANDLE = 14;
+/** The name beside a handle the pointer is on, in screen pixels. */
+const HANDLE_NAME = 12;
 const LINK_EDGE = 2;
 const LINK_DASH = [7, 6];
 const LINK_DOT = 3.5;
@@ -66,6 +77,8 @@ export interface Cell {
 }
 
 export interface Plate {
+  id: string;
+  name: string;
   hue: number;
   c0: number;
   c1: number;
@@ -145,6 +158,25 @@ export interface Scene {
   /** The rectangle a shift-click would select right now, while shift is held over a
    *  selection. Dashed and crawling: proposed, not yet held. */
   extending: (Region & { hue: number | null; invalid: boolean }) | null;
+  /** Scopes whose corner handle is showing: the cell at their top-left corner. A handle
+   *  is how a scope is selected, since clicking inside it selects a cell. */
+  handles: readonly { ci: number; ri: number; hue: number; name: string | null }[];
+  /** The scope whose handle the pointer is on. Pointing at the handle is pointing at the
+   *  scope: it is ringed whole, and the cell under the pointer is not pointed at. */
+  pointing: (Region & { hue: number | null }) | null;
+  /** The gridlines of the selected scope the pointer is on: a column line at `c`, a row
+   *  line at `r`, or both at a corner. Lit, because dragging one moves it. */
+  lines: {
+    region: Region;
+    hue: number | null;
+    c: number | null;
+    r: number | null;
+    /** The pointer, in screen pixels, so the grip is drawn where the hand is. */
+    cursor: { x: number; y: number } | null;
+  } | null;
+  /** A resize being proposed: the scope's bounds as they would be, the cells it would make
+   *  or unmake, and whether it may. */
+  growing: (Region & { ok: boolean; bands: readonly Region[] }) | null;
 }
 
 /** One occupant's mark, scaled from its own 24-unit space into the cell. */
@@ -193,7 +225,7 @@ function mark(
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
   const {
-    camera, width, height, dpr, plates, cells, occupied, texts, focus, about, selected, proposal, hover, shift, extending,
+    camera, width, height, dpr, plates, cells, occupied, texts, focus, about, selected, proposal, hover, shift, extending, handles, pointing, lines, growing,
   } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
@@ -597,25 +629,145 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ring(extending, extending.invalid ? palette.warn : hue(extending.hue).edge, true, true);
   }
 
+  // Scope handles: a square straddling the plate's corner, in the scope's own edge
+  // colour, on top of whatever else is drawn there so it can always be reached. The name
+  // sits to its right while the pointer is on it.
+  for (const h of handles) {
+    if (rule <= 0) break;
+    const cx = sx(h.ci);
+    const cy = sy(h.ri);
+    ctx.fillStyle = hue(h.hue).edge;
+    ctx.fillRect(cx - HANDLE / 2, cy - HANDLE / 2, HANDLE, HANDLE);
+    if (h.name) {
+      ctx.font = `500 ${HANDLE_NAME}px ${FONT}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = hue(h.hue).ink;
+      // Above the corner, clear of the ruling it would otherwise sit across.
+      ctx.fillText(h.name, cx + HANDLE / 2 + 4, cy - HANDLE / 2 - 5);
+    }
+  }
+
+  // Pointing at a scope's handle rings the scope, and nothing else is hovered.
+  if (pointing && rule > 0) ring(pointing, hue(pointing.hue).edge, false, false);
+
+  /*
+   * A resize in flight. The cells being made are hatched in the scope's edge colour, so
+   * what is new is visible as new; a refused one hatches in the warning colour and rings
+   * the scope in it. A legal one gets no ring: the selection ring, the lit line and the
+   * hatching say everything, and a second ring in another colour read as a warning.
+   */
+  if (growing && rule > 0) {
+    const colour = growing.ok ? hue(selected?.hue ?? null).edge : palette.warn;
+    for (const band of growing.bands) {
+      const x = sx(band.ci);
+      const y = sy(band.ri);
+      const w = size * band.span;
+      const h = size * band.rows;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      // Diagonal stripes, spaced in screen pixels, so the hatch reads the same at any zoom.
+      for (let d = -h; d < w + h; d += HATCH) {
+        ctx.moveTo(x + d, y);
+        ctx.lineTo(x + d + h, y + h);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (!growing.ok) ring(growing, palette.warn, false, false);
+  }
+
+  /*
+   * The lit gridlines of the selected scope, across the whole scope, and a grip under the
+   * pointer saying what kind of line it holds: a pill along one line, a cross where two
+   * interior lines meet, a rounded corner at a corner.
+   */
+  if (lines && rule > 0) {
+    const { region: r } = lines;
+    const colour = hue(lines.hue).edge;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = LINE_LIT;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    const x0 = sx(r.ci);
+    const x1 = sx(r.ci + r.span);
+    const y0 = sy(r.ri);
+    const y1 = sy(r.ri + r.rows);
+    if (lines.c !== null) {
+      const x = snap(sx(lines.c));
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x, y1);
+    }
+    if (lines.r !== null) {
+      const y = snap(sy(lines.r));
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+    }
+    ctx.stroke();
+    ctx.lineCap = "butt";
+
+    if (lines.cursor) {
+      const pill = (x: number, y: number, w: number, h: number) => {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, GRIP / 2);
+        ctx.fill();
+      };
+      ctx.fillStyle = colour;
+      const onEdgeC = lines.c === r.ci || lines.c === r.ci + r.span;
+      const onEdgeR = lines.r === r.ri || lines.r === r.ri + r.rows;
+      const clampY = Math.min(Math.max(lines.cursor.y, y0 + GRIP_LEN / 2), y1 - GRIP_LEN / 2);
+      const clampX = Math.min(Math.max(lines.cursor.x, x0 + GRIP_LEN / 2), x1 - GRIP_LEN / 2);
+      if (lines.c !== null && lines.r !== null) {
+        const cx = sx(lines.c);
+        const cy = sy(lines.r);
+        if (onEdgeC && onEdgeR) {
+          // A corner: two arms from the corner point, into the scope.
+          const dx = lines.c === r.ci ? 1 : -1;
+          const dy = lines.r === r.ri ? 1 : -1;
+          pill(dx > 0 ? cx - GRIP / 2 : cx - GRIP_LEN + GRIP / 2, cy - GRIP / 2, GRIP_LEN, GRIP);
+          pill(cx - GRIP / 2, dy > 0 ? cy - GRIP / 2 : cy - GRIP_LEN + GRIP / 2, GRIP, GRIP_LEN);
+        } else {
+          // Two interior lines meeting: a cross, held on both axes.
+          pill(cx - GRIP_LEN / 2, cy - GRIP / 2, GRIP_LEN, GRIP);
+          pill(cx - GRIP / 2, cy - GRIP_LEN / 2, GRIP, GRIP_LEN);
+        }
+      } else if (lines.c !== null) {
+        pill(sx(lines.c) - GRIP / 2, clampY - GRIP_LEN / 2, GRIP, GRIP_LEN);
+      } else if (lines.r !== null) {
+        pill(clampX - GRIP_LEN / 2, sy(lines.r) - GRIP / 2, GRIP_LEN, GRIP);
+      }
+    }
+  }
+
   // Hover stays live while something else is focused, except on the focused cell itself,
-  // which already has its ring — and gives way entirely to the extension preview.
-  if (hover && rule > 0 && !extending && !(focus && focus.ci === hover[0] && focus.ri === hover[1])) {
+  // which already has its ring — and gives way entirely to the extension preview and to
+  // a handle.
+  if (hover && rule > 0 && !extending && !pointing && !lines && !(focus && focus.ci === hover[0] && focus.ri === hover[1])) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;
     const inset = FOCUS_EDGE / 2;
-    // Whatever is under the pointer is selected whole, not by the cell it was touched on.
+    // Whatever is under the pointer is ringed whole, not by the cell it was touched on —
+    // unless it is inside the selection, which is already the thing being pointed at.
     const box = cell?.extent ?? { ci, ri, span: 1, rows: 1 };
-    const x = sx(box.ci);
-    const y = sy(box.ri);
-    ctx.lineWidth = FOCUS_EDGE;
-    ctx.strokeStyle = colour;
-    ctx.strokeRect(
-      x + inset,
-      y + inset,
-      size * box.span - FOCUS_EDGE,
-      size * box.rows - FOCUS_EDGE,
-    );
+    if (!(selected && contains(selected, ci, ri))) {
+      const x = sx(box.ci);
+      const y = sy(box.ri);
+      ctx.lineWidth = FOCUS_EDGE;
+      ctx.strokeStyle = colour;
+      ctx.strokeRect(
+        x + inset,
+        y + inset,
+        size * box.span - FOCUS_EDGE,
+        size * box.rows - FOCUS_EDGE,
+      );
+    }
 
     // Inside the selection shift still means act, so the plus shows there too.
     if (!cell?.occupied && shift && (!selected || contains(selected, ci, ri))) {

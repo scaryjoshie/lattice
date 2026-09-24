@@ -44,6 +44,12 @@ export interface Tile {
   /** Cells occupied, starting at (columnId, rowId). A title is always one row tall. */
   readonly span?: number;
   readonly rows?: number;
+  /**
+   * Text only: a size the writer fixed by dragging an edge. A capped width is a box the
+   * words wrap inside; a capped height clips them. Uncapped, the run is as big as what it
+   * says needs, bounded by what is free.
+   */
+  readonly cap?: { readonly span?: number; readonly rows?: number };
 }
 
 /**
@@ -53,6 +59,8 @@ export interface Tile {
  */
 export interface Scope {
   readonly id: string;
+  /** What the worktree is called. A fact about it, not a run on the grid. */
+  readonly name: string;
   /** Index into the palette. Hue says which group and nothing else does. */
   readonly hue: number;
   readonly columnStart: string;
@@ -335,18 +343,250 @@ export function footprint(grid: Grid, tile: Tile): Region {
  * circular, because the scene is built from the answer, and a circular answer flickers
  * between values and drags unrelated tiles along with it.
  */
-/** Where a thing — a tile or a scope, by id — would go. */
+/** Where a thing — a tile or a scope, by id — would go, and for a scope, how big it is. */
 export interface Move {
   id: string;
   ci: number;
   ri: number;
+  span?: number;
+  rows?: number;
+}
+
+/** A grid with moves applied. Positions are ids, so a move is a track lookup. */
+export function applied(grid: Grid, moves: readonly Move[]): Grid {
+  const at = new Map(moves.map((m) => [m.id, m]));
+  const track = (tracks: readonly Track[], i: number) => tracks[i]?.id;
+  return {
+    ...grid,
+    tiles: grid.tiles.map((tile) => {
+      const m = at.get(tile.id);
+      const columnId = m && track(grid.columns, m.ci);
+      const rowId = m && track(grid.rows, m.ri);
+      if (!m || !columnId || !rowId) return tile;
+      const moved = { ...tile, columnId, rowId };
+      // A size on a run's move is the writer fixing that axis: a cap, kept until lifted.
+      if (tile.kind !== "text" || (m.span === undefined && m.rows === undefined)) return moved;
+      return {
+        ...moved,
+        span: m.span ?? tile.span,
+        rows: m.rows ?? tile.rows,
+        cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows },
+      };
+    }),
+    scopes: grid.scopes.map((scope) => {
+      const m = at.get(scope.id);
+      if (!m) return scope;
+      const b = bounds(grid, scope);
+      const columnStart = track(grid.columns, m.ci);
+      const columnEnd = track(grid.columns, m.ci + (m.span ?? b.span) - 1);
+      const rowStart = track(grid.rows, m.ri);
+      const rowEnd = track(grid.rows, m.ri + (m.rows ?? b.rows) - 1);
+      return columnStart && columnEnd && rowStart && rowEnd
+        ? { ...scope, columnStart, columnEnd, rowStart, rowEnd }
+        : scope;
+    }),
+  };
+}
+
+/**
+ * What moves as one when pushed: a scope with everything in it, or a tile in no scope.
+ * Nothing is ever pushed out of its worktree; the worktree goes instead.
+ */
+function units(grid: Grid): readonly { id: string; region: Region; members: readonly string[] }[] {
+  const inScope = new Set<string>();
+  const scopes = grid.scopes.map((scope) => {
+    const region = bounds(grid, scope);
+    const members = grid.tiles.filter((tile) => covers(region, footprint(grid, tile))).map((tile) => tile.id);
+    for (const id of members) inScope.add(id);
+    return { id: scope.id, region, members };
+  });
+  const loose = grid.tiles
+    .filter((tile) => !inScope.has(tile.id))
+    .map((tile) => ({ id: tile.id, region: footprint(grid, tile), members: [] }));
+  return [...scopes, ...loose];
+}
+
+/**
+ * Push, the way things push: nothing moves until something is right up against it, and
+ * then it moves exactly as far as it is overlapped, and passes only that on. Along one
+ * axis, in one direction, so it cannot cycle. `orig` is where the pusher was and `after`
+ * where it is now; what lay ahead of it and overlaps it across the other axis is pushed
+ * by however far `after` reaches into it. Returns the moves, scopes and their tiles alike.
+ */
+export function push(
+  grid: Grid,
+  orig: Region,
+  after: Region,
+  axis: Axis,
+  sign: 1 | -1,
+  except: ReadonlySet<string>,
+): Move[] {
+  const P = axis === "col" ? "ci" : "ri";
+  const S = axis === "col" ? "span" : "rows";
+  const Q = axis === "col" ? "ri" : "ci";
+  const T = axis === "col" ? "rows" : "span";
+  const across = (a: Region, b: Region) => a[Q] < b[Q] + b[T] && b[Q] < a[Q] + a[T];
+  const all = units(grid).filter((u) => !except.has(u.id));
+  const moved = new Map<string, number>();
+  const queue: { orig: Region; after: Region }[] = [{ orig, after }];
+  while (queue.length > 0) {
+    const { orig: o, after: a } = queue.pop() as { orig: Region; after: Region };
+    const lead = sign > 0 ? a[P] + a[S] : a[P];
+    for (const u of all) {
+      if (!across(o, u.region)) continue;
+      const lo = u.region[P];
+      const hi = lo + u.region[S];
+      // Ahead of the pusher, judged where the pusher started, so nothing behind it moves.
+      if (sign > 0 ? lo < o[P] + o[S] : hi > o[P]) continue;
+      const need = sign > 0 ? lead - lo : hi - lead;
+      if (need <= (moved.get(u.id) ?? 0)) continue;
+      moved.set(u.id, need);
+      queue.push({ orig: u.region, after: { ...u.region, [P]: lo + sign * need } });
+    }
+  }
+  const moves: Move[] = [];
+  for (const u of all) {
+    const need = moved.get(u.id);
+    if (!need) continue;
+    const dc = axis === "col" ? sign * need : 0;
+    const dr = axis === "row" ? sign * need : 0;
+    moves.push({ id: u.id, ci: u.region.ci + dc, ri: u.region.ri + dr });
+    for (const id of u.members) {
+      const tile = grid.tiles.find((x) => x.id === id);
+      if (!tile) continue;
+      const f = footprint(grid, tile);
+      moves.push({ id, ci: f.ci + dc, ri: f.ri + dr });
+    }
+  }
+  return moves;
+}
+
+export type Axis = "col" | "row";
+
+/**
+ * Move one gridline of a scope by `n` cells, on one axis. An interior line only inserts:
+ * `|n|` empty tracks appear at the line and the part of the scope on the far side shifts,
+ * the scope growing at that edge and pushing the world beyond it. An edge inserts outward
+ * the same way, and dragged inward removes that many tracks, which must hold nothing. A
+ * corner is this twice, once per axis, the second on the grid the first would leave.
+ */
+export interface Resize {
+  ok: boolean;
+  after: Region;
+  band: Region | null;
+  moves: readonly Move[];
+}
+
+/**
+ * Move one edge of a run by `n` cells. A run has no interior lines to insert at, only
+ * edges. Outward grows it, pushing whatever is beyond, and refuses if that would take it
+ * out of its scope or into one; inward shrinks it and the words reflow. Either way the
+ * axis dragged becomes a cap.
+ */
+function resizeRun(grid: Grid, tile: Tile, axis: Axis, line: number, n: number): Resize {
+  const b = footprint(grid, tile);
+  const P = axis === "col" ? "ci" : "ri";
+  const S = axis === "col" ? "span" : "rows";
+  const start = b[P];
+  const end = start + b[S];
+  const k = Math.abs(n);
+  const refuse: Resize = { ok: false, after: b, band: null, moves: [] };
+  if (n === 0) return { ok: true, after: b, band: null, moves: [] };
+  if (line !== start && line !== end) return refuse;
+  const outward = (line === start && n < 0) || (line === end && n > 0);
+  if (!outward) {
+    if (k >= b[S]) return { ...refuse, band: { ...b, [P]: line === start ? start : end - k, [S]: k } };
+    const after: Region = { ...b, [P]: line === start ? start + k : start, [S]: b[S] - k };
+    const band: Region = { ...b, [P]: line === start ? start : end - k, [S]: k };
+    return { ok: true, after, band, moves: [{ id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] }] };
+  }
+  const after: Region = { ...b, [P]: line === start ? start - k : start, [S]: b[S] + k };
+  const band: Region = { ...b, [P]: line === start ? start - k : end, [S]: k };
+  const moves: Move[] = [
+    { id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] },
+    ...push(grid, b, after, axis, n > 0 ? 1 : -1, new Set([tile.id])),
+  ];
+  // Text stays in its scope, or out of every scope, once everything has been pushed.
+  const world = applied(grid, moves);
+  const home = scopeAt(grid, b.ci, b.ri)?.id ?? null;
+  for (const [ci, ri] of cells(after)) {
+    if ((scopeAt(world, ci, ri)?.id ?? null) !== home) return { ...refuse, band };
+  }
+  return { ok: true, after, band, moves };
+}
+
+export function proposeResize(grid: Grid, ownerId: string, axis: Axis, line: number, n: number): Resize {
+  const run = grid.tiles.find((x) => x.id === ownerId && x.kind === "text");
+  if (run) return resizeRun(grid, run, axis, line, n);
+  const scope = grid.scopes.find((s) => s.id === ownerId);
+  if (!scope) return { ok: false, after: { ci: 0, ri: 0, span: 1, rows: 1 }, band: null, moves: [] };
+  const b = bounds(grid, scope);
+  const P = axis === "col" ? "ci" : "ri";
+  const S = axis === "col" ? "span" : "rows";
+  const start = b[P];
+  const end = start + b[S];
+  const k = Math.abs(n);
+  const inside = grid.tiles.filter((tile) => covers(b, footprint(grid, tile)));
+  const own = new Set([scope.id, ...inside.map((tile) => tile.id)]);
+  if (n === 0) return { ok: true, after: b, band: null, moves: [] };
+
+  // An edge dragged inward removes the tracks it sweeps over. Whatever is in them is
+  // pushed inward, the same push as everywhere else with the edge as the pusher, among
+  // the scope's own tiles only. It is refused when something would have to leave the
+  // scope's far side to make way.
+  const inward = (line === start && n > 0) || (line === end && n < 0);
+  if (inward) {
+    const band: Region = { ...b, [P]: line === start ? start : end - k, [S]: k };
+    const refuse = { ok: false, after: b, band, moves: [] as const };
+    if (k >= b[S]) return refuse;
+    const after: Region = { ...b, [P]: line === start ? start + k : start, [S]: b[S] - k };
+    const within: Grid = { ...grid, tiles: inside, scopes: [] };
+    const wall: Region = { ...b, [P]: line === start ? start - 1 : end, [S]: 1 };
+    const moved = push(within, wall, band, axis, line === start ? 1 : -1, new Set());
+    const fits = moved.every((m) => {
+      const tile = inside.find((x) => x.id === m.id);
+      return tile !== undefined && covers(after, { ...footprint(grid, tile), ci: m.ci, ri: m.ri });
+    });
+    if (!fits) return refuse;
+    return {
+      ok: true,
+      after,
+      band,
+      moves: [{ id: scope.id, ci: after.ci, ri: after.ri, span: after.span, rows: after.rows }, ...moved],
+    };
+  }
+
+  // Otherwise insert at the line: the far side shifts, the scope grows, the world beyond
+  // its new edge is pushed.
+  const dc = axis === "col" ? n : 0;
+  const dr = axis === "row" ? n : 0;
+  const far = (r: Region) => (n > 0 ? r[P] >= line : r[P] + r[S] <= line);
+  const shifted: Move[] = inside
+    .filter((tile) => far(footprint(grid, tile)))
+    .map((tile) => {
+      const f = footprint(grid, tile);
+      return { id: tile.id, ci: f.ci + dc, ri: f.ri + dr };
+    });
+  const after: Region = { ...b, [P]: n > 0 ? start : start - k, [S]: b[S] + k };
+  // The new cells, where they will be once the far side has shifted: at the line.
+  const band: Region = { ...b, [P]: n > 0 ? line : line - k, [S]: k };
+  return {
+    ok: true,
+    after,
+    band,
+    moves: [
+      { id: scope.id, ci: after.ci, ri: after.ri, span: after.span, rows: after.rows },
+      ...shifted,
+      ...push(grid, b, after, axis, n > 0 ? 1 : -1, own),
+    ],
+  };
 }
 
 /** Everything that owns a region, so a move can carry tiles and scopes alike. */
-function owners(grid: Grid): readonly { id: string; region: Region }[] {
+function owners(grid: Grid): readonly { id: string; region: Region; scope: boolean }[] {
   return [
-    ...grid.tiles.map((tile) => ({ id: tile.id, region: footprint(grid, tile) })),
-    ...grid.scopes.map((scope) => ({ id: scope.id, region: bounds(grid, scope) })),
+    ...grid.tiles.map((tile) => ({ id: tile.id, region: footprint(grid, tile), scope: false })),
+    ...grid.scopes.map((scope) => ({ id: scope.id, region: bounds(grid, scope), scope: true })),
   ];
 }
 
@@ -369,7 +609,9 @@ export function proposeMove(
   // What is inside the destination and would come back — not what merely surrounds it,
   // which is a scope the destination lies in and which stays where it is.
   const there = others.filter((o) => covers(to, o.region));
-  const swaps = others.some((o) => overlaps(o.region, to) && !covers(o.region, to));
+  // A scope the destination lies inside is not something coming back; anything else
+  // overlapping it is.
+  const swaps = others.some((o) => overlaps(o.region, to) && !(o.scope && covers(o.region, to)));
   const refuse = { ok: false, swaps, moves: [] as const };
 
   if (to.ci === from.ci && to.ri === from.ri) return { ok: true, swaps, moves: [] };
@@ -407,10 +649,10 @@ export function seed(): Grid {
   const row = (i: number) => rows[i]!.id;
 
   const scopes: Scope[] = [
-    { id: nextId("g"), hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
-    { id: nextId("g"), hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
-    { id: nextId("g"), hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
-    { id: nextId("g"), hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
+    { id: nextId("g"), name: "auth", hue: 0, columnStart: col(2), columnEnd: col(4), rowStart: row(1), rowEnd: row(4) },
+    { id: nextId("g"), name: "infra", hue: 1, columnStart: col(11), columnEnd: col(14), rowStart: row(1), rowEnd: row(3) },
+    { id: nextId("g"), name: "research", hue: 2, columnStart: col(3), columnEnd: col(6), rowStart: row(6), rowEnd: row(9) },
+    { id: nextId("g"), name: "planner", hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
 
   const texts: [number, number, number, string][] = [

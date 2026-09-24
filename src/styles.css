@@ -67,8 +67,8 @@ body {
   z-index: 20;
   min-width: 168px;
   padding: 6px;
-  /* The key panel's surface, a little more solid: it has to be read, not seen through. */
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  /* The key panel's surface, exactly. */
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   border: 1px solid var(--border);
