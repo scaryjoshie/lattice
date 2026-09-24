@@ -15,10 +15,11 @@ lattice/
     protocol/    the wire: commands in, snapshots and facts out; types and a codec    shared
     daemon/      the Bun sidecar
       core/        store (SQLite), history, events, preferences, paths, secrets
+      document/    the grid: load, run, save
       terminals/   PTYs, the headless mirror, size
-      runtime/     agents: identity, hosting, observation of what is running
-      providers/   one folder per provider: claude/, codex/, shell/
-      projects/    repos and worktrees, read from git
+      agents/      identity, hosting, observation of what is running
+      providers/   one folder per provider: the adapter halves
+      git/         reading repos and worktrees. Which repos: rows in the store, not code
       server/      the socket and request handling
     app/         the webview client: session/, scene/, paint/, view/, client/
     shell/       src-tauri: the window, the tray, sidecar supervision, the quit prompt
@@ -28,9 +29,10 @@ lattice/
 1. `model` and `protocol` are the only packages both processes import. The daemon never
    imports the app; the app never imports the daemon.
 2. Each package keeps its own layer checker, by folder, as `experiment-5` and modelbus do.
-   Within the daemon, `core` imports nothing else in the daemon; `runtime` imports `core`;
-   `providers/<name>` imports its own folder, the runtime's provider contract, and `core`'s
-   paths and secrets helpers; `server` imports anything.
+   Within the daemon, `core` imports nothing else in the daemon; `document` imports `core`;
+   `git`, `terminals` and `agents` import `core` and `document`; `providers/<name>` imports
+   its own folder, the agents' provider contract, and `core`'s paths and secrets helpers;
+   `server` imports anything.
 3. Done on 24 September: `experiment-5` is `packages/app`, `model` is its own package
    imported as `@lattice/model`, `packages/daemon` listens on the socket and answers
    hello, and `packages/shell` is a Tauri project that opens the app. `mock` stays in the
