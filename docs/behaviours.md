@@ -239,9 +239,11 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     empty run removes it.
 79. The ruling is omitted inside a run rather than painted over. While a run is being
     typed the canvas owns its surface, its ruling and its caret; the input contributes
-    glyphs, and reports its draft and where its caret is. The caret is drawn at the
-    font's height on whichever line it is on, blinking on the shared counter from the
-    moment the run opens, and follows the arrow keys. The input's own caret is hidden,
+    glyphs, and reports its draft, where its caret is, and how far it has scrolled its
+    lines up to keep the caret in view when the draft has more lines than the run has
+    room for. The caret is drawn at the font's height on whichever line it is on, less
+    that scroll, blinking on the shared counter from the moment the run opens, and
+    follows the arrow keys. The input's own caret is hidden,
     since a textarea's is as tall as its line box, a whole cell for a title.
 80. Text takes the ink of whatever scope it sits in.
 81. A run's size is fixed when it is committed: what its words needed and what was free

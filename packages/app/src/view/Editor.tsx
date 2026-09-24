@@ -20,7 +20,7 @@ export function Editor({
 }: {
   id: string;
   onDone(): void;
-  onDraft(text: string, caret: number): void;
+  onDraft(text: string, caret: number, scroll: number): void;
 }) {
   const grid = useGrid((s) => s.grid);
   const run = useGrid((s) => s.run);
@@ -28,6 +28,8 @@ export function Editor({
   const tile = found && isRun(found) ? found : undefined;
   const [draft, setDraft] = useState(tile?.text ?? "");
   const [caret, setCaret] = useState(tile?.text.length ?? 0);
+  /** How far the textarea has scrolled its lines up, in cells. */
+  const [scroll, setScroll] = useState(0);
 
   if (!tile) return null;
   const ci = indexOfTrack(grid.columns, tile.columnId);
@@ -40,9 +42,10 @@ export function Editor({
   // canvas and the model cannot disagree about the run's cells.
   const { span, rows } = extentFor(grid, tile, draft);
   // The canvas draws the run's surface, its ruling and its caret even while typing; the
-  // input contributes glyphs, and says what it holds and where its caret is. Its own caret
-  // is hidden: a textarea's is as tall as its line box, a whole cell for a title.
-  useLayoutEffect(() => onDraft(draft, caret), [onDraft, draft, caret]);
+  // input contributes glyphs, and says what it holds, where its caret is, and how far it
+  // has scrolled to keep the caret in view. Its own caret is hidden: a textarea's is as
+  // tall as its line box, a whole cell for a title.
+  useLayoutEffect(() => onDraft(draft, caret, scroll), [onDraft, draft, caret, scroll]);
   const commit = () => {
     onDone();
     run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft });
@@ -73,8 +76,10 @@ export function Editor({
       onChange={(e) => {
         setDraft(e.target.value);
         setCaret(e.target.selectionEnd);
+        setScroll(e.target.scrollTop / CELL);
       }}
       onSelect={(e) => setCaret(e.currentTarget.selectionEnd)}
+      onScroll={(e) => setScroll(e.currentTarget.scrollTop / CELL)}
       onBlur={commit}
       onKeyDown={(e) => {
         // Enter commits. Shift-enter is a line break, which the textarea inserts itself.

@@ -96,7 +96,7 @@ export interface Scene {
   growing: (Region & { ok: boolean; bands: readonly Region[] }) | null;
   /** The caret of the run being typed: which line of the run, and how many characters
    *  along it. Drawn by the canvas at the font's height, blinking. */
-  caret: { ci: number; ri: number; style: "title" | "note"; line: number; column: number; hue: number | null } | null;
+  caret: { ci: number; ri: number; style: "title" | "note"; line: number; column: number; scroll: number; hue: number | null } | null;
   /** What the pointer is over, as the cursor should say it: a grab inside the selection, a
    *  resize on a line, else nothing special. */
   cursor: "default" | "grab" | "grabbing" | "col-resize" | "row-resize" | "nwse-resize" | "nesw-resize" | "move";
@@ -164,7 +164,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
     const extent: Region = { ...(edited && isRun(tile) ? extentFor(grid, tile, editing!.draft) : footprint(grid, tile)), ci, ri };
     if (edited && isRun(tile)) {
       const { line, column } = caretAt(tile.style, editing!.draft, extent.span, editing!.caret);
-      caret = { ci, ri, style: tile.style, line, column, hue: hueAt(tile) };
+      caret = { ci, ri, style: tile.style, line, column, scroll: editing!.scroll, hue: hueAt(tile) };
     }
     const hue = hueAt(tile);
     tiles.set(tile.id, { ...extent, hue });

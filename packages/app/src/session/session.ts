@@ -64,7 +64,9 @@ export type Overlay =
   | { kind: "add"; at: { x: number; y: number }; ci: number; ri: number }
   | { kind: "tile"; at: { x: number; y: number }; id: string }
   /** A run being typed. The draft is here so the scene can lay the run out as it grows. */
-  | { kind: "edit"; id: string; draft: string; caret: number }
+  /** `scroll` is how far the input has scrolled its lines up, in cells, to keep the caret
+   *  in view when the draft has more lines than the run has room for. */
+  | { kind: "edit"; id: string; draft: string; caret: number; scroll: number }
   | { kind: "name"; id: string };
 
 export interface Opened {

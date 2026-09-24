@@ -302,7 +302,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   if (caret && rule > 0 && Math.floor(dash / CARET_BLINK) % 2 === 0) {
     const m = METRICS[caret.style];
     const cx = sx(caret.ci) + size * m.inset + caret.column * size * m.size * ADVANCE;
-    const cy = sy(caret.ri) + size * m.pad + size * m.leading * (caret.line + 0.5);
+    // Less however far the input has scrolled its lines up to keep the caret in view.
+    const cy = sy(caret.ri) + size * m.pad + size * m.leading * (caret.line + 0.5) - size * caret.scroll;
     const half = size * m.size * 0.62;
     ctx.fillStyle = hue(caret.hue).ink;
     ctx.fillRect(Math.round(cx), Math.round(cy - half), CARET, Math.round(half * 2));

@@ -34,7 +34,7 @@ export type Input =
   /** What the overlays report back. */
   | { type: "choose"; choice: Choice }
   | { type: "act"; action: "rename" | "delete" }
-  | { type: "draft"; text: string; caret: number }
+  | { type: "draft"; text: string; caret: number; scroll: number }
   | { type: "done" }
   | { type: "dismiss" }
   | { type: "leaving" }
@@ -125,7 +125,7 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       const { choice } = input;
       if (choice.family === "text") {
         const place: Command = { kind: "place", ci, ri, what: { family: "text", style: choice.style }, id };
-        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: "", caret: 0 })];
+        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: "", caret: 0, scroll: 0 })];
       }
       // A host is placed with the surface its occupant needs; the occupant is the
       // runtime's to start, unless it is what that surface shows anyway.
@@ -140,13 +140,15 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       if (input.action === "delete") return [overlay(null), { kind: "remove", id }, select(null)];
       const tile = grid.tiles.find((t) => t.id === id);
       return tile && tile.family === "text"
-        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: tile.text, caret: tile.text.length })]
+        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: tile.text, caret: tile.text.length, scroll: 0 })]
         : [overlay({ kind: "name", id })];
     }
-    case "draft":
-      return session.overlay?.kind === "edit" && (session.overlay.draft !== input.text || session.overlay.caret !== input.caret)
-        ? [overlay({ ...session.overlay, draft: input.text, caret: input.caret })]
+    case "draft": {
+      const o = session.overlay;
+      return o?.kind === "edit" && (o.draft !== input.text || o.caret !== input.caret || o.scroll !== input.scroll)
+        ? [overlay({ ...o, draft: input.text, caret: input.caret, scroll: input.scroll })]
         : [];
+    }
     case "done":
     case "dismiss":
       return [overlay(null)];
