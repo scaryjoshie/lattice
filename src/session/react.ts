@@ -1,6 +1,6 @@
 import { type Command, propose } from "../model/command.ts";
 import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, wellFormed } from "../model/grid.ts";
-import type { ProgramId } from "../providers/descriptors.ts";
+import type { ProgramId } from "../providers/index.ts";
 import type { RuntimeCommand } from "../runtime/facts.ts";
 import { contains, type Region } from "../model/region.ts";
 import type { Gesture, Selection, Session, SessionCommand } from "./session.ts";

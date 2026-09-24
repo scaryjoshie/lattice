@@ -1,7 +1,7 @@
-import { MARKS } from "../paint/marks.ts";
 import { type Group, Popup } from "./Popup.tsx";
 import type { TextStyle } from "../model/grid.ts";
-import { type MarkId, PROGRAMS } from "../providers/descriptors.ts";
+import { PROGRAMS, type Stroke } from "../providers/index.ts";
+import { BROWSER } from "../scene/marks.ts";
 import type { Choice } from "../session/react.ts";
 
 /**
@@ -18,7 +18,7 @@ import type { Choice } from "../session/react.ts";
 interface Item {
   label: string;
   choice: Choice;
-  mark: MarkId | TextStyle;
+  mark: readonly Stroke[] | TextStyle;
 }
 
 const programs = Object.values(PROGRAMS);
@@ -34,7 +34,7 @@ const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
     heading: "utilities",
     items: [
       ...programs.filter((p) => !p.agent).map((p) => ({ label: p.label, choice: { family: "terminal", program: p.id } as const, mark: p.mark })),
-      { label: "browser", choice: { family: "browser" }, mark: "browser" },
+      { label: "browser", choice: { family: "browser" }, mark: BROWSER },
     ],
   },
   {
@@ -111,10 +111,10 @@ export function TileMenu({
 }
 
 /** The same path data the canvas draws, rendered as SVG for the menu. */
-function Mark({ mark }: { mark: MarkId }) {
+function Mark({ mark }: { mark: readonly Stroke[] }) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
-      {MARKS[mark].map((stroke) => (
+      {mark.map((stroke) => (
         <path
           key={stroke.d}
           d={stroke.d}

@@ -1,5 +1,5 @@
 import { CELL, visible, worldX } from "../scene/geometry.ts";
-import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
+import { MARK, MARK_UNITS, path } from "../scene/marks.ts";
 import { clip as clip_, FONT, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { hue, theme } from "./theme.ts";
@@ -87,7 +87,7 @@ function mark(
   ctx.strokeStyle = hue(spot.hue).ink;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (const stroke of MARKS[spot.mark]) {
+  for (const stroke of spot.mark) {
     const shape = path(stroke.d);
     if (stroke.width === undefined) {
       ctx.fill(shape, "evenodd");

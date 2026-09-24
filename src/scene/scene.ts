@@ -1,6 +1,7 @@
 import { bounds, close, type Grid, indexOfTrack, isRun, scopeAt, wellFormed } from "../model/grid.ts";
-import { type MarkId, PROGRAMS } from "../providers/descriptors.ts";
+import { PROGRAMS, type Stroke } from "../providers/index.ts";
 import { type Facts, programOf } from "../runtime/facts.ts";
+import { BROWSER } from "./marks.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { invalid, reach } from "../session/react.ts";
 import type { Session } from "../session/session.ts";
@@ -44,7 +45,7 @@ export interface TextRun {
 export interface Occupant {
   ci: number;
   ri: number;
-  mark: MarkId;
+  mark: readonly Stroke[];
   name?: string;
   hue: number | null;
 }
@@ -167,7 +168,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
       texts.push({ ...extent, style: tile.style, text: edited ? "" : tile.text, hue });
     } else {
       // The mark is what is observed to be running there, or the browser's own.
-      const mark: MarkId = tile.family === "browser" ? "browser" : PROGRAMS[programOf(facts, tile.id)].mark;
+      const mark = tile.family === "browser" ? BROWSER : PROGRAMS[programOf(facts, tile.id)].mark;
       const spot: Occupant = { ci, ri, mark, name: naming === tile.id ? undefined : tile.name, hue };
       occupied.push(spot);
       spots.set(tile.id, spot);

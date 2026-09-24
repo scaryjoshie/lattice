@@ -1,4 +1,4 @@
-import type { ProgramId } from "../providers/descriptors.ts";
+import type { ProgramId } from "../providers/index.ts";
 
 /**
  * What the runtime has observed: which program is in the foreground of each terminal.

@@ -1,5 +1,5 @@
 import { type Grid, type Link, nextId, type Scope, type Tile } from "../model/grid.ts";
-import type { ProgramId } from "../providers/descriptors.ts";
+import type { ProgramId } from "../providers/index.ts";
 import type { Facts } from "../runtime/facts.ts";
 
 /**
