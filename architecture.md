@@ -65,9 +65,13 @@ DOM event ──▶ toInput(event, camera)         view: the only code that know
    undoable; session and runtime commands are not.
 10. Each history entry records the grid before the change and the selection before it.
     Undo restores both, so undoing a change re-selects what was selected when it was made,
-    and selecting on its own is not an undo step. This is Figma's behaviour.
-11. History starts as a stack of grid snapshots, one per command. The grid is a small
-    immutable value, so no inverse commands exist to get wrong.
+    and selecting on its own is not an undo step. Figma and tldraw both put selection
+    changes on the undo stack; restoring the selection without making it a step is our
+    choice, not a precedent.
+11. History starts as a stack of grid snapshots, one per command, in memory. The grid is a
+    small immutable value, so no inverse commands exist to get wrong. Undo does not survive
+    a restart; when it must, it is rebuilt by replaying the daemon's events log
+    ([runtime.md](runtime.md)).
 
 ## Types the interaction layer is built on
 
@@ -109,9 +113,15 @@ function react(grid, session, input): Command[]
 
 Unidirectional data flow (Elm, Redux) for input → pure step → view. The command pattern
 for the commit step, which is how editors and games get preview and undo. A tool state
-chart for the gesture, of which tldraw is the nearest example. The two parts that are
-ours: the proposal, where the model returns a whole verdict that the scene previews and the
-store applies whole; and pointer ownership as a stated precedence.
+chart for the gesture, of which tldraw's `StateNode` tools are the nearest example; note
+that tldraw's handlers mutate the editor directly, so the precedent covers the state chart
+and not the purity. The closest thing to our pure step is Excalidraw's actions, each a
+`perform(elements, appState, …) → { elements, appState }`. Neither keeps a separate session
+value: tldraw holds selection as session-scoped records in the same store, Excalidraw in
+`appState`. The parts that are ours: the proposal, where the model returns a whole verdict
+that the scene previews and the store applies whole; the session as a value of its own;
+and pointer ownership as a stated precedence. Checked against both repositories on
+24 September 2026.
 
 ## Open
 

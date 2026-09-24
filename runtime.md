@@ -21,7 +21,9 @@ paint, overlays, xterm view       terminals: PTYs, scrollback, size
    quits, with a prompt if agents are running, as Terminal does. It is not a launch agent
    and does not survive quitting; that is the expectation every terminal app sets.
 3. Closing the window does not quit the app, so terminals and agents survive the canvas
-   being closed and reopened. That is the property that gets used.
+   being closed and reopened. That is the property that gets used. Tauri quits when its
+   last window closes unless the exit request is prevented, so this has to be built, not
+   assumed.
 4. The app and the daemon talk over a Unix socket, not in-process calls. Nothing else
    changes if the daemon is one day started differently.
 5. Rust in the Tauri shell does the window, tray and lifecycle. The daemon is a compiled
@@ -39,12 +41,14 @@ State lives under `~/.lattice/`: database, socket, log, secrets. Owner-only, as
 | `terminals` | id, cwd, status, created. The PTY is not persisted; its scrollback is, from the serialised headless mirror |
 | `agents` | identity, provider, provider session id, hosted-by terminal or null, created |
 | `projects`, `repos` | See [projects.md](projects.md) |
-| `events` | Append-only: every document command and every runtime fact, in order. The audit trail and the undo history, so undo survives a restart |
+| `events` | Append-only: every document command and every runtime fact, in order. The audit trail. Undo is in-memory snapshots ([architecture.md](architecture.md) 11); if it must survive a restart, it is rebuilt by replaying this |
 
 6. What is persisted is exactly the daemon column of the ownership table in
    [model.md](model.md). Nothing the client holds is written anywhere.
 7. The tmux model, plus a database. tmux persists nothing: its server holds PTYs in memory
-   and a reboot loses everything. Here the daemon holds the PTYs for the life of the app,
+   and a reboot loses everything; tmux-resurrect restores layout, working directories and
+   optionally pane contents, and cannot restore a conversation. Here the daemon holds the
+   PTYs for the life of the app,
    and disk holds enough to restore the grid, re-spawn each terminal in its directory with
    its scrollback, and offer to resume each agent from its session id. An agent session is
    resumable in a way a shell command is not, which is why this is more than tmux.
