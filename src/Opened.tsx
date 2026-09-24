@@ -7,7 +7,7 @@ import type { OccupantKind } from "./model.ts";
  * nothing else, so nothing reflows and nothing inside is measured on the way. What is
  * inside fades in once the panel has arrived, because a card and a terminal are different
  * representations rather than two sizes of one thing. For now what is inside is nothing.
- * Cmd-Escape closes it: Escape itself is the agent's.
+ * Cmd-period closes it: Escape itself is the agent's.
  */
 
 export interface Rect {
@@ -62,10 +62,12 @@ export function Opened({
   };
 
   // Cmd is the application layer; every other key belongs to what is inside, and Escape
-  // in particular belongs to the agent. Cmd-Escape leaves.
+  // in particular belongs to the agent. Cmd-period leaves: the Mac's own cancel chord. It
+  // was Cmd-Escape, which works in Chromium but never reaches the page in Aside, the
+  // browser this is being looked at in — the browser takes it first.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && e.metaKey) {
+      if (e.key === "." && e.metaKey) {
         e.preventDefault();
         close();
       }
