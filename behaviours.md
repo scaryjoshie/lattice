@@ -86,7 +86,7 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 29. Shift-click on an empty cell opens the add menu at the pointer: for a place, the act
     and the menu are the same thing. With something selected and the cell outside it,
     shift-click extends instead (20).
-30. **[proposed]** Shift-click on an item opens it.
+30. Shift-click on an occupant opens it (105). A run does not open.
 31. Right-click on an item opens the tile menu at the pointer, whichever of its cells was
     hit. Right-click on an empty cell opens the add menu. The browser's own context menu
     never appears over the canvas.
@@ -282,6 +282,22 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 103. All of them move on one shared counter, so everything in flight moves together.
 104. The frame loop requests a frame every 16ms for the life of the component and draws
      only while something is focused, proposed or previewed. It does not go idle.
+
+## Opening
+
+105. Shift-click on an occupant opens it: a panel appears exactly over the tile, at whatever
+     zoom, and scales up to fill the viewport 24 screen pixels short of each edge. Inside
+     the selection shift still means act, so a selected occupant opens the same way.
+106. The panel is one element at its full size, shown as a transform of itself, so nothing
+     reflows and nothing inside is measured on the way. What is inside fades in once the
+     panel has arrived. For now what is inside is nothing.
+107. Cmd-Escape closes it, and so does Cmd-period, and so does a press anywhere outside the
+     panel. Escape alone does nothing: it belongs to what is inside. Closing retraces the
+     same path back to the tile, and the panel is gone when it arrives.
+108. While a tile is open the grid and the camera see nothing: no hover, no press, no pan,
+     no wheel, no Escape.
+109. The key panel fades and settles a few pixels down while a tile is open, and comes back
+     the moment the close begins, not when it ends.
 
 ## Gaps and contradictions
 
