@@ -130,6 +130,35 @@ shadows than from an argument about it.
     began.
 50. Hover, the plus and the menu are all suppressed while dragging.
 
+## Worktrees, and resizing
+
+50a. A worktree is selected by a square on its top-left corner, straddling the corner
+    point, shown while the pointer is inside the worktree or on the square; pointing at
+    the square rings the whole worktree and names it, and the cell under the pointer is
+    not pointed at. A rectangle selection whose bounds are exactly a worktree's is that
+    worktree. Selected, the square gives way to the brackets.
+50b. With a worktree selected, its gridlines can be held: an edge within nine pixels, an
+    interior line within five, a corner both lines, and two interior lines only within
+    four pixels of their crossing. A held line is lit across the worktree with a grip
+    under the pointer — a pill along a line, a cross at a crossing, a rounded corner at a
+    corner — and no cell is hovered while one is lit.
+50c. Dragging a line by whole cells moves it. An interior line only inserts: that many
+    empty tracks appear at the line, the far side shifts, the worktree grows at that edge.
+    An edge inserts outward the same way and dragged inward removes tracks, pushing the
+    worktree's own contents inward and refusing when something would have to leave the
+    far side. A corner is both axes, the second on the grid the first would leave. The new
+    cells are hatched in the hue; a refusal hatches in red and rings in red.
+50d. Pushing: nothing beyond the growing edge moves until it is up against it, then it
+    moves by the overlap and passes only that on. Units are a loose tile alone or a
+    worktree whole with its contents. It chains along one direction and never fails.
+50e. A selected run resizes by the same grips, edges only. Inward shrinks it and the words
+    reflow; outward grows it and pushes, refused if it would leave or enter a worktree.
+    The axis dragged becomes a cap the editor keeps.
+50f. Shift-drag sweeps a rectangle selection, closed as it goes and previewed dashed; with
+    something selected it extends from the selection. Plain drag pans everywhere except
+    from inside the selection, where it moves.
+50g. The veil sits at 68 percent. Menus and the key panel share one translucent surface.
+
 ## What a move is
 
 51. A move exchanges one region of the grid with another of the same size: the region the
