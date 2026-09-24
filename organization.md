@@ -46,10 +46,11 @@ lattice/
 6. Adding a provider is one folder and one descriptor. Nothing in `model`, `session` or
    `paint` changes. That is the test that the tile's `kind` has left the model: today
    adding one touches all three, which [model.md](model.md) forbids.
-7. Two model changes come before the daemon, because its protocol is written against the
-   model's shape: the provider comes off the tile and becomes a fact the runtime observes
-   and looks up in the descriptor table; and a run becomes its own record beside occupants
-   rather than optional fields on one `Tile`.
+7. Two model changes came before the daemon, because its protocol is written against the
+   model's shape, and both are done: the provider is off the tile and is a fact the
+   runtime observes (`runtime/facts.ts`) looked up in the descriptor table
+   (`providers/descriptors.ts`); and a run is its own record beside terminals and
+   browsers rather than optional fields on one `Tile`.
 
 ## Preferences
 

@@ -21,7 +21,8 @@ Dependencies point down. Nothing lower knows what is above it.
 | paint | Draws a scene and remembers nothing | Exists: `paint/paint.ts`. Sound. Called paint rather than render because render already means React's re-render in this codebase |
 | view | Translates DOM events into inputs; mounts overlays | `view/Grid.tsx`, 410 lines: hit tests, the scheduler, `toInput`, `dispatch`, the overlays. Decides nothing |
 
-One folder per layer, in this order plus `mock` between model and store for the seed grid,
+One folder per layer, in this order plus `providers` (the descriptor table), `runtime` (facts
+the runtime observes, and its commands) and `mock` between model and session,
 and `scripts/check-layers.ts` fails the build on an import that points up. How these become
 packages once there are two processes is in [organization.md](organization.md).
 
