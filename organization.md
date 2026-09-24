@@ -38,11 +38,14 @@ lattice/
 
 ## Providers
 
-4. A provider is two halves. The *descriptor* is data: its mark, its label, the controls it
-   offers, how it is launched, how it is resumed, how its session id is found. The
-   *adapter* is code that does those things against the real program.
+4. A provider is one folder that defines everything about itself, in two halves. The
+   *descriptor* is data: its mark, its label, the controls it offers, how it is launched,
+   how it is resumed, how its session id is found. The *adapter* is code that does those
+   things against the real program. Both live in `providers/<name>/`.
 5. Descriptors are shared, so the client draws a mark and offers a control without knowing
-   how anything is launched. Adapters live only in `daemon/providers/<name>`.
+   how anything is launched. Adapters run only in the daemon. A registry, `providers/index.ts`,
+   lists the folders and knows nothing about them but their names. Built as far as the
+   descriptors: `experiment-5/src/providers/{claude,codex,shell}`.
 6. Adding a provider is one folder and one descriptor. Nothing in `model`, `session` or
    `paint` changes. That is the test that the tile's `kind` has left the model: today
    adding one touches all three, which [model.md](model.md) forbids.
