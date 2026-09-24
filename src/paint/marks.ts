@@ -1,4 +1,4 @@
-import type { OccupantKind } from "./model.ts";
+import type { OccupantKind } from "../model/grid.ts";
 
 /**
  * Provider marks as path data rather than components. They are drawn onto the canvas with

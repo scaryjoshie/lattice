@@ -1,59 +1,46 @@
 #!/usr/bin/env bun
-import { readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 /**
- * Dependencies point down. Each module names what it may import; a module not named here
- * fails, so a new file has to be placed before it builds. The view (every .tsx, and the
- * camera) may import anything below it, and nothing below the view may import it.
- *
- *   region, geometry, theme, pointer    import nothing
- *   model                               region
- *   marks, measure                      model, geometry
- *   store                               model, measure, region
- *   interaction                         model, region, geometry            (to be written)
- *   scene                               model, region, geometry, measure   (to be written)
- *   paint                               scene and what scene may, plus marks, theme
- *   camera                              geometry, pointer
+ * Dependencies point down. A folder is a layer; a file may import from its own folder or
+ * any folder earlier in this list, and nothing outside `view` imports `view`. A file in a
+ * folder not listed fails, so a new file has to be placed before it builds. `main.tsx` at
+ * the root may import anything.
  */
-const LAYERS: Record<string, readonly string[]> = {
-  region: [],
-  geometry: [],
-  theme: [],
-  pointer: [],
-  model: ["region"],
-  marks: ["model"],
-  measure: ["geometry", "model"],
-  store: ["model", "measure", "region"],
-  interaction: ["model", "region", "geometry"],
-  scene: ["model", "region", "geometry", "measure"],
-  paint: ["scene", "model", "region", "geometry", "measure", "marks", "theme"],
-  camera: ["geometry", "pointer"],
+const LAYERS = ["model", "store", "session", "scene", "paint", "view"] as const;
+
+/** Debts: imports the rule forbids, allowed by name until the debt is paid. */
+const DEBTS: Record<string, readonly string[]> = {
+  // Text geometry is measured in the store until a run's span is derived once, in the
+  // layout, with caps as the only stored size.
+  "store/store.ts": ["paint/measure.ts"],
 };
 
-const root = join(import.meta.dir, "..", "src");
+const root = resolve(import.meta.dir, "..", "src");
+const files = (dir: string): string[] =>
+  readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? files(p) : /\.(ts|tsx)$/.test(n) && !n.endsWith(".test.ts") ? [p] : [];
+  });
+
+const layerOf = (rel: string): number => LAYERS.indexOf(rel.split("/")[0] as (typeof LAYERS)[number]);
 const violations: string[] = [];
-for (const file of readdirSync(root)) {
-  if (!/\.(ts|tsx)$/.test(file) || file.endsWith(".test.ts")) continue;
-  const name = basename(file).replace(/\.tsx?$/, "");
-  const view = file.endsWith(".tsx");
-  const allowed = LAYERS[name];
-  if (!view && !allowed) {
-    violations.push(`${file} is not placed in a layer`);
+for (const file of files(root)) {
+  const rel = relative(root, file);
+  if (rel === "main.tsx") continue;
+  const layer = layerOf(rel);
+  if (layer < 0) {
+    violations.push(`${rel} is not in a layer`);
     continue;
   }
-  const src = readFileSync(join(root, file), "utf8");
-  for (const m of src.matchAll(/from\s+"\.\/([^"]+)"/g)) {
-    const target = (m[1] ?? "").replace(/\.tsx?$/, "").replace(/\.css$/, "");
-    const targetIsView = (m[1] ?? "").endsWith(".tsx");
-    if (view) {
-      if (targetIsView && name !== "App" && name !== "main" && name !== "Grid" && name !== "Menu") {
-        violations.push(`${file} (view) imports another view, ${m[1]}`);
-      }
-      continue;
-    }
-    if (targetIsView) violations.push(`${file} (${name}) imports the view, ${m[1]}`);
-    else if (!allowed?.includes(target)) violations.push(`${file} (${name}) imports ${target}`);
+  const src = readFileSync(file, "utf8");
+  for (const m of src.matchAll(/from\s+"(\.[^"]+)"/g)) {
+    const target = relative(root, resolve(file, "..", m[1] ?? ""));
+    if (target.endsWith(".css")) continue;
+    const to = layerOf(target);
+    if (to < 0) violations.push(`${rel} imports ${target}, which is in no layer`);
+    else if (to > layer && !DEBTS[rel]?.includes(target)) violations.push(`${rel} (${LAYERS[layer]}) imports ${target} (${LAYERS[to]})`);
   }
 }
 if (violations.length > 0) {

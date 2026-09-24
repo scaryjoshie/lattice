@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { cellsFor, linesFor, spanFor } from "./measure.ts";
+import { cellsFor, linesFor, spanFor } from "../paint/measure.ts";
 import {
   addTile,
   applied,
@@ -12,7 +12,7 @@ import {
   seed,
   type TextStyle,
   type TileKind,
-} from "./model.ts";
+} from "../model/grid.ts";
 
 /** The model, and nothing else. Camera state deliberately does not live here. */
 interface Store {

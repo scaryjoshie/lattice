@@ -2,7 +2,7 @@ import { select } from "d3-selection";
 import { zoom as d3zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { type RefObject, useEffect, useRef } from "react";
 import { claimed } from "./pointer.ts";
-import type { Camera } from "./geometry.ts";
+import type { Camera } from "../scene/geometry.ts";
 
 /**
  * The camera never touches React.

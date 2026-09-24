@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Grid } from "./Grid.tsx";
-import { useGrid } from "./store.ts";
-import { dark, followSystem, light, setTheme, theme } from "./theme.ts";
+import { useGrid } from "../store/store.ts";
+import { dark, followSystem, light, setTheme, theme } from "../paint/theme.ts";
 
 export function App() {
   useEffect(() => {

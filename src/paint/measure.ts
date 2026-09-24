@@ -1,5 +1,5 @@
-import { CELL } from "./geometry.ts";
-import type { TextStyle } from "./model.ts";
+import { CELL } from "../scene/geometry.ts";
+import type { TextStyle } from "../model/grid.ts";
 
 /**
  * Type metrics, shared between the paint and the editor so the two cannot disagree about

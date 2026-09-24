@@ -1,8 +1,8 @@
-import { CELL, type Camera, visible, worldX } from "./geometry.ts";
+import { CELL, type Camera, visible, worldX } from "../scene/geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { clip as clip_, FONT, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
-import type { OccupantKind, TextStyle } from "./model.ts";
-import { cells as cellsOf, contains, type Region } from "./region.ts";
+import type { OccupantKind, TextStyle } from "../model/grid.ts";
+import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { hue, theme } from "./theme.ts";
 
 /**

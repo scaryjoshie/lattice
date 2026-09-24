@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { OccupantKind } from "./model.ts";
+import type { OccupantKind } from "../model/grid.ts";
 
 /**
  * A tile opened: the same rectangle, drawn bigger. The panel lives at its full size and is

@@ -1,26 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "./camera.ts";
-import { type Camera, CELL, cellAt, worldX } from "./geometry.ts";
+import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
 import {
   indexOfTrack,
   type Move,
   proposeMove,
-  columnsFor,
-  rowsFor,
   applied,
   bounds,
   proposeResize,
-  type Axis,
   type Grid,
   type OccupantKind,
   close,
-  footprint,
   wellFormed,
   scopeAt,
   type TextStyle,
   type TileKind,
-} from "./model.ts";
-import { cells as cellsOf, contains, type Region } from "./region.ts";
+} from "../model/grid.ts";
+import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import {
   type Cell,
   type Scene,
@@ -29,14 +25,16 @@ import {
   paint,
   type Plate,
   type TextRun,
-} from "./paint.ts";
-import { cellsFor, fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
+} from "../paint/paint.ts";
 import { Keys, type Mode } from "./Keys.tsx";
 import { Menu, TileMenu } from "./Menu.tsx";
 import { Opened, type Rect } from "./Opened.tsx";
 import { claimed } from "./pointer.ts";
-import { useGrid } from "./store.ts";
-import { onTheme } from "./theme.ts";
+import { Editor } from "./Editor.tsx";
+import { Namer } from "./Namer.tsx";
+import { sameTarget, type Target } from "../session/target.ts";
+import { useGrid } from "../store/store.ts";
+import { onTheme } from "../paint/theme.ts";
 
 /**
  * Two layers over one camera. The canvas paints every cell, occupied or not, so that cells
@@ -46,133 +44,6 @@ import { onTheme } from "./theme.ts";
  *
  * React renders when the model changes. Panning and zooming call `draw` and nothing else.
  */
-/**
- * Typing a run.
- *
- * The span follows the words, cell by cell, so nothing is cleared before there is
- * something to put in it. It stops at the first cell that already holds something — the
- * way a spreadsheet lets text spill into empty neighbours and cuts it off at a full one —
- * because two things cannot be in one cell, and pushing the neighbour aside needs a notion
- * of what may be pushed that does not exist yet.
- */
-function Editor({
-  id,
-  onDone,
-  onShape,
-}: {
-  id: string;
-  onDone(): void;
-  onShape(span: number, rows: number): void;
-}) {
-  const grid = useGrid((s) => s.grid);
-  const setText = useGrid((s) => s.setText);
-  const removeTile = useGrid((s) => s.remove);
-  const tile = grid.tiles.find((x) => x.id === id);
-  const [draft, setDraft] = useState(tile?.text ?? "");
-
-  if (!tile) return null;
-  const ci = indexOfTrack(grid.columns, tile.columnId);
-  const ri = indexOfTrack(grid.rows, tile.rowId);
-  const style = tile.style ?? "title";
-  const m = METRICS[style];
-
-  // A capped axis is the size the writer fixed; an uncapped one is what the words need.
-  const span = columnsFor(grid, id, ci, ri, tile.cap?.span ?? spanFor(style, draft || " "));
-  /*
-   * Wrapping is what running out of room means. If the words need more width than there
-   * is, they go down instead — as far as there is room below at that width, and no
-   * further, at which point the paint cuts them with an ellipsis.
-   */
-  // In cells, not lines: a note fits several lines in a cell, a title exactly one.
-  const rows = rowsFor(grid, id, ci, ri, span, tile.cap?.rows ?? cellsFor(style, linesFor(style, draft, span)));
-  // The canvas owns the surface and the ruling even while typing; the input contributes
-  // only a caret and glyphs, so it has to say how far it currently reaches.
-  // Both, not just the width: the canvas leaves a run's cells unruled while it is being
-  // typed, and it can only do that for cells it has been told about.
-  onShape(span, rows);
-  const commit = () => {
-    onDone();
-    if (draft.trim() === "") removeTile(id);
-    else setText(id, draft, span, rows);
-  };
-
-  return (
-    <textarea
-      className="editor"
-      autoFocus
-      spellCheck={false}
-      value={draft}
-      rows={1}
-      style={{
-        left: worldX(ci),
-        top: worldX(ri) + CELL * m.pad,
-        height: CELL * rows - CELL * m.pad,
-        width: CELL * span,
-        paddingLeft: CELL * m.inset,
-        paddingRight: CELL * m.inset,
-        font: fontOf(style, CELL),
-        // After `font`, not before: the shorthand resets line-height to normal, so setting
-        // it first is silently undone. An input centres its own text; a textarea needs the
-        // line box to be the cell for one line to sit where the input's did.
-        lineHeight: `${CELL * m.leading}px`,
-      }}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        // Enter commits. Shift-enter is a line break, which the textarea inserts itself.
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
-        if (e.key === "Escape") {
-          onDone();
-          if ((tile.text ?? "") === "") removeTile(id);
-        }
-      }}
-    />
-  );
-}
-
-/**
- * Naming a tile. A name has exactly the one cell its tile occupies, so it is typed in the
- * place it will live and at the size it will be, and is cut to fit rather than allowed to
- * spill — an occupant owns one cell and its name cannot claim more.
- */
-function Namer({ id, onDone }: { id: string; onDone(): void }) {
-  const grid = useGrid((s) => s.grid);
-  const setName = useGrid((s) => s.setName);
-  const tile = grid.tiles.find((x) => x.id === id);
-  const [draft, setDraft] = useState(tile?.name ?? "");
-  if (!tile) return null;
-  const ci = indexOfTrack(grid.columns, tile.columnId);
-  const ri = indexOfTrack(grid.rows, tile.rowId);
-  const commit = () => {
-    onDone();
-    setName(id, draft);
-  };
-  return (
-    <input
-      className="editor namer"
-      autoFocus
-      spellCheck={false}
-      value={draft}
-      style={{
-        left: worldX(ci),
-        top: worldX(ri) + CELL * 0.69,
-        width: CELL,
-        height: CELL * 0.2,
-        font: nameFont(CELL),
-      }}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-        if (e.key === "Escape") onDone();
-      }}
-    />
-  );
-}
-
 /**
  * A selection, with a region that is exactly a scope's bounds read as that scope. Selecting
  * a worktree's cells is selecting the worktree; there is no second way to mean it.
@@ -196,26 +67,6 @@ const CROSS_HIT = 4;
 
 /** The scope handle's hit area, in screen pixels. Drawn smaller; a target should be generous. */
 const HANDLE_HIT = 24;
-
-/**
- * What the pointer is on: exactly one of these at a time. A scope's corner handle, a
- * gridline of the selected scope or run, or a cell. Their hit areas nest — a handle's
- * square lies within a line's band, which lies within a cell — so the pointer is on the
- * most specific thing whose area contains it. `targetAt` is the only place that knows.
- */
-type Target =
-  | { kind: "cell"; ci: number; ri: number }
-  | { kind: "handle"; scope: string }
-  | { kind: "line"; owner: string; c: number | null; r: number | null };
-
-const sameTarget = (a: Target | null, b: Target | null): boolean => {
-  if (a === b) return true;
-  if (!a || !b || a.kind !== b.kind) return false;
-  if (a.kind === "cell" && b.kind === "cell") return a.ci === b.ci && a.ri === b.ri;
-  if (a.kind === "handle" && b.kind === "handle") return a.scope === b.scope;
-  if (a.kind === "line" && b.kind === "line") return a.owner === b.owner && a.c === b.c && a.r === b.r;
-  return false;
-};
 
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 function reach(r: Region, [ci, ri]: readonly [number, number]): Region {

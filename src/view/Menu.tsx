@@ -1,6 +1,6 @@
-import { MARKS } from "./marks.ts";
+import { MARKS } from "../paint/marks.ts";
 import { type Group, Popup } from "./Popup.tsx";
-import type { TextStyle, TileKind } from "./model.ts";
+import type { TextStyle, TileKind } from "../model/grid.ts";
 
 /**
  * What can go in a cell, grouped by what a thing is rather than by what it does. This is

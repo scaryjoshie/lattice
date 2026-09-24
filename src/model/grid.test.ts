@@ -13,7 +13,7 @@ import {
   seed,
   type Tile,
   wellFormed,
-} from "./model.ts";
+} from "./grid.ts";
 import { cells, contains, covers, overlaps, type Region } from "./region.ts";
 
 /**
