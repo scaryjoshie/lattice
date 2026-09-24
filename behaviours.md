@@ -217,10 +217,11 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 74. A title and a note differ only in type size. One drawing path, one editor, and nothing
     else branches on which a run is.
-75. A run's width is what its words need, measured at the cell's own size, bounded by
-    what is free beside it, unless a cap fixes it. Its height is its lines times its
-    leading rounded up to whole cells, bounded by what is free below, unless a cap fixes
-    it.
+75. A run's width is what its words need, bounded by what is free beside it, unless a cap
+    fixes it. Its height is its lines times its leading rounded up to whole cells, bounded
+    by what is free below, unless a cap fixes it. Text is measured by arithmetic: the face
+    is monospace and every glyph advances 0.6 em, so a line's width is its length times
+    its size times 0.6, and no canvas is asked.
 76. A run grows cell by cell as it is typed. It stops at the first cell that already holds
     something, and at every scope boundary in both directions: text may not leave a
     scope, and may not enter one.
@@ -232,10 +233,13 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     empty run removes it.
 79. The ruling is omitted inside a run rather than painted over. While a run is being
     typed the canvas still owns its surface and its ruling; the input contributes only a
-    caret and glyphs, and tells the canvas how far it currently reaches.
+    caret and glyphs, and reports its draft, which the scene lays out like any run.
 80. Text takes the ink of whatever scope it sits in.
-81. **[proposed]** A run's span is not stored at all: what the text needs, bounded by what
-    is free, so anything that stops blocking a run lets it breathe with no rule per case.
+81. A run's span is not stored at all: what the text needs, bounded by what is free, so
+    anything that stops blocking a run lets it breathe with no rule per case. Move a host
+    away and the run grows; undo and it is cut again. Two runs in one row are bounded by
+    the later one's origin and the earlier one's extent, in tile order. A cap is the only
+    stored size.
 82. **[proposed]** `*italic*` and `**bold**` mark emphasis inline. Emphasis changes width,
     so it changes the span a run needs.
 
