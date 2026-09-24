@@ -244,8 +244,8 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 87. The wheel zooms. Dragging the background pans. Zoom is limited to between 0.25 and 3.
 88. Panning and zooming never change the model.
-89. Camera events repaint at most once per animation frame, always with the latest camera.
-    A scene change repaints at once, so during a drag a frame can paint twice.
+89. Everything repaints at most once per animation frame, always with the latest camera.
+    A camera move and a scene change in the same frame are one paint.
 90. A camera move starts nothing animating. Anything already in flight keeps moving.
 
 ## What scales and what does not
@@ -280,8 +280,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 102. The only things that animate are the crawling link dashes, the flowing chevrons and
      the crawling outline of a selection being previewed.
 103. All of them move on one shared counter, so everything in flight moves together.
-104. The frame loop requests a frame every 16ms for the life of the component and draws
-     only while something is focused, proposed or previewed. It does not go idle.
+104. A frame is requested only while something animates: a focus, a proposal or a
+     previewed selection. Each animated frame asks for the next itself and stops asking
+     when nothing animates, so an idle canvas requests no frames and paints nothing.
 
 ## Opening
 
@@ -303,9 +304,6 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 Noted rather than resolved.
 
-- The frame loop never stops (104). The fix exists on the `verifier-fixes` branch and was
-  reverted with everything around it.
-- A scene change paints synchronously beside the frame loop (89).
 - The editor reports its shape to the grid during its own render.
 - A cell under a run is not lightness-marked (95).
 - A cap on a run can be set by dragging and cannot be lifted.
