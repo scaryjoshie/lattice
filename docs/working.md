@@ -20,7 +20,8 @@ long session. Written 24 September 2026.
 
 1. One step per commit. A step is one rule, one deletion, or one behaviour. Ten fixes in
    two edits broke chevrons and the frame loop on 23 September and needed a hard reset.
-2. `bun run check` before every commit. `bunx vite build` does not typecheck.
+2. `bun run check` at the repository root before every commit: every package's layer
+   check, tests, types and build. `bunx vite build` alone does not typecheck.
 3. A visible change is left uncommitted with a note saying exactly what to look at. Joshua
    looks; then it is committed. A green build says nothing about what is drawn.
 4. Prefer the diff that deletes. The correct implementation replaces the incorrect one

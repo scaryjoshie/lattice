@@ -1,0 +1,10 @@
+{
+  "name": "lattice",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "bun run --cwd packages/app dev",
+    "check": "bun run --cwd packages/model check && bun run --cwd packages/app check && bun run --cwd packages/daemon check",
+    "test": "bun test"
+  }
+}

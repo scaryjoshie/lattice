@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Lattice",
+  "version": "0.1.0",
+  "identifier": "dev.lattice.app",
+  "build": {
+    "frontendDist": "../../app/dist",
+    "devUrl": "http://localhost:5277",
+    "beforeDevCommand": "bun run --cwd ../app dev",
+    "beforeBuildCommand": "bun run --cwd ../app build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lattice",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

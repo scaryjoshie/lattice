@@ -1,0 +1,16 @@
+{
+  "name": "@lattice/model",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "check": "bun test && bunx tsc -p ."
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2",
+    "typescript": "^5.9.0"
+  }
+}

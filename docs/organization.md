@@ -31,10 +31,12 @@ lattice/
    Within the daemon, `core` imports nothing else in the daemon; `runtime` imports `core`;
    `providers/<name>` imports its own folder, the runtime's provider contract, and `core`'s
    paths and secrets helpers; `server` imports anything.
-3. Today's `experiment-5/src` is `packages/app/src` with `model/` and `mock/` inside it.
-   The split is a move: `model` lifts out to its own package, `mock` becomes the daemon's
-   seed until there is real data, and nothing else changes. It happens as the first daemon
-   commit, not before, since until then there is one consumer.
+3. Done on 24 September: `experiment-5` is `packages/app`, `model` is its own package
+   imported as `@lattice/model`, `packages/daemon` listens on the socket and answers
+   hello, and `packages/shell` is a Tauri project that opens the app. `mock` stays in the
+   app until the daemon has real data. Not yet wired: the shell starting the daemon, and
+   the app reaching the daemon's socket, which a webview cannot open itself and the shell
+   must bridge.
 
 ## Providers
 

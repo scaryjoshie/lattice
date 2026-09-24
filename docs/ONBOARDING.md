@@ -13,22 +13,26 @@ primary interface. The current effort is establishing what that canvas *is*.
 ## Where things are
 
 ```
-/Users/joshua/dev/pane
+/Users/joshua/dev/lattice        one repository since 24 September 2026; history of each part kept
   docs/                the current design. Rebuilt from scratch; see README.md
   docs/archive/        the previous design set, superseded, kept whole for cherry-picking
+  packages/model       the document as a value. Pure, shared, tested from Bun
+  packages/app         the grid. Was experiments/experiment-5
+  packages/daemon      the Bun sidecar. A socket that answers hello, today
+  packages/shell       the Tauri window around the app
   experiments/experiment-1   a full vertical slice: kernel, git, runtime, MCP, React Flow UI
   experiments/experiment-2   a pane that opens into a live Claude Code terminal
   experiments/experiment-3   a first grid, abandoned
   experiments/experiment-4   a grid of rounded boxes with gutters, superseded
-  experiments/experiment-5   the live one. A ruled grid on a canvas
 ```
 
-`docs/` and each experiment are separate git repositories. Commit messages are long and
-explain reasoning; they are a good history of why things are the way they are, and they are
-also claims that can be wrong.
+Commit messages are long and explain reasoning; they are a good history of why things are
+the way they are, and they are also claims that can be wrong. `~/dev/pane` holds the
+repositories as they were before the merge, untouched.
 
-`experiment-5` runs with `bun install && bunx vite` on port 5277. It is frontend only: no
-daemon, no terminals, no agents actually running. Everything on screen is a mock.
+`bun install && bun run dev` runs the app in a browser on port 5277; `bun run --cwd
+packages/shell dev` runs it in a window. No terminals or agents actually run yet; what is
+on the grid is a mock.
 
 ## The documents, and what each claims
 
@@ -62,10 +66,9 @@ In rough order of how much damage a wrong answer does.
    React state. Check these rather than take them.
 
 4. **Known weaknesses, already admitted — confirm or refute rather than rediscover.**
-   `Grid.tsx` is 28% of the codebase and holds scene derivation, the render loop, five
-   effects and five pointer handlers. There are no tests. `draw` is a `useCallback` with
-   empty dependencies and may read only refs, which is an unenforced contract that has
-   already been broken once. `Scene` grows a field per feature.
+   These were true on 23 September and are not now: `Grid.tsx` is 410 lines and decides
+   nothing, there are 55 tests, the scene is a pure function. What is admitted today is in
+   the gaps list at the end of `behaviours.md`.
 
 5. **Claims made about third-party behaviour**, which were researched but may be wrong or
    stale: that xterm's WebGL addon ignores `lineHeight`; that `@xyflow/react` delegates
