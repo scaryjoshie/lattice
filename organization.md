@@ -1,0 +1,89 @@
+# Organisation
+
+How the code is laid out once there are two processes, where providers and settings go,
+and what lives in `~/.lattice`. Decided 24 September 2026. The client half exists in
+`experiments/experiment-5`; the rest is not built.
+
+## Packages
+
+One repository, Bun workspaces, one package per process plus what they share.
+
+```
+lattice/
+  packages/
+    model/       the document as a value: grid, region, commands, propose and apply     shared, pure
+    protocol/    the wire: commands in, snapshots and facts out; types and a codec    shared
+    daemon/      the Bun sidecar
+      core/        store (SQLite), history, events, preferences, paths, secrets
+      terminals/   PTYs, the headless mirror, size
+      runtime/     agents: identity, hosting, observation of what is running
+      providers/   one folder per provider: claude/, codex/, shell/
+      projects/    repos and worktrees, read from git
+      server/      the socket and request handling
+    app/         the webview client: session/, scene/, paint/, view/, client/
+    shell/       src-tauri: the window, the tray, sidecar supervision, the quit prompt
+  docs/
+```
+
+1. `model` and `protocol` are the only packages both processes import. The daemon never
+   imports the app; the app never imports the daemon.
+2. Each package keeps its own layer checker, by folder, as `experiment-5` and modelbus do.
+   Within the daemon, `core` imports nothing else in the daemon; `runtime` imports `core`;
+   `providers/<name>` imports its own folder, the runtime's provider contract, and `core`'s
+   paths and secrets helpers; `server` imports anything.
+3. Today's `experiment-5/src` is `packages/app/src` with `model/` and `mock/` inside it.
+   The split is a move: `model` lifts out to its own package, `mock` becomes the daemon's
+   seed until there is real data, and nothing else changes. It happens as the first daemon
+   commit, not before, since until then there is one consumer.
+
+## Providers
+
+4. A provider is two halves. The *descriptor* is data: its mark, its label, the controls it
+   offers, how it is launched, how it is resumed, how its session id is found. The
+   *adapter* is code that does those things against the real program.
+5. Descriptors are shared, so the client draws a mark and offers a control without knowing
+   how anything is launched. Adapters live only in `daemon/providers/<name>`.
+6. Adding a provider is one folder and one descriptor. Nothing in `model`, `session` or
+   `paint` changes. That is the test that the tile's `kind` has left the model: today
+   adding one touches all three, which [model.md](model.md) forbids.
+7. Two model changes come before the daemon, because its protocol is written against the
+   model's shape: the provider comes off the tile and becomes a fact the runtime observes
+   and looks up in the descriptor table; and a run becomes its own record beside occupants
+   rather than optional fields on one `Tile`.
+
+## Preferences
+
+8. A third persisted value beside the document and the session. Theme, the key panel,
+   the default location for new worktrees, provider configuration such as paths and flags.
+9. Owned by the daemon's store, changed by their own commands, not undoable, pushed to the
+   client the way the grid is. Not in the session, because they outlive the window; not in
+   the document, because they are not about any project.
+
+## `~/.lattice`
+
+```
+~/.lattice/
+  lattice.db      the store: grid, terminals, agents, projects, preferences, events
+  daemon.sock     the socket
+  daemon.log
+  secrets/        one owner-only file per provider, replaced through a temporary file and rename
+```
+
+10. The directory and every file in it are owner-only. That protects against other users
+    on the machine and not against other programs running as you: the same trust model as
+    `~/.modelbus` and every developer tool's dotfolder, and the right one for a local daemon.
+11. `daemon/core/paths.ts` is the only module that knows where `~/.lattice` is. Tests run
+    against a temporary directory by overriding one value.
+12. `daemon/core/secrets.ts` is the only module that reads or writes `secrets/`. A provider
+    asks it for its own secret and cannot reach the database.
+13. The socket needs no token. A client that can open an owner-only socket is the owner.
+
+## Tokens
+
+14. Lattice runs the providers' own programs and never calls their APIs, so it holds no
+    API keys. Claude Code and Codex keep their own logins.
+15. What it may hold: a per-provider delivery token, if pushing text into a running Claude
+    uses its inbox mechanism as modelbus does. In `secrets/`, owned by that provider's
+    adapter.
+16. Cloud or sync credentials, if they ever exist, go in the macOS Keychain through
+    Tauri's plugin, not in a file. Not now.

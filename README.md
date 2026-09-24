@@ -24,6 +24,7 @@ For a reviewing agent, start at [ONBOARDING.md](ONBOARDING.md).
 | [architecture.md](architecture.md) | The layers, the three owned values, the loop, commands and undo. Decided, not built |
 | [runtime.md](runtime.md) | The daemon, what it persists, the agent service, what is lifted from modelbus |
 | [projects.md](projects.md) | Projects, repos and worktrees: observed from git, never owned |
+| [organization.md](organization.md) | Packages for two processes, providers as descriptor and adapter, preferences, `~/.lattice`, secrets |
 | [shipping.md](shipping.md) | Tauri, signing, the sidecar, what installing mandates |
 | [working.md](working.md) | The practices, and the mechanism that enforces each |
 

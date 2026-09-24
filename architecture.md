@@ -22,7 +22,8 @@ Dependencies point down. Nothing lower knows what is above it.
 | view | Translates DOM events into inputs; mounts overlays | `view/Grid.tsx`, 410 lines: hit tests, the scheduler, `toInput`, `dispatch`, the overlays. Decides nothing |
 
 One folder per layer, in this order plus `mock` between model and store for the seed grid,
-and `scripts/check-layers.ts` fails the build on an import that points up.
+and `scripts/check-layers.ts` fails the build on an import that points up. How these become
+packages once there are two processes is in [organization.md](organization.md).
 
 The test for where a thing lives is unchanged from [model.md](model.md), with one word
 corrected: *would this still be true with no window open?* Yes: model, history, and later

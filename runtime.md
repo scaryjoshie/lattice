@@ -33,7 +33,8 @@ paint, overlays, xterm view       terminals: PTYs, scrollback, size
 ## Persistence
 
 State lives under `~/.lattice/`: database, socket, log, secrets. Owner-only, as
-`~/.modelbus/` is.
+`~/.modelbus/` is. What is in it, and who may know the path, is in
+[organization.md](organization.md).
 
 | Table | Holds |
 |---|---|
