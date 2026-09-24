@@ -1,6 +1,6 @@
 import { extentFor, indexOfTrack, isRun, METRICS } from "@lattice/model";
 import { useLayoutEffect, useState } from "react";
-import { fontOf } from "../paint/measure.ts";
+import { FONT } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
 import { useGrid } from "../store/store.ts";
 
@@ -60,13 +60,15 @@ export function Editor({
         top: worldX(ri) + CELL * m.pad,
         height: CELL * rows - CELL * m.pad,
         width: CELL * span,
-        paddingLeft: CELL * m.inset,
-        paddingRight: CELL * m.inset,
-        font: fontOf(style, CELL),
-        // After `font`, not before: the shorthand resets line-height to normal, so setting
-        // it first is silently undone. An input centres its own text; a textarea needs the
-        // line box to be the cell for one line to sit where the input's did.
+        // The font as three properties, never the shorthand: the shorthand resets
+        // line-height, and an engine that applies the two in a different order lays the
+        // lines out at the font's own pitch while the canvas puts the caret at ours.
+        fontFamily: FONT,
+        fontSize: CELL * m.size,
+        fontWeight: m.weight,
+        // The line box is the leading, so line n of the input sits where line n is drawn.
         lineHeight: `${CELL * m.leading}px`,
+        padding: `0 ${CELL * m.inset}px`,
       }}
       onChange={(e) => {
         setDraft(e.target.value);

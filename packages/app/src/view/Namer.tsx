@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { indexOfTrack, isRun } from "@lattice/model";
-import { nameFont } from "../paint/measure.ts";
+import { indexOfTrack, isRun, NAME } from "@lattice/model";
+import { FONT } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
 import { useGrid } from "../store/store.ts";
 
@@ -33,7 +33,9 @@ export function Namer({ id, onDone }: { id: string; onDone(): void }) {
         top: worldX(ri) + CELL * 0.69,
         width: CELL,
         height: CELL * 0.2,
-        font: nameFont(CELL),
+        fontFamily: FONT,
+        fontSize: CELL * NAME.size,
+        fontWeight: NAME.weight,
       }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
