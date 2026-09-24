@@ -1,5 +1,5 @@
 import { type Command, propose } from "../model/command.ts";
-import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, wellFormed } from "../model/grid.ts";
+import { bounds, close, footprint, type Grid, holder, nextId, type TextStyle, wellFormed } from "../model/grid.ts";
 import { idleOf, OCCUPANTS, type OccupantId } from "../occupants/index.ts";
 import type { RuntimeCommand } from "../runtime/facts.ts";
 import { contains, type Region } from "../model/region.ts";
@@ -88,14 +88,8 @@ export function invalid(grid: Grid, selection: Selection | null): boolean {
   return selection !== null && "region" in selection && !wellFormed(grid, selection.region);
 }
 
-/** The tile whose region holds a cell, by the model's positions. */
-function tileUnder(grid: Grid, [ci, ri]: readonly [number, number]): string | null {
-  const column = grid.columns[ci];
-  const row = grid.rows[ri];
-  const direct = column && row ? tileAt(grid, column.id, row.id) : undefined;
-  if (direct) return direct.id;
-  return grid.tiles.find((t) => contains(footprint(grid, t), ci, ri))?.id ?? null;
-}
+/** The tile holding a cell, by the model's positions. */
+const tileUnder = (grid: Grid, [ci, ri]: readonly [number, number]): string | null => holder(grid, ci, ri)?.id ?? null;
 
 const select = (selection: Selection | null): SessionCommand => ({ kind: "select", selection });
 const point = (target: Target | null): SessionCommand => ({ kind: "point", target });

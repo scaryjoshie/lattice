@@ -3,6 +3,7 @@ import {
   applied,
   ensureTracks,
   type Grid,
+  holder,
   type Move,
   nextId,
   proposeMove,
@@ -62,12 +63,10 @@ export function propose(grid: Grid, command: Command): Verdict {
     }
     case "resize":
       return corner(grid, command);
-    case "place": {
-      const column = grid.columns[command.ci];
-      const row = grid.rows[command.ri];
-      // Past the tracks is free by definition; the tracks are made when it is applied.
-      return plain(!column || !row || !grid.tiles.some((t) => t.columnId === column.id && t.rowId === row.id));
-    }
+    case "place":
+      // Onto an empty cell only. Past the tracks is free by definition; the tracks are
+      // made when it is applied.
+      return plain(!holder(grid, command.ci, command.ri));
     case "remove":
     case "setText":
     case "setName":

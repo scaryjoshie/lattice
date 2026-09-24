@@ -64,6 +64,10 @@ describe("commands", () => {
   test("place makes tracks before the first, and reports the shift and the id", () => {
     const g = world();
     expect(propose(g, { kind: "place", ci: 3, ri: 2, what: { family: "host", surface: "terminal" } }).ok).toBe(false);
+    // A cell inside a run's extent, not its origin, is held too: the model says so, not the view.
+    const withRun: Grid = { ...g, tiles: [...g.tiles, { id: "r", family: "text", style: "title", text: "research", columnId: "x5", rowId: "y5" }] };
+    expect(propose(withRun, { kind: "place", ci: 7, ri: 5, what: { family: "host", surface: "terminal" } }).ok).toBe(false);
+    expect(propose(withRun, { kind: "place", ci: 8, ri: 5, what: { family: "host", surface: "terminal" } }).ok).toBe(true);
     const done = apply(g, { kind: "place", ci: -2, ri: 0, what: { family: "host", surface: "terminal" } });
     expect(done.ok).toBe(true);
     expect(done.dc).toBe(2);

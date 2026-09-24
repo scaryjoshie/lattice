@@ -112,8 +112,17 @@ export function indexOfTrack(tracks: readonly Track[], id: string): number {
   return tracks.findIndex((t) => t.id === id);
 }
 
+/** The tile whose origin is this cell. Not the same question as `holder`. */
 export function tileAt(grid: Grid, columnId: string, rowId: string): Tile | undefined {
   return grid.tiles.find((t) => t.columnId === columnId && t.rowId === rowId);
+}
+
+/**
+ * The tile that holds a cell, by the cells it owns: a host at its cell, a run across its
+ * extent. A cell holds at most one, which is the model's invariant and not the view's.
+ */
+export function holder(grid: Grid, ci: number, ri: number): Tile | undefined {
+  return grid.tiles.find((t) => contains(footprint(grid, t), ci, ri));
 }
 
 /* Insertion --------------------------------------------------------------- */
@@ -157,7 +166,8 @@ export function addTile(
   what: { family: "text"; style?: TextStyle } | { family: "host"; surface: string },
   id = nextId("t"),
 ): Grid {
-  if (tileAt(grid, columnId, rowId)) return grid;
+  // Only onto an empty cell: nothing's origin, and inside nothing's extent.
+  if (holder(grid, indexOfTrack(grid.columns, columnId), indexOfTrack(grid.rows, rowId))) return grid;
   const tile: Tile =
     what.family === "text"
       ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "" }
