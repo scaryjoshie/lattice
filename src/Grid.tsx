@@ -244,8 +244,12 @@ export function Grid() {
   const [selection, setSelection] = useState<
     { tile: string } | { scope: string } | { region: Region } | null
   >(null);
-  /** Where a press started, so a drag that pans is not also read as a click. */
-  const pressed = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * The press in progress: where it started, so a drag is not also read as a click, and
+   * whether the grid holds it. Decided once, at pointer-down, which the browser fires
+   * before the mousedown the camera listens to, so the camera only has to ask.
+   */
+  const pressed = useRef<{ x: number; y: number; held: boolean } | null>(null);
   /**
    * Whether the press that is happening was one that dismissed something. A click that
    * closes an overlay is spent closing it and does nothing else.
@@ -726,28 +730,11 @@ export function Grid() {
     return null;
   };
 
-  /** Whether a press lands inside the selection, which makes it a move rather than a pan.
-   *  A press anywhere else, tile or not, is the camera's: the grid needs places to pan
-   *  from, and every tile being a handle would leave none. */
-  const inSelection = (event: { clientX: number; clientY: number }): boolean => {
-    const host = viewport.current;
-    const r = model.current.selected;
-    if (!host || !r) return false;
-    const box = host.getBoundingClientRect();
-    const [ci, ri] = cellAt(latest.current, event.clientX - box.left, event.clientY - box.top);
-    return contains(r, ci, ri);
-  };
-
   // While a menu, a rename or an edit is open the camera is still: the press that closes
   // it is spent closing it, and the wheel would slide the cell out from under the menu.
+  // And a press the grid holds is not a pan.
   const overlay = menu !== null || acting !== null || editing !== null || naming !== null || opened !== null;
-  const { camera, shift: shiftView } = useCamera(
-    viewport,
-    schedule,
-    (event) =>
-      overlay ||
-      (event.type === "mousedown" && !event.shiftKey && (lineHot.current !== null || inSelection(event))),
-  );
+  const { camera, shift: shiftView } = useCamera(viewport, schedule, () => overlay || pressed.current?.held === true);
 
   // The dashes crawl, which is what makes a live connection look live. The loop exists
   // only while a focus does; with nothing focused the canvas is still and costs nothing.
@@ -903,18 +890,23 @@ export function Grid() {
 
   const onDown = (event: React.PointerEvent) => {
     if (claimed(event.target)) return;
-    pressed.current = { x: event.clientX, y: event.clientY };
+    const press = { x: event.clientX, y: event.clientY, held: false };
+    pressed.current = press;
     dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
     if (dismissing.current) return;
     const at = cellUnder(event);
     if (!at) return;
+    const hold = () => {
+      press.held = true;
+      (event.target as Element).setPointerCapture?.(event.pointerId);
+    };
     const owner = model.current.resizable;
     if (lineHot.current && owner && !event.shiftKey) {
       // Taking hold of a gridline of the selected scope or run. The line's world position
       // is where the drag is measured from.
       const { c, r } = lineHot.current;
       stretching.current = { owner: owner.id, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r) };
-      (event.target as Element).setPointerCapture?.(event.pointerId);
+      hold();
       return;
     }
     const selected = model.current.selected;
@@ -924,22 +916,23 @@ export function Grid() {
       // the selection if something is, which is extending it. A shift-click is decided
       // on the release, as before.
       sweeping.current = selected && !selected.invalid ? selected : { ci: at[0], ri: at[1], span: 1, rows: 1 };
-      (event.target as Element).setPointerCapture?.(event.pointerId);
+      hold();
       return;
     }
     if (inside && selected.invalid) {
       // A press on an invalid selection is the grid's, and it goes nowhere: the selection
       // is already drawn in the colour that says so. A drag does nothing; a click is a
       // click on the cell.
+      press.held = true;
       return;
     }
-    // Only a press inside the selection carries anything. The camera has yielded it.
-    // Anywhere else a plain drag pans, tile or not, so there is always somewhere to pan from.
+    // Only a press inside the selection carries anything. Anywhere else a plain drag
+    // pans, tile or not, so there is always somewhere to pan from.
     if (!inside) return;
     const from = selected;
     const id = selection && "tile" in selection ? selection.tile : null;
     dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri], proposal: null };
-    (event.target as Element).setPointerCapture?.(event.pointerId);
+    hold();
   };
 
   const onUp = (event: React.PointerEvent) => {
