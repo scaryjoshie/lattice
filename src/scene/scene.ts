@@ -1,4 +1,5 @@
-import { bounds, close, type Grid, indexOfTrack, isRun, scopeAt, wellFormed } from "../model/grid.ts";
+import { bounds, close, footprint, type Grid, indexOfTrack, isRun, scopeAt, wellFormed } from "../model/grid.ts";
+import { withText } from "../model/layout.ts";
 import { idleOf, OCCUPANTS, type Stroke } from "../occupants/index.ts";
 import { type Facts, hostedBy } from "../runtime/facts.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
@@ -110,9 +111,11 @@ export interface View {
   cursor: { x: number; y: number } | null;
 }
 
-export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View): Scene {
+export function sceneOf(document: Grid, facts: Facts, session: Session, view: View): Scene {
   const { selection, overlay, gesture, pointing, shift } = session;
   const editing = overlay?.kind === "edit" ? overlay : null;
+  // A run being typed is laid out from its draft, so its cells open up as the words do.
+  const grid = editing ? withText(document, editing.id, editing.draft) : document;
   const naming = overlay?.kind === "name" ? overlay.id : null;
   const acting = overlay?.kind === "tile" ? overlay.id : null;
 
@@ -153,8 +156,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
   for (const tile of grid.tiles) {
     const [ci, ri] = placed(tile);
     const edited = editing?.id === tile.id;
-    const run = isRun(tile) ? tile : null;
-    const extent: Region = { ci, ri, span: edited ? editing!.span : (run?.span ?? 1), rows: edited ? editing!.rows : (run?.rows ?? 1) };
+    const extent: Region = { ...footprint(grid, tile), ci, ri };
     const hue = hueAt(tile);
     tiles.set(tile.id, { ...extent, hue });
     if (!edited) {

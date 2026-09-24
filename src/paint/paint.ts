@@ -1,6 +1,7 @@
 import { CELL, visible, worldX } from "../scene/geometry.ts";
 import { MARK, MARK_UNITS, path } from "../scene/marks.ts";
-import { clip as clip_, FONT, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
+import { FONT, fontOf, nameFont } from "./measure.ts";
+import { clip, fits, METRICS, NAME, wrap } from "../model/text.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { hue, theme } from "./theme.ts";
 import type { Occupant, Scene, TextRun } from "../scene/scene.ts";
@@ -107,7 +108,7 @@ function mark(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = hue(spot.hue).ink;
-  ctx.fillText(clip_(ctx, spot.name, size * 0.86), x + size / 2, y + size * 0.79);
+  ctx.fillText(clip(spot.name, fits(NAME.size, 0.86)), x + size / 2, y + size * 0.79);
   ctx.restore();
 }
 
@@ -145,7 +146,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    * on both axes: a word sheared through the middle reads as a fault; an ellipsis reads as
    * "there is more", which is what is true.
    */
-  const drawRun = (run: TextRun, clip: Region) => {
+  const drawRun = (run: TextRun, within: Region) => {
     if (rule <= 0) return;
     const m = METRICS[run.style];
     const x = sx(run.ci);
@@ -160,16 +161,16 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.font = fontOf(run.style, size);
     ctx.fillStyle = hue(run.hue).ink;
     ctx.beginPath();
-    ctx.rect(sx(clip.ci), sy(clip.ri), size * clip.span, size * clip.rows);
+    ctx.rect(sx(within.ci), sy(within.ri), size * within.span, size * within.rows);
     ctx.clip();
-    const room = box.w - inset * 2;
-    const lines = wrap(ctx, run.text, room);
-    const fits = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
-    for (let i = 0; i < Math.min(lines.length, fits); i++) {
-      const last = i === fits - 1 && lines.length > fits;
+    const lines = wrap(run.style, run.text, run.span);
+    const room = fits(m.size, run.span - m.inset * 2);
+    const shown = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
+    for (let i = 0; i < Math.min(lines.length, shown); i++) {
+      const last = i === shown - 1 && lines.length > shown;
       const line = lines[i] as string;
       ctx.fillText(
-        clip_(ctx, last ? `${line} ${lines[i + 1] ?? ""}` : line, room),
+        clip(last ? `${line} ${lines[i + 1] ?? ""}` : line, room),
         x + inset,
         y + size * m.pad + leading * (i + 0.5),
       );

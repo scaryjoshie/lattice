@@ -12,7 +12,7 @@ function world(): Grid {
     rows,
     tiles: [
       { id: "a", family: "host", surface: "terminal", columnId: "x3", rowId: "y2" },
-      { id: "run", family: "text", style: "title", text: "auth", columnId: "x2", rowId: "y1", span: 2, rows: 1 },
+      { id: "run", family: "text", style: "title", text: "auth", columnId: "x2", rowId: "y1", cap: { span: 2, rows: 1 } },
       { id: "b", family: "host", surface: "terminal", columnId: "x8", rowId: "y4" },
     ],
     scopes: [{ id: "auth", name: "auth", hue: 0, columnStart: "x2", columnEnd: "x4", rowStart: "y1", rowEnd: "y4" }],
@@ -151,7 +151,7 @@ describe("overlays", () => {
     const id = place?.kind === "place" ? place.id : undefined;
     expect(id).toBeDefined();
     expect(session.selection).toEqual({ tile: id as string });
-    expect(session.overlay).toEqual({ kind: "edit", id: id as string, span: 1, rows: 1 });
+    expect(session.overlay).toEqual({ kind: "edit", id: id as string, draft: "" });
   });
 
   test("delete from the tile menu removes and deselects", () => {

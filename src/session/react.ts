@@ -36,7 +36,7 @@ export type Input =
   /** What the overlays report back. */
   | { type: "choose"; choice: Choice }
   | { type: "act"; action: "rename" | "delete" }
-  | { type: "shape"; span: number; rows: number }
+  | { type: "draft"; text: string }
   | { type: "done" }
   | { type: "dismiss" }
   | { type: "leaving" }
@@ -133,7 +133,7 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       const { choice } = input;
       if (choice.family === "text") {
         const place: Command = { kind: "place", ci, ri, what: { family: "text", style: choice.style }, id };
-        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })];
+        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: "" })];
       }
       // A host is placed with the surface its occupant needs; the occupant is the
       // runtime's to start, unless it is what that surface shows anyway.
@@ -146,14 +146,14 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       if (session.overlay?.kind !== "tile") return [];
       const { id } = session.overlay;
       if (input.action === "delete") return [overlay(null), { kind: "remove", id }, select(null)];
-      const isText = grid.tiles.find((t) => t.id === id)?.family === "text";
-      return isText
-        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })]
+      const tile = grid.tiles.find((t) => t.id === id);
+      return tile && tile.family === "text"
+        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: tile.text })]
         : [overlay({ kind: "name", id })];
     }
-    case "shape":
-      return session.overlay?.kind === "edit" && (session.overlay.span !== input.span || session.overlay.rows !== input.rows)
-        ? [overlay({ ...session.overlay, span: input.span, rows: input.rows })]
+    case "draft":
+      return session.overlay?.kind === "edit" && session.overlay.draft !== input.text
+        ? [overlay({ ...session.overlay, draft: input.text })]
         : [];
     case "done":
     case "dismiss":

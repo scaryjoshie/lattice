@@ -1,121 +1,17 @@
-import { CELL } from "../scene/geometry.ts";
 import type { TextStyle } from "../model/grid.ts";
+import { METRICS, NAME } from "../model/text.ts";
 
 /**
- * Type metrics, shared between the paint and the editor so the two cannot disagree about
- * how much room a run needs. Everything is a fraction of the cell, and everything is
- * measured at the cell's own size, so an answer does not depend on the zoom it was asked
- * at.
+ * Fonts. The geometry of text is the model's (model/text.ts); this is only how it is
+ * asked of the canvas. Sizes are not rounded: a rounded size snaps between integers as
+ * the camera scales, so the glyphs change width in steps while the cell they sit in grows
+ * smoothly — which is the jiggle.
  */
-
 export const FONT = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
-export interface Metrics {
-  /** Cap height as a fraction of the cell. */
-  size: number;
-  /** Line spacing as a fraction of the cell. A title's is a whole cell, so one line sits
-   *  in the middle of one cell and the same formula centres it. */
-  leading: number;
-  /** Space before the text, across the run. */
-  inset: number;
-  /** Space above the first line. Zero for a title, which is centred by its leading. */
-  pad: number;
-  weight: number;
-}
-
-/** A tile's name, under its mark. Smaller than a note, and never wrapped. */
-export const NAME = { size: 0.155, weight: 400 };
-
-export const nameFont = (cell: number): string => `${NAME.weight} ${cell * NAME.size}px ${FONT}`;
-
-/** Cut to fit, with an ellipsis, since a name has exactly one cell to live in. */
-export function clip(ctx: CanvasRenderingContext2D, text: string, width: number): string {
-  if (ctx.measureText(text).width <= width) return text;
-  let cut = text;
-  while (cut.length > 1 && ctx.measureText(`${cut}…`).width > width) cut = cut.slice(0, -1);
-  return `${cut}…`;
-}
-
-/**
- * The only thing that differs between a title and a note is how big it is. Nothing
- * branches on which one a run is; both are drawn by the same code with these numbers.
- */
-export const METRICS: Record<TextStyle, Metrics> = {
-  title: { size: 0.32, leading: 1, inset: 0.26, pad: 0, weight: 500 },
-  note: { size: 0.19, leading: 0.34, inset: 0.2, pad: 0.16, weight: 400 },
-};
-
-/**
- * Not rounded. A rounded size snaps between integers as the camera scales, so the glyphs
- * change width in steps while the cell they sit in grows smoothly — which is the jiggle.
- */
 export const fontOf = (style: TextStyle, cell: number): string => {
   const m = METRICS[style];
   return `${m.weight} ${cell * m.size}px ${FONT}`;
 };
 
-let ctx: CanvasRenderingContext2D | null = null;
-
-function measurer(): CanvasRenderingContext2D | null {
-  if (!ctx) ctx = document.createElement("canvas").getContext("2d");
-  return ctx;
-}
-
-/** How many columns a title needs to sit on one line. */
-export function spanFor(style: TextStyle, text: string): number {
-  const c = measurer();
-  if (!c) return 1;
-  c.font = fontOf(style, CELL);
-  // The widest line, since a run may carry its own line breaks.
-  const widest = Math.max(...text.split("\n").map((line) => c.measureText(line).width));
-  const width = CELL * METRICS[style].inset * 2 + widest;
-  return Math.max(1, Math.ceil(width / CELL));
-}
-
-/**
- * How many cells tall a run of this many lines is. A title's leading is a whole cell, so
- * it is one cell per line; a note fits several lines in a cell. Rounded up, because a
- * run owns whole cells.
- */
-export function cellsFor(style: TextStyle, lines: number): number {
-  const m = METRICS[style];
-  return Math.max(1, Math.ceil(m.pad + lines * m.leading - 1e-6));
-}
-
-/**
- * Break a run into lines that fit the width it has been given. A line break the writer
- * typed is kept: each paragraph wraps on its own, and an empty one is an empty line.
- */
-export function wrap(
-  measure: CanvasRenderingContext2D,
-  text: string,
-  width: number,
-): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split("\n")) {
-    let line = "";
-    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-      const next = line ? `${line} ${word}` : word;
-      if (line && measure.measureText(next).width > width) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = next;
-      }
-    }
-    lines.push(line);
-  }
-  return lines;
-}
-
-/**
- * How many lines a run's text takes at a given width in cells. Measured at the cell's own
- * size and with the same `wrap` the paint uses, so the two cannot disagree about where the
- * lines fall — which they would if each counted them its own way.
- */
-export function linesFor(style: TextStyle, text: string, span: number): number {
-  const c = measurer();
-  if (!c) return 1;
-  c.font = fontOf(style, CELL);
-  return Math.max(1, wrap(c, text, CELL * span - CELL * METRICS[style].inset * 2).length);
-}
+export const nameFont = (cell: number): string => `${NAME.weight} ${cell * NAME.size}px ${FONT}`;

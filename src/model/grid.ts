@@ -12,6 +12,7 @@
  * a drag landed on). They are never stored.
  */
 
+import { layout } from "./layout.ts";
 import { cells, contains, covers, overlaps, type Region } from "./region.ts";
 
 export interface Track {
@@ -48,9 +49,10 @@ export interface Run extends Placed {
   readonly family: "text";
   readonly style: TextStyle;
   readonly text: string;
-  /** Cells occupied, starting at (columnId, rowId). */
-  readonly span: number;
-  readonly rows: number;
+  /**
+   * Its extent is not stored: see layout.ts. What its words need, bounded by what is
+   * free, unless capped.
+   */
   /**
    * A size the writer fixed by dragging an edge. A capped width is a box the words wrap
    * inside; a capped height clips them. Uncapped, the run is as big as what it says
@@ -158,7 +160,7 @@ export function addTile(
   if (tileAt(grid, columnId, rowId)) return grid;
   const tile: Tile =
     what.family === "text"
-      ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "", span: 1, rows: 1 }
+      ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "" }
       : { id, family: "host", columnId, rowId, surface: what.surface };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
@@ -225,53 +227,6 @@ export function without(grid: Grid, ids: ReadonlySet<string>): Grid {
 }
 
 /**
- * Whether a cell is available to a run that started in `home`.
- *
- * This is the primitive, and there is only one: a **boundary** is anything a run cannot
- * cross, and a cell holding something else and a cell in a different scope are the same
- * kind of thing. Writing them as two checks makes it possible for one axis to learn about
- * a boundary the other does not, which is how a note ended up with no vertical rule at all.
- */
-export function available(
-  grid: Grid,
-  tileId: string,
-  home: Scope | null,
-  ci: number,
-  ri: number,
-): boolean {
-  if (scopeAt(grid, ci, ri) !== home) return false;
-  return !grid.tiles.some((other) => other.id !== tileId && contains(footprint(grid, other), ci, ri));
-}
-
-/** How many columns a run may occupy, starting at its own cell, of the `want` it needs. */
-export function columnsFor(grid: Grid, tileId: string, ci: number, ri: number, want: number): number {
-  const home = scopeAt(grid, ci, ri);
-  let n = 1;
-  while (n < want && available(grid, tileId, home, ci + n, ri)) n += 1;
-  return n;
-}
-
-/**
- * How many rows a run of this width may occupy. A row is available only if every cell
- * across the run's width is — one blocked cell anywhere along it stops the whole row,
- * because a line of text cannot be written around an obstacle.
- */
-export function rowsFor(
-  grid: Grid,
-  tileId: string,
-  ci: number,
-  ri: number,
-  span: number,
-  want: number,
-): number {
-  const home = scopeAt(grid, ci, ri);
-  const row = (n: number): Region => ({ ci, ri: ri + n, span, rows: 1 });
-  let n = 1;
-  while (n < want && [...cells(row(n))].every(([c, r]) => available(grid, tileId, home, c, r))) n += 1;
-  return n;
-}
-
-/**
  * Tracks for every cell of a region, made on demand. The lattice is infinite and the
  * model's tracks are not, so anything placed or moved past the last one gets tracks
  * appended, and anything placed before the first gets them prepended — which shifts every
@@ -326,13 +281,11 @@ export function close(grid: Grid, r: Region): Region {
 
 /* Moving ------------------------------------------------------------------ */
 
+/** The cells a tile owns. A host's is its cell; a run's is laid out from its words. */
 export function footprint(grid: Grid, tile: Tile): Region {
-  return {
-    ci: indexOfTrack(grid.columns, tile.columnId),
-    ri: indexOfTrack(grid.rows, tile.rowId),
-    span: isRun(tile) ? tile.span : 1,
-    rows: isRun(tile) ? tile.rows : 1,
-  };
+  const ci = indexOfTrack(grid.columns, tile.columnId);
+  const ri = indexOfTrack(grid.rows, tile.rowId);
+  return (isRun(tile) && layout(grid).get(tile.id)) || { ci, ri, span: 1, rows: 1 };
 }
 
 /**
@@ -372,7 +325,10 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
   if (moves.length === 0) return { grid, dc: 0, dr: 0 };
   const size = (m: Move) => {
     const tile = grid.tiles.find((x) => x.id === m.id);
-    if (tile) return { span: m.span ?? (isRun(tile) ? tile.span : 1), rows: m.rows ?? (isRun(tile) ? tile.rows : 1) };
+    if (tile) {
+      const f = footprint(grid, tile);
+      return { span: m.span ?? f.span, rows: m.rows ?? f.rows };
+    }
     const scope = grid.scopes.find((x) => x.id === m.id);
     const b = scope ? bounds(grid, scope) : { span: 1, rows: 1 };
     return { span: m.span ?? b.span, rows: m.rows ?? b.rows };
@@ -403,12 +359,7 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
       const moved = { ...tile, columnId, rowId };
       // A size on a run's move is the writer fixing that axis: a cap, kept until lifted.
       if (!isRun(tile) || (m.span === undefined && m.rows === undefined)) return moved;
-      return {
-        ...(moved as Run),
-        span: m.span ?? tile.span,
-        rows: m.rows ?? tile.rows,
-        cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows },
-      };
+      return { ...(moved as Run), cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows } };
     }),
     scopes: g.scopes.map((scope) => {
       const m = at.get(scope.id);

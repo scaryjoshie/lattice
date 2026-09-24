@@ -1,6 +1,8 @@
 import { useLayoutEffect, useState } from "react";
-import { columnsFor, indexOfTrack, isRun, rowsFor } from "../model/grid.ts";
-import { cellsFor, fontOf, linesFor, METRICS, spanFor } from "../paint/measure.ts";
+import { footprint, indexOfTrack, isRun } from "../model/grid.ts";
+import { withText } from "../model/layout.ts";
+import { METRICS } from "../model/text.ts";
+import { fontOf } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
 import { useGrid } from "../store/store.ts";
 
@@ -16,11 +18,11 @@ import { useGrid } from "../store/store.ts";
 export function Editor({
   id,
   onDone,
-  onShape,
+  onDraft,
 }: {
   id: string;
   onDone(): void;
-  onShape(span: number, rows: number): void;
+  onDraft(text: string): void;
 }) {
   const grid = useGrid((s) => s.grid);
   const run = useGrid((s) => s.run);
@@ -34,23 +36,16 @@ export function Editor({
   const style = tile.style;
   const m = METRICS[style];
 
-  // A capped axis is the size the writer fixed; an uncapped one is what the words need.
-  const span = columnsFor(grid, id, ci, ri, tile.cap?.span ?? spanFor(style, draft || " "));
-  /*
-   * Wrapping is what running out of room means. If the words need more width than there
-   * is, they go down instead — as far as there is room below at that width, and no
-   * further, at which point the paint cuts them with an ellipsis.
-   */
-  // In cells, not lines: a note fits several lines in a cell, a title exactly one.
-  const rows = rowsFor(grid, id, ci, ri, span, tile.cap?.rows ?? cellsFor(style, linesFor(style, draft, span)));
-  // The canvas owns the surface and the ruling even while typing; the input contributes
-  // only a caret and glyphs, so it has to say how far it currently reaches — both axes,
-  // since the canvas leaves a run's cells unruled only for cells it has been told about.
-  // After the render, not during it: reporting is a change to the session.
-  useLayoutEffect(() => onShape(span, rows), [onShape, span, rows]);
+  // Where the run reaches with the draft in it: what the words need, bounded by what is
+  // free, capped where the writer fixed an axis. The same layout the scene uses, so the
+  // input and the canvas cannot disagree about the run's cells.
+  const { span, rows } = footprint(withText(grid, id, draft), tile);
+  // The canvas draws the run's surface and ruling even while typing; the input contributes
+  // only a caret and glyphs, so it says what it currently holds and the scene does the rest.
+  useLayoutEffect(() => onDraft(draft), [onDraft, draft]);
   const commit = () => {
     onDone();
-    run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft, span, rows });
+    run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft });
   };
 
   return (

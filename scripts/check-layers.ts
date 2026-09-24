@@ -11,11 +11,7 @@ import { join, relative, resolve } from "node:path";
 const LAYERS = ["model", "providers", "occupants", "runtime", "mock", "session", "store", "scene", "paint", "view"] as const;
 
 /** Debts: imports the rule forbids, allowed by name until the debt is paid. */
-const DEBTS: Record<string, readonly string[]> = {
-  // Text geometry is measured in the store until a run's span is derived once, in the
-  // layout, with caps as the only stored size.
-  "store/store.ts": ["paint/measure.ts"],
-};
+const DEBTS: Record<string, readonly string[]> = {};
 
 const root = resolve(import.meta.dir, "..", "src");
 const files = (dir: string): string[] =>

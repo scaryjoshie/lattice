@@ -6,7 +6,6 @@ import type { Facts } from "../runtime/facts.ts";
  * A grid to look at. Nothing in it is real: the scopes are not worktrees, the occupants
  * run nothing, and the links are made up. It exists so the canvas has something on it
  * while the daemon does not exist, and it is the only file that knows what is on it.
- * The runs' spans here are placeholders; the store measures them from their words.
  */
 export function seed(): { grid: Grid; facts: Facts } {
   const columns = Array.from({ length: 18 }, () => ({ id: nextId("c") }));
@@ -21,11 +20,11 @@ export function seed(): { grid: Grid; facts: Facts } {
     { id: nextId("g"), name: "planner", hue: 3, columnStart: col(12), columnEnd: col(14), rowStart: row(6), rowEnd: row(8) },
   ];
 
-  const texts: [number, number, number, string][] = [
-    [2, 1, 3, "auth"],
-    [11, 1, 4, "infra"],
-    [3, 6, 4, "research"],
-    [12, 6, 3, "planner"],
+  const texts: [number, number, string][] = [
+    [2, 1, "auth"],
+    [11, 1, "infra"],
+    [3, 6, "research"],
+    [12, 6, "planner"],
   ];
 
 
@@ -37,15 +36,13 @@ export function seed(): { grid: Grid; facts: Facts } {
     [8, 4, null],
   ];
   const tiles: Tile[] = [
-    ...texts.map(([c, r, span, text]) => ({
+    ...texts.map(([c, r, text]) => ({
       id: nextId("t"),
       family: "text" as const,
       style: "title" as const,
       columnId: col(c),
       rowId: row(r),
       text,
-      span,
-      rows: 1,
     })),
     ...cells.map(([c, r]) => ({
       id: nextId("t"),

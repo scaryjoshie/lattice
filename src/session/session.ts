@@ -64,7 +64,8 @@ export type Gesture =
 export type Overlay =
   | { kind: "add"; at: { x: number; y: number }; ci: number; ri: number }
   | { kind: "tile"; at: { x: number; y: number }; id: string }
-  | { kind: "edit"; id: string; span: number; rows: number }
+  /** A run being typed. The draft is here so the scene can lay the run out as it grows. */
+  | { kind: "edit"; id: string; draft: string }
   | { kind: "name"; id: string };
 
 export interface Opened {

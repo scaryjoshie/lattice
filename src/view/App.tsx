@@ -1,13 +1,8 @@
 import { useEffect } from "react";
 import { Grid } from "./Grid.tsx";
-import { useGrid } from "../store/store.ts";
 import { dark, followSystem, light, setTheme, theme } from "../paint/theme.ts";
 
 export function App() {
-  useEffect(() => {
-    void document.fonts.ready.then(() => useGrid.getState().remeasure());
-  }, []);
-
   useEffect(() => {
     const stop = followSystem();
     // `t` flips it, so both can be seen without changing the system appearance.

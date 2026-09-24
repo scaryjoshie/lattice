@@ -26,7 +26,7 @@ export type Command =
   | { kind: "resize"; owner: string; col?: Edge; row?: Edge }
   | { kind: "place"; ci: number; ri: number; what: Placing; id?: string }
   | { kind: "remove"; id: string }
-  | { kind: "setText"; id: string; text: string; span: number; rows: number }
+  | { kind: "setText"; id: string; text: string }
   | { kind: "setName"; id: string; name: string };
 
 /** What a place makes: a run in a style, or a host with a surface. */
@@ -138,7 +138,7 @@ export function apply(grid: Grid, command: Command): Applied {
         grid: {
           ...grid,
           tiles: grid.tiles.map((t) =>
-            t.id === command.id ? { ...t, text: command.text, span: command.span, rows: command.rows } : t,
+            t.id === command.id ? { ...t, text: command.text } : t,
           ),
         },
         dc: 0,

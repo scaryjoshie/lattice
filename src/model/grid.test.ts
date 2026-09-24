@@ -41,7 +41,7 @@ function grid(
     tiles: tiles.map(([id, ci, ri, span, rows_]): Tile =>
       span === 1 && rows_ === 1
         ? { id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
-        : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, span, rows: rows_ },
+        : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, cap: { span, rows: rows_ } },
     ),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
       id,
@@ -314,7 +314,7 @@ describe("proposeResize", () => {
     const inward = proposeResize(g1, "run", "col", 4, -1);
     expect(inward.ok).toBe(true);
     const shrunk = applied(g1, inward.moves).grid.tiles.find((x) => x.id === "run");
-    expect(shrunk && isRun(shrunk) ? shrunk.cap : null).toEqual({ span: 1, rows: undefined });
+    expect(shrunk && isRun(shrunk) ? shrunk.cap : null).toEqual({ span: 1, rows: 1 });
     expect(proposeResize(g1, "run", "col", 3, 1).ok).toBe(false);
   });
 

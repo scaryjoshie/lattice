@@ -378,7 +378,7 @@ export function Grid() {
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
         {overlay?.kind === "edit" && (
-          <Editor id={overlay.id} onDone={() => send({ type: "done" })} onShape={(span, rows) => send({ type: "shape", span, rows })} />
+          <Editor id={overlay.id} onDone={() => send({ type: "done" })} onDraft={(text) => send({ type: "draft", text })} />
         )}
         {overlay?.kind === "name" && <Namer id={overlay.id} onDone={() => send({ type: "done" })} />}
       </div>
