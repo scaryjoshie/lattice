@@ -1,9 +1,9 @@
-import { CELL, type Camera, visible, worldX } from "../scene/geometry.ts";
+import { CELL, visible, worldX } from "../scene/geometry.ts";
 import { MARK, MARK_UNITS, MARKS, path } from "./marks.ts";
 import { clip as clip_, FONT, fontOf, METRICS, nameFont, wrap } from "./measure.ts";
-import type { OccupantKind, TextStyle } from "../model/grid.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { hue, theme } from "./theme.ts";
+import type { Occupant, Scene, TextRun } from "../scene/scene.ts";
 
 /**
  * A ruled grid. The lattice is two sets of lines rather than a shape per cell, which is
@@ -66,118 +66,6 @@ const PLUS = 0.16;
 const PLUS_EDGE = 2;
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
-
-export interface Cell {
-  hue: number | null;
-  occupied: boolean;
-  /** Which tile owns this cell, so any part of a run can be acted on. */
-  tileId?: string;
-  /** For a tile larger than one cell, the whole of it — so focus can cover all of it. */
-  extent?: { ci: number; ri: number; span: number; rows: number };
-}
-
-export interface Plate {
-  id: string;
-  name: string;
-  hue: number;
-  c0: number;
-  c1: number;
-  r0: number;
-  r1: number;
-}
-
-/**
- * Text is canvas content, not a floating tag. It occupies cells like anything else, so it
- * has to be made room for, and because it is redrawn every frame it stays crisp at every
- * zoom rather than being a rasterised layer scaled up.
- */
-export interface TextRun {
-  ci: number;
-  ri: number;
-  /** Cells occupied, starting at (ci, ri). A title is always one row tall. */
-  span: number;
-  rows: number;
-  style: TextStyle;
-  text: string;
-  hue: number | null;
-}
-
-/** Occupants as a list. Searching the viewport for them allocated a key per cell. */
-export interface Occupant {
-  ci: number;
-  ri: number;
-  kind: OccupantKind;
-  name?: string;
-  hue: number | null;
-}
-
-/** The focused agent and everyone it is talking to, in cell coordinates. */
-export interface Focus {
-  ci: number;
-  ri: number;
-  /** Where the lines leave from. Normally the tile; while it is being carried, where it
-   *  was picked up, so the connections do not swing about as it moves. */
-  anchor: { ci: number; ri: number };
-  hue: number | null;
-  partners: readonly { ci: number; ri: number }[];
-}
-
-/** A move being proposed: where it came from, where it would land, and whether it may. */
-export interface Proposal {
-  from: Region;
-  to: Region;
-  hue: number | null;
-  ok: boolean;
-  /** Something would come back the other way, so the chevrons run both directions. */
-  swaps: boolean;
-}
-
-export interface Scene {
-  camera: Camera;
-  width: number;
-  height: number;
-  dpr: number;
-  plates: readonly Plate[];
-  cells: ReadonlyMap<string, Cell>;
-  occupied: readonly Occupant[];
-  texts: readonly TextRun[];
-  focus: Focus | null;
-  /** What a menu, a rename or an edit is about: a tile, or the cell the add menu was
-   *  asked on. Ringed for as long as it is being acted on. */
-  about: (Region & { hue: number | null }) | null;
-  /**
-   * The selection. Ringed with corner brackets; `invalid` means it is not one the grid
-   * can use, and it is drawn in the one colour that says so.
-   */
-  selected: (Region & { hue: number | null; invalid: boolean; corners: boolean }) | null;
-  proposal: Proposal | null;
-  hover: readonly [number, number] | null;
-  /** Shift is held. The plus shows only then, so the affordance appears with the modifier
-   *  that reaches it: shift-click on an empty cell is the add menu. */
-  shift: boolean;
-  /** The rectangle a shift-click would select right now, while shift is held over a
-   *  selection. Dashed and crawling: proposed, not yet held. */
-  extending: (Region & { hue: number | null; invalid: boolean }) | null;
-  /** Scopes whose corner handle is showing: the cell at their top-left corner. A handle
-   *  is how a scope is selected, since clicking inside it selects a cell. */
-  handles: readonly { ci: number; ri: number; hue: number; name: string | null }[];
-  /** The scope whose handle the pointer is on. Pointing at the handle is pointing at the
-   *  scope: it is ringed whole, and the cell under the pointer is not pointed at. */
-  pointing: (Region & { hue: number | null }) | null;
-  /** The gridlines of the selected scope the pointer is on: a column line at `c`, a row
-   *  line at `r`, or both at a corner. Lit, because dragging one moves it. */
-  lines: {
-    region: Region;
-    hue: number | null;
-    c: number | null;
-    r: number | null;
-    /** The pointer, in screen pixels, so the grip is drawn where the hand is. */
-    cursor: { x: number; y: number } | null;
-  } | null;
-  /** A resize being proposed: the scope's bounds as they would be, the cells it would make
-   *  or unmake, and whether it may. */
-  growing: (Region & { ok: boolean; bands: readonly Region[] }) | null;
-}
 
 /** One occupant's mark, scaled from its own 24-unit space into the cell. */
 function mark(

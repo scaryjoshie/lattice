@@ -5,7 +5,7 @@
  * and anything else as a plain word.
  */
 
-export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu" | "list" | "typing";
+import type { Mode } from "../scene/scene.ts";
 
 /** A chord is keys, pointer parts and words in order. */
 type Row = readonly [chord: readonly string[], means: string];

@@ -25,7 +25,7 @@ import type { Region } from "./region.ts";
 export type Command =
   | { kind: "move"; from: Region; to: Region }
   | { kind: "resize"; owner: string; col?: Edge; row?: Edge }
-  | { kind: "place"; ci: number; ri: number; tile: TileKind; style?: TextStyle }
+  | { kind: "place"; ci: number; ri: number; tile: TileKind; style?: TextStyle; id?: string }
   | { kind: "remove"; id: string }
   | { kind: "setText"; id: string; text: string; span: number; rows: number }
   | { kind: "setName"; id: string; name: string };
@@ -124,7 +124,8 @@ export function apply(grid: Grid, command: Command): Applied {
       const column = made.grid.columns[command.ci + made.dc];
       const row = made.grid.rows[command.ri + made.dr];
       if (!column || !row) return same;
-      const id = nextId("t");
+      // Named by the caller when what follows must refer to it, else here.
+      const id = command.id ?? nextId("t");
       return { ok: true, grid: addTile(made.grid, column.id, row.id, command.tile, id, command.style), dc: made.dc, dr: made.dr, id };
     }
     case "remove":

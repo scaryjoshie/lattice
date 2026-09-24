@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { columnsFor, indexOfTrack, rowsFor } from "../model/grid.ts";
 import { cellsFor, fontOf, linesFor, METRICS, spanFor } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
@@ -43,10 +43,10 @@ export function Editor({
   // In cells, not lines: a note fits several lines in a cell, a title exactly one.
   const rows = rowsFor(grid, id, ci, ri, span, tile.cap?.rows ?? cellsFor(style, linesFor(style, draft, span)));
   // The canvas owns the surface and the ruling even while typing; the input contributes
-  // only a caret and glyphs, so it has to say how far it currently reaches.
-  // Both, not just the width: the canvas leaves a run's cells unruled while it is being
-  // typed, and it can only do that for cells it has been told about.
-  onShape(span, rows);
+  // only a caret and glyphs, so it has to say how far it currently reaches — both axes,
+  // since the canvas leaves a run's cells unruled only for cells it has been told about.
+  // After the render, not during it: reporting is a change to the session.
+  useLayoutEffect(() => onShape(span, rows), [onShape, span, rows]);
   const commit = () => {
     onDone();
     run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft, span, rows });

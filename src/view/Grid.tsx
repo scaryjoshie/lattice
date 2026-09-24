@@ -1,402 +1,63 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCamera } from "./camera.ts";
+import { useCallback, useEffect, useRef } from "react";
+import { footprint, type OccupantKind } from "../model/grid.ts";
+import { paint } from "../paint/paint.ts";
+import { onTheme } from "../paint/theme.ts";
 import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
-import {
-  indexOfTrack,
-  type Move,
-  bounds,
-  type Grid,
-  type OccupantKind,
-  close,
-  wellFormed,
-  scopeAt,
-  type TextStyle,
-  type TileKind,
-} from "../model/grid.ts";
-import { cells as cellsOf, contains, type Region } from "../model/region.ts";
-import {
-  type Cell,
-  type Scene,
-  type Focus,
-  type Occupant,
-  paint,
-  type Plate,
-  type TextRun,
-} from "../paint/paint.ts";
-import { Keys, type Mode } from "./Keys.tsx";
+import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
+import { type Effect, type Input, react } from "../session/react.ts";
+import type { Target } from "../session/target.ts";
+import { useSession } from "../store/session.ts";
+import { useGrid } from "../store/store.ts";
+import { useCamera } from "./camera.ts";
+import { Editor } from "./Editor.tsx";
+import { Keys } from "./Keys.tsx";
 import { Menu, TileMenu } from "./Menu.tsx";
+import { Namer } from "./Namer.tsx";
 import { Opened, type Rect } from "./Opened.tsx";
 import { claimed } from "./pointer.ts";
-import { Editor } from "./Editor.tsx";
-import { Namer } from "./Namer.tsx";
-import type { Command } from "../model/command.ts";
-import { sameTarget, type Target } from "../session/target.ts";
-import { useGrid } from "../store/store.ts";
-import { onTheme } from "../paint/theme.ts";
 
 /**
- * Two layers over one camera. The canvas paints every cell, occupied or not, so that cells
- * can later know about their neighbours without any DOM being involved. The tile layer is
- * transparent and sits on top, because a tile eventually holds a terminal and that has to
- * be real text in a real element.
+ * The view. Two layers over one camera: the canvas paints every cell, and a transparent
+ * tile layer sits on top for the things that have to be real elements, the editor now and
+ * a terminal later. Both ride one transform.
  *
- * React renders when the model changes. Panning and zooming call `draw` and nothing else.
+ * It does two jobs. It translates DOM events into inputs in grid terms and hands them to
+ * `react`, which decides what they mean; and it draws, by painting the scene the grid and
+ * the session project to. It decides nothing itself. Pointer-speed state lives in the
+ * session store outside React; React renders only the overlays.
  */
-/**
- * A selection, with a region that is exactly a scope's bounds read as that scope. Selecting
- * a worktree's cells is selecting the worktree; there is no second way to mean it.
- */
-function selectionOf(grid: Grid, region: Region): { scope: string } | { region: Region } {
-  const scope = grid.scopes.find((s) => {
-    const b = bounds(grid, s);
-    return b.ci === region.ci && b.ri === region.ri && b.span === region.span && b.rows === region.rows;
-  });
-  return scope ? { scope: scope.id } : { region };
-}
 
 /** How far an opened tile stops short of the viewport's edge, in screen pixels. */
 const OPEN_INSET = 24;
-
 /** How near a gridline the pointer must be to take hold of it, and how near a crossing to
  *  hold both of its lines, in screen pixels. */
 const LINE_HIT = 9;
 const INNER_HIT = 5;
 const CROSS_HIT = 4;
-
 /** The scope handle's hit area, in screen pixels. Drawn smaller; a target should be generous. */
 const HANDLE_HIT = 24;
-
-/** The smallest region holding both a region and a cell: what shift-click extends to. */
-function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
-  const c0 = Math.min(r.ci, ci);
-  const r0 = Math.min(r.ri, ri);
-  return {
-    ci: c0,
-    ri: r0,
-    span: Math.max(r.ci + r.span - 1, ci) - c0 + 1,
-    rows: Math.max(r.ri + r.rows - 1, ri) - r0 + 1,
-  };
-}
+/** A press that travels further than this is a drag, never a click. */
+const CLICK = 3;
 
 export function Grid() {
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
-  /**
-   * What the pointer is on. Exactly one thing at a time, chosen by `targetAt`, so nothing
-   * downstream arbitrates between rival answers. A ref: it changes at pointer speed and
-   * only the paint reads it.
-   */
-  const pointing = useRef<Target | null>(null);
-  /** Shift is held. A ref, like pointing: it changes at key speed and only the paint reads it. */
-  const shift = useRef(false);
-  /** Where the pointer last was, so pointing can be picked back up when a menu closes. */
+  /** Where the pointer last was, in client pixels: for the grip, and to re-point after a menu. */
   const pointer = useRef<{ x: number; y: number } | null>(null);
+  /** Where the press started, so a drag is not also read as a click. */
+  const pressed = useRef<{ x: number; y: number } | null>(null);
+  /** The scene as last painted, for hit tests between paints. */
+  const last = useRef<Scene | null>(null);
 
+  // React draws the overlays from these and nothing else. Pointing and gestures change at
+  // pointer speed and never pass through a render.
   const grid = useGrid((s) => s.grid);
-  const propose = useGrid((s) => s.propose);
-  const run = useGrid((s) => s.run);
-  const undo = useGrid((s) => s.undo);
-  const redo = useGrid((s) => s.redo);
+  const overlay = useSession((s) => s.session.overlay);
+  const opened = useSession((s) => s.session.opened);
+  const mode = useSession((s) => modeOf(grid, s.session));
 
-  /** Open at the pointer, holding the cell it was asked about. */
-  const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editShape, setEditShape] = useState({ span: 1, rows: 1 });
-  /** The tile being renamed, if any. */
-  const [naming, setNaming] = useState<string | null>(null);
-  /** An occupant opened: which, and the rectangles it scales between. */
-  const [opened, setOpened] = useState<{ id: string; from: Rect; to: Rect; leaving?: boolean } | null>(null);
-  /** Right-click on something that is already there. */
-  const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
-  /**
-   * What is selected: a tile, or a region of cells. Always a region underneath — selecting
-   * a tile is shorthand for selecting the region it owns — but a tile is remembered by id
-   * so the selection follows it rather than the cells it happened to be on.
-   */
-  const [selection, setSelection] = useState<
-    { tile: string } | { scope: string } | { region: Region } | null
-  >(null);
-  /**
-   * The press in progress: where it started, so a drag is not also read as a click, and
-   * whether the grid holds it. Decided once, at pointer-down, which the browser fires
-   * before the mousedown the camera listens to, so the camera only has to ask.
-   */
-  const pressed = useRef<{ x: number; y: number; held: boolean } | null>(null);
-  /**
-   * Whether the press that is happening was one that dismissed something. A click that
-   * closes an overlay is spent closing it and does nothing else.
-   *
-   * It has to be recorded at pointer-down, because an input commits on blur and blur
-   * happens between the press and the release — so by the time the release is handled,
-   * the thing that was open has already gone and the release looks like a click on empty
-   * canvas.
-   */
-  const dismissing = useRef(false);
-  /** The move in progress, while shift is held. */
-  /**
-   * `grab` is where inside the tile it was picked up, as an offset from its own corner. A
-   * multi-cell run grabbed by its far end would otherwise be placed as though the pointer
-   * were on its corner, jumping sideways the moment the drag began.
-   */
-  const dragging = useRef<{
-    /** The one tile being carried, if it is one tile: its links stay lit as it goes. */
-    id: string | null;
-    from: Region;
-    grab: [number, number];
-    /** The move as last previewed. The release runs this same command. */
-    command: Extract<Command, { kind: "move" }> | null;
-  } | null>(null);
-  /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
-  /** A gridline of the selected scope being dragged: which line, and where it started. */
-  const stretching = useRef<{
-    owner: string;
-    c: number | null;
-    r: number | null;
-    wx: number;
-    wy: number;
-    /** The resize as last previewed. The release runs this same command. */
-    command: Extract<Command, { kind: "resize" }> | null;
-  } | null>(null);
-  /** A rectangle being swept out with shift held: where it started, as a region. */
-  const sweeping = useRef<Region | null>(null);
-  const [sweep, setSweep] = useState<Region | null>(null);
-  /** The resize in progress, as the scene needs it. */
-  const [grow, setGrow] = useState<{
-    after: Region;
-    ok: boolean;
-    moves: readonly Move[];
-    /** The cells being made, or for a shrink, unmade. */
-    bands: readonly Region[];
-    /** Where the dragged lines are now. */
-    c: number | null;
-    r: number | null;
-  } | null>(null);
-  const [held, setHeld] = useState<{
-    id: string | null;
-    from: Region;
-    to: Region;
-    /** Everywhere the proposal would put something. Empty when it is refused. */
-    moves: readonly Move[];
-    ok: boolean;
-    swaps: boolean;
-  } | null>(null);
-
-  /**
-   * Derived from the model, so it is rebuilt when the model changes and never on a camera
-   * event. Recomputing it per wheel event was allocating a map hundreds of times a second
-   * for data that had not moved.
-   */
-  const gridRef = useRef(grid);
-  gridRef.current = grid;
-
-  const scene = useMemo(() => {
-    /*
-     * Where a tile is *while the drag is happening*, which is not where the model says it
-     * is. Doing it here rather than in the paint means nothing downstream knows a drag
-     * exists: the cell a tile left is empty, and empty cells already know how to look.
-     */
-    const carry = held?.ok ? held : null;
-    // Whichever proposal is live, a move or a resize, says where things would be.
-    const live = carry ?? (grow?.ok ? grow : null);
-    const proposed = new Map(live?.moves.map((m) => [m.id, m]) ?? []);
-    const placed = (tile: { id: string; columnId: string; rowId: string }): [number, number] => {
-      const m = proposed.get(tile.id);
-      if (m) return [m.ci, m.ri];
-      return [indexOfTrack(grid.columns, tile.columnId), indexOfTrack(grid.rows, tile.rowId)];
-    };
-    /** A scope's bounds, where the drag would put it. */
-    const placedScope = (scope: (typeof grid.scopes)[number]): Region => {
-      const b = bounds(grid, scope);
-      const m = proposed.get(scope.id);
-      return m ? { ci: m.ci, ri: m.ri, span: m.span ?? b.span, rows: m.rows ?? b.rows } : b;
-    };
-
-    /*
-     * A tile's colour is the region it belongs to according to the *model* — never
-     * according to where a proposal would put it. Nothing changes colour because of a
-     * move that has not happened, which covers the tile being carried and equally the one
-     * it would displace.
-     */
-    const hueAt = (tile: { id: string; columnId: string; rowId: string }): number | null =>
-      scopeAt(
-        grid,
-        indexOfTrack(grid.columns, tile.columnId),
-        indexOfTrack(grid.rows, tile.rowId),
-      )?.hue ?? null;
-
-    const cells = new Map<string, Cell>();
-    const plates: Plate[] = [];
-    for (const scope of grid.scopes) {
-      const b = placedScope(scope);
-      plates.push({
-        id: scope.id,
-        name: scope.name,
-        hue: scope.hue,
-        c0: b.ci,
-        c1: b.ci + b.span - 1,
-        r0: b.ri,
-        r1: b.ri + b.rows - 1,
-      });
-      for (const [ci, ri] of cellsOf(b)) cells.set(`${ci},${ri}`, { hue: scope.hue, occupied: false });
-    }
-    for (const tile of grid.tiles) {
-      if (tile.id === editing) continue;
-      const [ci, ri] = placed(tile);
-      const extent = { ci, ri, span: tile.span ?? 1, rows: tile.rows ?? 1 };
-      for (const [c, r] of cellsOf(extent)) {
-        cells.set(`${c},${r}`, {
-          hue: cells.get(`${c},${r}`)?.hue ?? null,
-          occupied: true,
-          tileId: tile.id,
-          // Selecting a run selects all of it, not the one cell under the pointer.
-          extent,
-        });
-      }
-    }
-    const occupied: Occupant[] = [];
-    const texts: TextRun[] = [];
-    for (const tile of grid.tiles) {
-      const [ci, ri] = placed(tile);
-      const h = hueAt(tile);
-      if (tile.kind === "text") {
-        if (tile.id === editing) {
-          // No glyphs — the input draws those — but the cells it covers stay unruled.
-          texts.push({
-            ci,
-            ri,
-            span: editShape.span,
-            rows: editShape.rows,
-            style: tile.style ?? "title",
-            text: "",
-            hue: h,
-          });
-        } else {
-          texts.push({
-            ci,
-            ri,
-            span: tile.span ?? 1,
-            rows: tile.rows ?? 1,
-            style: tile.style ?? "title",
-            text: tile.text ?? "",
-            hue: h,
-          });
-        }
-      }
-      else
-        occupied.push({
-          ci,
-          ri,
-          kind: tile.kind,
-          name: tile.id === naming ? undefined : tile.name,
-          hue: h,
-        });
-    }
-    /** Every tile's extent, so anything being acted on can be ringed whole. */
-    const tiles = new Map<string, { ci: number; ri: number; span: number; rows: number; hue: number | null }>();
-    for (const tile of grid.tiles) {
-      const [ci, ri] = placed(tile);
-      tiles.set(tile.id, {
-        ci,
-        ri,
-        span: tile.id === editing ? editShape.span : (tile.span ?? 1),
-        rows: tile.id === editing ? editShape.rows : (tile.rows ?? 1),
-        hue: hueAt(tile),
-      });
-    }
-
-    const spots = new Map<string, Occupant>();
-    for (const tile of grid.tiles) {
-      if (tile.kind === "text") continue;
-      const [ci, ri] = placed(tile);
-      spots.set(tile.id, { ci, ri, kind: tile.kind, hue: hueAt(tile) });
-    }
-    /** Agent tile id by cell, so hovering a cell can find what is talking to what. */
-    const byCell = new Map<string, string>();
-    for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
-    /*
-     * What is being acted on: shown a menu, renamed, edited, or selected. One thing at a
-     * time, and the ring around it. A region selection is valid on the same terms as a
-     * move — one scope or none, and nothing half in and half out.
-     */
-    const subject =
-      acting?.id ?? naming ?? editing ?? (selection && "tile" in selection ? selection.tile : null);
-    const region = selection && "region" in selection ? selection.region : null;
-    const usable = (r: Region): boolean => wellFormed(grid, r);
-    /*
-     * Two rings, for two questions. `about` is what a menu, a rename or an edit is about:
-     * a tile, or for the add menu the cell it was asked on. `selected` is the selection.
-     * They are separate so a selection stays ringed while a menu is open about something
-     * else. Brackets say "held"; while a move is proposed the proposal says it instead.
-     */
-    const acted = acting?.id ?? naming ?? editing;
-    // One ring where the thing acted on is also the thing selected.
-    const own = selection !== null && "tile" in selection && selection.tile === acted;
-    const about: Scene["about"] = acted
-      ? own
-        ? null
-        : (tiles.get(acted) ?? null)
-      : menu
-        ? { ci: menu.ci, ri: menu.ri, span: 1, rows: 1, hue: scopeAt(grid, menu.ci, menu.ri)?.hue ?? null }
-        : null;
-    const corners = held === null && grow === null;
-    const selectedScope = selection && "scope" in selection ? grid.scopes.find((s) => s.id === selection.scope) : undefined;
-    const selected: Scene["selected"] =
-      selection && "tile" in selection
-        ? (() => {
-            const shape = tiles.get(selection.tile);
-            return shape ? { ...shape, invalid: false, corners } : null;
-          })()
-        : selectedScope
-          ? { ...placedScope(selectedScope), hue: selectedScope.hue, invalid: false, corners }
-          : region
-            ? { ...region, hue: scopeAt(grid, region.ci, region.ri)?.hue ?? null, invalid: !usable(region), corners }
-            : null;
-
-    const heldTile = held?.id ? grid.tiles.find((x) => x.id === held.id) : undefined;
-    const proposal = held
-      ? {
-          from: held.from,
-          to: held.to,
-          hue: heldTile ? hueAt(heldTile) : (scopeAt(grid, held.from.ci, held.from.ri)?.hue ?? null),
-          ok: held.ok,
-          swaps: held.swaps,
-        }
-      : null;
-    return {
-      cells,
-      plates,
-      occupied,
-      texts,
-      spots,
-      byCell,
-      tiles,
-      links: grid.links,
-      carried: carry,
-      proposal,
-      subject,
-      about,
-      selected,
-      selectedScope: selectedScope?.id ?? null,
-      /** What the lit gridlines belong to: the selected scope with every line, or the
-       *  selected run with its edges only. */
-      resizable: selectedScope
-        ? { id: selectedScope.id, region: placedScope(selectedScope), edgesOnly: false }
-        : selection && "tile" in selection && grid.tiles.find((x) => x.id === selection.tile)?.kind === "text" && tiles.get(selection.tile)
-          ? { id: selection.tile, region: tiles.get(selection.tile) as Region, edgesOnly: true }
-          : null,
-      /** The rectangle being swept, closed, if shift-drag is in progress. */
-      sweep,
-      /** The resize being proposed: the scope's new bounds, the cells it makes, whether it may. */
-      growing: grow ? { ...grow.after, ok: grow.ok, bands: grow.bands } : null,
-      /** Where the dragged lines are, while a resize is in flight. */
-      growLines: grow ? { c: grow.c, r: grow.r } : null,
-      usable,
-    };
-  }, [grid, editing, editShape, naming, acting, menu, selection, held, grow, sweep]);
-
-  const model = useRef(scene);
-  model.current = scene;
+  /* Drawing ---------------------------------------------------------------- */
 
   const draw = useCallback((camera: Camera) => {
     const el = canvas.current;
@@ -412,119 +73,15 @@ export function Grid() {
       el.width = w;
       el.height = h;
     }
-    // Opaque: nothing behind the canvas shows through, so the page fill is a copy
-    // rather than a blend and the compositor skips one step.
+    // Opaque: nothing behind the canvas shows through, so the page fill is a copy.
     const ctx = el.getContext("2d", { alpha: false });
     if (!ctx) return;
-
-    const {
-      cells, plates, occupied, texts, spots, byCell, links, carried, proposal, subject, about, selected, selectedScope, growing, usable,
-    } = model.current;
-
-    // Everything about the pointer comes from the one target. A cell is pointed at only
-    // when nothing with precedence over it is.
-    const target = pointing.current;
-    const cell = target?.kind === "cell" ? target : null;
-    const onHandle = target?.kind === "handle" ? target.scope : null;
-
-    // The gridlines of the selected scope the pointer is on, lit as what a drag would move;
-    // during a drag, where they have got to. The pointer's own position, so the grip can
-    // be drawn under it.
-    const held_ = model.current.growLines ?? (target?.kind === "line" ? target : null);
-    const owner = model.current.resizable;
     const box = host.getBoundingClientRect();
     const cursor = pointer.current ? { x: pointer.current.x - box.left, y: pointer.current.y - box.top } : null;
-    const lines: Scene["lines"] =
-      owner && held_
-        ? { region: owner.region, hue: selected?.hue ?? null, c: held_.c, r: held_.r, cursor }
-        : null;
-
-    // A scope's handle shows while the pointer is inside it or on the handle itself, and
-    // goes once the scope is selected: the brackets say it then. The name shows on the
-    // handle while the pointer is on it.
-    const handles: Scene["handles"] = plates
-      .filter(
-        (p) =>
-          p.id !== selectedScope &&
-          (p.id === onHandle ||
-            (cell !== null && cell.ci >= p.c0 && cell.ci <= p.c1 && cell.ri >= p.r0 && cell.ri <= p.r1)),
-      )
-      .map((p) => ({ ci: p.c0, ri: p.r0, hue: p.hue, name: p.id === onHandle ? p.name : null }));
-    const hotPlate = onHandle ? plates.find((p) => p.id === onHandle) : undefined;
-    const pointedScope: Scene["pointing"] = hotPlate
-      ? { ci: hotPlate.c0, ri: hotPlate.r0, span: hotPlate.c1 - hotPlate.c0 + 1, rows: hotPlate.r1 - hotPlate.r0 + 1, hue: hotPlate.hue }
-      : null;
-
-    // With something selected, shift previews the rectangle a shift-click would select.
-    const sweptRegion = model.current.sweep;
-    const extending: Scene["extending"] = sweptRegion
-      ? { ...sweptRegion, hue: selected?.hue ?? scopeAt(gridRef.current, sweptRegion.ci, sweptRegion.ri)?.hue ?? null, invalid: !usable(sweptRegion) }
-      : shift.current && selected && cell && !proposal && !contains(selected, cell.ci, cell.ri)
-        ? (() => {
-            const r = close(gridRef.current, reach(selected, [cell.ci, cell.ri]));
-            return { ...r, hue: selected.hue, invalid: !usable(r) };
-          })()
-        : null;
-
-    // Focus is derived from what the pointer is on, not stored. Hovering an agent is the
-    // question "who is this one talking to", and the answer is a read of the model.
-    /*
-     * While moving an agent its connections stay lit: that is the one thing still worth
-     * knowing mid-drag, and it comes from the tile being dragged rather than from wherever
-     * the pointer was when the drag began.
-     */
-    /*
-     * Focus survives a menu and a rename. Opening a menu about an agent is still being
-     * about that agent, so its connections stay lit and everything else stays back — the
-     * alternative is the lines going out and the page brightening the moment you act,
-     * which is a change that says nothing happened when something did.
-     */
-    let focus: Focus | null = null;
-    const spot = carried?.id ?? subject ?? (cell && byCell.get(`${cell.ci},${cell.ri}`));
-    if (spot) {
-      const here = spots.get(spot);
-      if (here) {
-        const partners = links
-          .filter((l) => l.from === spot || l.to === spot)
-          .map((l) => spots.get(l.from === spot ? l.to : l.from))
-          .filter((s): s is NonNullable<typeof s> => Boolean(s));
-        // Every agent focuses, talking or not. Dimming that depended on whether an agent
-        // happened to have links would make the canvas respond unevenly to the same act.
-        const anchor =
-          carried?.id === spot ? { ci: carried.from.ci, ri: carried.from.ri } : { ci: here.ci, ri: here.ri };
-        focus = { ...here, anchor, partners };
-      }
-    }
-
-    paint(
-      ctx,
-      {
-        camera,
-        width,
-        height,
-        dpr,
-        plates,
-        cells,
-        occupied,
-        texts,
-        focus,
-        about,
-        selected,
-        proposal,
-        // The hovered cell, unless something already says more about it: the extension
-        // preview, or the focus ring on that same cell.
-        hover: cell && !extending && !(focus && focus.ci === cell.ci && focus.ri === cell.ri) ? [cell.ci, cell.ri] : null,
-        shift: shift.current,
-        extending,
-        handles,
-        pointing: pointedScope,
-        lines,
-        growing,
-      },
-      dash.current,
-    );
-    running.current = focus !== null || proposal !== null || extending !== null;
-
+    const scene = sceneOf(useGrid.getState().grid, useSession.getState().session, { camera, width, height, dpr, cursor });
+    last.current = scene;
+    paint(ctx, scene, dash.current);
+    running.current = animating(scene);
     // The tile layer rides the same transform, written directly for the same reason the
     // canvas is: nothing here should pass through a render.
     if (layer.current) {
@@ -543,12 +100,7 @@ export function Grid() {
   /** The shared crawl. Advances once per animated frame. */
   const dash = useRef(0);
   const running = useRef(false);
-  /**
-   * The latest camera, not the one that happened to queue the frame. Capturing `next` in
-   * the closure instead paints the *first* event of each batch and discards the rest, so
-   * every frame is stale by a variable amount — which reads as stutter while producing no
-   * slow frames at all, and is why batching the drawing changed nothing.
-   */
+  /** The latest camera, not the one that happened to queue the frame. */
   const latest = useRef<Camera>({ x: 0, y: 0, k: 1 });
   const schedule = useCallback(
     (next: Camera) => {
@@ -575,10 +127,33 @@ export function Grid() {
     [],
   );
 
-  /** The gridlines of the selected scope under a screen point: a column line, a row line,
-   *  or both at a corner. Edges count; the boundary is a line like any other. */
+  // While an overlay or an opened tile is up the camera is still, and a press the grid
+  // holds is not a pan. Every gesture is a held press.
+  const { camera, shift: shiftView } = useCamera(viewport, schedule, () => {
+    const s = useSession.getState().session;
+    return s.overlay !== null || s.opened !== null || s.gesture !== null;
+  });
+
+  // Anything that changes the grid or the session wants a paint, on the same frame as
+  // anything else that does.
+  useEffect(() => {
+    const stop = [useGrid.subscribe(() => schedule(camera.current)), useSession.subscribe(() => schedule(camera.current))];
+    schedule(camera.current);
+    return () => stop.forEach((f) => f());
+  }, [schedule, camera]);
+  useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
+  useEffect(() => {
+    const onResize = () => schedule(camera.current);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [schedule, camera]);
+
+  /* Hit tests: a screen point to the one thing under it ----------------------- */
+
+  /** The gridlines of the selected scope or run under a screen point: a column line, a row
+   *  line, or both at a corner. Edges count; the boundary is a line like any other. */
   const linesUnder = (px: number, py: number): Target | null => {
-    const owner = model.current.resizable;
+    const owner = last.current?.resizable;
     if (!owner) return null;
     const { region: o, edgesOnly } = owner;
     const { x, y, k } = camera.current;
@@ -619,10 +194,12 @@ export function Grid() {
 
   /** The scope whose corner handle is under a screen point, if any. */
   const handleUnder = (px: number, py: number): string | null => {
+    const scene = last.current;
+    if (!scene) return null;
     const { x, y, k } = camera.current;
     const half = HANDLE_HIT / 2;
-    for (const plate of model.current.plates) {
-      if (plate.id === model.current.selectedScope) continue;
+    for (const plate of scene.plates) {
+      if (plate.id === scene.selectedScope) continue;
       const hx = worldX(plate.c0) * k + x;
       const hy = worldX(plate.r0) * k + y;
       if (Math.abs(px - hx) <= half && Math.abs(py - hy) <= half) return plate.id;
@@ -644,67 +221,86 @@ export function Grid() {
     return { kind: "cell", ci, ri };
   };
 
-  /** Point at whatever is under a client position now, and repaint. */
+  /* Inputs and effects ----------------------------------------------------- */
+
+  /** Do what `react` decided. Document commands run; session commands apply; the view
+   *  follows a run that prepended tracks by shifting the camera and the session's indices. */
+  const dispatch = (effects: Effect[]) => {
+    for (const effect of effects) {
+      switch (effect.kind) {
+        case "select":
+        case "point":
+        case "shiftKey":
+        case "gesture":
+        case "overlay":
+        case "open":
+        case "shift":
+          useSession.getState().apply(effect);
+          break;
+        case "undo":
+          useGrid.getState().undo();
+          break;
+        case "redo":
+          useGrid.getState().redo();
+          break;
+        default: {
+          const done = useGrid.getState().run(effect);
+          if (done.ok && (done.dc || done.dr)) {
+            shiftView(-done.dc * CELL, -done.dr * CELL);
+            useSession.getState().apply({ kind: "shift", dc: done.dc, dr: done.dr });
+            useSession.getState().apply({ kind: "point", target: null });
+          }
+        }
+      }
+    }
+  };
+
+  /** Point at whatever is under a client position now. */
   const repoint = (clientX: number, clientY: number) => {
     const host = viewport.current;
     if (!host) return;
     const box = host.getBoundingClientRect();
-    pointing.current = targetAt(clientX - box.left, clientY - box.top);
-    schedule(camera.current);
+    useSession.getState().apply({ kind: "point", target: targetAt(clientX - box.left, clientY - box.top) });
   };
 
-  // While a menu, a rename or an edit is open the camera is still: the press that closes
-  // it is spent closing it, and the wheel would slide the cell out from under the menu.
-  // And a press the grid holds is not a pan.
-  const overlay = menu !== null || acting !== null || editing !== null || naming !== null || opened !== null;
-  const { camera, shift: shiftView } = useCamera(viewport, schedule, () => overlay || pressed.current?.held === true);
+  const send = (input: Input) => {
+    const before = useSession.getState().session;
+    dispatch(react(useGrid.getState().grid, before, input));
+    // Whatever closed an overlay, the pointer is still somewhere, and that is pointed at
+    // again at once rather than when it next moves.
+    const after = useSession.getState().session;
+    if (before.overlay && !after.overlay && !after.gesture && pointer.current) repoint(pointer.current.x, pointer.current.y);
+  };
 
-  // A scene change wants a paint, on the same frame as anything else that does.
-  useEffect(() => {
-    schedule(camera.current);
-  }, [schedule, camera, scene]);
-
-  useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
-
-  useEffect(() => {
-    const onResize = () => schedule(camera.current);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [schedule, camera]);
-
-  // The plus follows shift. Losing the window drops it too, since the keyup that would
-  // have cleared it goes to whatever took focus.
-  useEffect(() => {
-    const set = (held: boolean) => {
-      if (shift.current === held) return;
-      shift.current = held;
-      schedule(camera.current);
+  /** A pointer event in grid terms: the target, the cell, and the point in cell units. */
+  const place = (event: { clientX: number; clientY: number }) => {
+    const host = viewport.current;
+    if (!host) return null;
+    const box = host.getBoundingClientRect();
+    const px = event.clientX - box.left;
+    const py = event.clientY - box.top;
+    const { x, y, k } = camera.current;
+    return {
+      target: targetAt(px, py),
+      cell: cellAt(camera.current, px, py),
+      world: { x: (px - x) / k / CELL, y: (py - y) / k / CELL },
+      client: { x: event.clientX, y: event.clientY },
     };
+  };
+
+  // Keys arrive at the window. Shift is tracked so the plus and the extension preview
+  // follow it; losing the window drops it, since the keyup goes elsewhere. Cmd is the
+  // application layer. A text field keeps its own keys.
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      set(e.shiftKey);
-      if (claimed(e.target) || document.querySelector(".opened")) return;
-      // Cmd is the application layer. Undo and redo are the document's; a selection may
-      // name something the restored grid does not have, so it is dropped.
-      if (e.type === "keydown" && e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "z") {
+      send({ type: "key", key: "Shift", down: e.shiftKey });
+      if (e.type !== "keydown" || claimed(e.target)) return;
+      if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey ? redo() : undo()) setSelection(null);
-        return;
-      }
-      // An opened tile owns Escape while it is up, the way an overlay owns the pointer.
-      if (e.key === "Escape") {
-        if (dragging.current || stretching.current || sweeping.current) {
-          // Cancel the move, the resize or the sweep: drop it and spend the release on nothing.
-          dragging.current = null;
-          stretching.current = null;
-          sweeping.current = null;
-          pressed.current = null;
-          setHeld(null);
-          setGrow(null);
-          setSweep(null);
-        } else setSelection(null);
-      }
+        send({ type: "key", key: e.shiftKey ? "Redo" : "Undo", down: true });
+      } else if (e.key === "Escape") send({ type: "key", key: "Escape", down: true });
     };
-    const onBlur = () => set(false);
+    const onBlur = () => send({ type: "key", key: "Shift", down: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
     window.addEventListener("blur", onBlur);
@@ -713,367 +309,100 @@ export function Grid() {
       window.removeEventListener("keyup", onKey);
       window.removeEventListener("blur", onBlur);
     };
-  }, [schedule, camera, undo, redo]);
+  });
 
   const onMove = (event: React.PointerEvent) => {
     pointer.current = { x: event.clientX, y: event.clientY };
     if (claimed(event.target)) return;
-    const host = viewport.current;
-    if (!host || menu || editing || naming || acting) return;
-    if (stretching.current) {
-      const s = stretching.current;
-      const box = host.getBoundingClientRect();
-      const { x, y, k } = camera.current;
-      const wx = (event.clientX - box.left - x) / k;
-      const wy = (event.clientY - box.top - y) / k;
-      const nc = s.c === null ? 0 : Math.round((wx - s.wx) / CELL);
-      const nr = s.r === null ? 0 : Math.round((wy - s.wy) / CELL);
-      const command: Extract<Command, { kind: "resize" }> = {
-        kind: "resize",
-        owner: s.owner,
-        ...(s.c === null ? {} : { col: { line: s.c, n: nc } }),
-        ...(s.r === null ? {} : { row: { line: s.r, n: nr } }),
-      };
-      const verdict = propose(command);
-      s.command = command;
-      pointing.current = null;
-      if (verdict.after) {
-        setGrow({ after: verdict.after, ok: verdict.ok, moves: verdict.moves, bands: verdict.bands, c: s.c === null ? null : s.c + nc, r: s.r === null ? null : s.r + nr });
-      }
-      schedule(camera.current);
-      return;
-    }
-    if (sweeping.current) {
-      const at = cellUnder(event);
-      if (at) {
-        pointing.current = null;
-        setSweep(close(gridRef.current, reach(sweeping.current, at)));
-        schedule(camera.current);
-      }
-      return;
-    }
-    if (dragging.current) {
-      const at = cellUnder(event);
-      if (at) {
-        const carry = dragging.current;
-        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
-        // From the model, never from the scene: the scene is built from this answer.
-        const command: Extract<Command, { kind: "move" }> = { kind: "move", from: carry.from, to };
-        const verdict = propose(command);
-        carry.command = command;
-        pointing.current = null;
-        setHeld({ id: carry.id, from: carry.from, to, ok: verdict.ok, swaps: verdict.swaps, moves: verdict.moves });
-      }
-      return;
-    }
-    const box = host.getBoundingClientRect();
-    const next = targetAt(event.clientX - box.left, event.clientY - box.top);
-    // A lit line repaints on every move, since the grip follows the pointer along it.
-    if (next.kind !== "line" && sameTarget(next, pointing.current)) return;
-    pointing.current = next;
-    schedule(camera.current);
-  };
-
-  const cellUnder = (event: { clientX: number; clientY: number }) => {
-    const host = viewport.current;
-    if (!host) return null;
-    const box = host.getBoundingClientRect();
-    return cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
+    const at = place(event);
+    if (at) send({ type: "move", target: at.target, cell: at.cell, world: at.world });
   };
 
   const onDown = (event: React.PointerEvent) => {
     if (claimed(event.target)) return;
-    const press = { x: event.clientX, y: event.clientY, held: false };
-    pressed.current = press;
-    dismissing.current = menu !== null || acting !== null || editing !== null || naming !== null;
-    if (dismissing.current) return;
-    const at = cellUnder(event);
+    pressed.current = { x: event.clientX, y: event.clientY };
+    const at = place(event);
     if (!at) return;
-    const hold = () => {
-      press.held = true;
-      (event.target as Element).setPointerCapture?.(event.pointerId);
-    };
-    const target = pointing.current;
-    if (target?.kind === "line" && !event.shiftKey) {
-      // Taking hold of a gridline of the selected scope or run. The line's world position
-      // is where the drag is measured from.
-      const { owner, c, r } = target;
-      stretching.current = { owner, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r), command: null };
-      hold();
-      return;
-    }
-    const selected = model.current.selected;
-    const inside = selected !== null && contains(selected, at[0], at[1]);
-    if (event.shiftKey) {
-      // Shift and drag sweeps a rectangle: from the cell if nothing is selected, and from
-      // the selection if something is, which is extending it. A shift-click is decided
-      // on the release, as before.
-      sweeping.current = selected && !selected.invalid ? selected : { ci: at[0], ri: at[1], span: 1, rows: 1 };
-      hold();
-      return;
-    }
-    if (inside && selected.invalid) {
-      // A press on an invalid selection is the grid's, and it goes nowhere: the selection
-      // is already drawn in the colour that says so. A drag does nothing; a click is a
-      // click on the cell.
-      press.held = true;
-      return;
-    }
-    // Only a press inside the selection carries anything. Anywhere else a plain drag
-    // pans, tile or not, so there is always somewhere to pan from.
-    if (!inside) return;
-    const from = selected;
-    const id = selection && "tile" in selection ? selection.tile : null;
-    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri], command: null };
-    hold();
+    send({ type: "press", target: at.target, cell: at.cell, shift: event.shiftKey, button: event.button });
+    // A press the grid holds keeps the pointer until release, wherever it goes.
+    const g = useSession.getState().session.gesture;
+    if (g && g.kind !== "dismiss" && g.kind !== "hold") (event.target as Element).setPointerCapture?.(event.pointerId);
   };
 
   const onUp = (event: React.PointerEvent) => {
     if (claimed(event.target)) return;
     const start = pressed.current;
     pressed.current = null;
-    const moved = !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3;
-    if (sweeping.current) {
-      const anchor = sweeping.current;
-      sweeping.current = null;
-      setSweep(null);
-      if (moved) {
-        const at = cellUnder(event);
-        if (at) setSelection(selectionOf(gridRef.current, close(gridRef.current, reach(anchor, at))));
-        return;
-      }
-    }
-    if (stretching.current) {
-      const s = stretching.current;
-      stretching.current = null;
-      setGrow(null);
-      // The command previewed is the command run; the store judges it again itself.
-      const done = s.command ? run(s.command) : null;
-      if (done?.ok && (done.dc || done.dr)) {
-        shiftView(-done.dc * CELL, -done.dr * CELL);
-        pointing.current = null;
-      }
-      return;
-    }
-    if (dragging.current) {
-      const carry = dragging.current;
-      dragging.current = null;
-      setHeld(null);
-      // A press inside the selection that never travelled is a click on it, not a move.
-      // The command previewed is the command run; the store judges it again itself.
-      if (moved && carry.command) {
-        const { to } = carry.command;
-        const done = run(carry.command);
-        if (done.ok) {
-          // Tracks prepended on the way shift every index; the view shifts to match.
-          if (done.dc || done.dr) {
-            shiftView(-done.dc * CELL, -done.dr * CELL);
-            pointing.current = null;
-          }
-          // A selected tile follows itself; a selected region has to be told where it went.
-          if (carry.id === null && !(selection && "scope" in selection)) {
-            setSelection(selectionOf(useGrid.getState().grid, { ...to, ci: to.ci + done.dc, ri: to.ri + done.dr }));
-          }
-        }
-        return;
-      }
-      if (moved) return;
-    }
-    const host = viewport.current;
-    if (dismissing.current) {
-      dismissing.current = false;
-      setMenu(null);
-      setActing(null);
-      // Point back at whatever is under the pointer already, rather than waiting for it
-      // to move before the grid responds again.
-      repoint(event.clientX, event.clientY);
-      return;
-    }
-    // A press that moved was a pan, not a click on a cell.
-    if (moved || !host) return;
-    const box = host.getBoundingClientRect();
-    const [ci, ri] = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
-    const id = model.current.cells.get(`${ci},${ri}`)?.tileId ?? null;
-    if (event.shiftKey) {
-      // With a selection, shift-click selects the rectangle out to this cell. Without
-      // one, shift-click acts: on an empty cell the act is the add menu; on a tile it
-      // will be opening it, which does not exist yet.
-      const anchor = model.current.selected;
-      if (anchor && !contains(anchor, ci, ri)) {
-        setSelection(selectionOf(gridRef.current, close(gridRef.current, reach(anchor, [ci, ri]))));
-        return;
-      }
-      if (id) {
-        // Shift-click on an occupant opens it, scaling up from where it sits.
-        const tile = gridRef.current.tiles.find((x) => x.id === id);
-        const extent = model.current.tiles.get(id);
-        if (!tile || tile.kind === "text" || !extent) return;
-        const { x, y, k } = camera.current;
-        const size = CELL * k;
-        pointing.current = null;
-        setOpened({
-          id,
-          from: { x: worldX(extent.ci) * k + x, y: worldX(extent.ri) * k + y, w: size * extent.span, h: size * extent.rows },
-          to: { x: OPEN_INSET, y: OPEN_INSET, w: host.clientWidth - OPEN_INSET * 2, h: host.clientHeight - OPEN_INSET * 2 },
-        });
-        return;
-      }
-      pointing.current = null;
-      setMenu({ x: event.clientX, y: event.clientY, ci, ri });
-      return;
-    }
-    // Click selects, and clicking what is already selected clears it. A scope's corner
-    // handle selects the scope; anywhere else inside it selects the cell.
-    const target = targetAt(event.clientX - box.left, event.clientY - box.top);
-    if (target.kind === "handle") {
-      setSelection({ scope: target.scope });
-      return;
-    }
-    const current = model.current.selected;
-    if (current && contains(current, ci, ri)) {
-      setSelection(null);
-      return;
-    }
-    setSelection(id ? { tile: id } : selectionOf(gridRef.current, { ci, ri, span: 1, rows: 1 }));
+    const travelled = !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK;
+    const at = place(event);
+    if (at) send({ type: "release", target: at.target, cell: at.cell, travelled, shift: event.shiftKey, button: event.button, client: at.client });
   };
 
   const onContextMenu = (event: React.MouseEvent) => {
     if (claimed(event.target)) return;
     event.preventDefault();
-    const at = cellUnder(event);
-    if (!at) return;
-    const id = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-    pointing.current = null;
-    // The menu for what is there. On an empty cell that is the add menu, which is also
-    // what shift-click offers: the act and the menu are the same thing for a place.
-    if (id) {
-      setMenu(null);
-      setActing({ x: event.clientX, y: event.clientY, id });
-    } else {
-      setActing(null);
-      setMenu({ x: event.clientX, y: event.clientY, ci: at[0], ri: at[1] });
-    }
-    // Repaint now: otherwise the veil from hovering this agent lingers on a stale
-    // canvas and then vanishes later, when something else happens to trigger a draw.
-    schedule(camera.current);
+    const at = place(event);
+    if (at) send({ type: "context", cell: at.cell, client: at.client });
   };
 
-  /** Whatever closed a menu, the pointer is still somewhere, and that is still pointed at. */
-  const resume = () => {
-    if (pointer.current) repoint(pointer.current.x, pointer.current.y);
-  };
+  /* Overlays --------------------------------------------------------------- */
 
-  const pick = (kind: TileKind, style?: TextStyle) => {
-    if (!menu) return;
-    const made = run({ kind: "place", ci: menu.ci, ri: menu.ri, tile: kind, style });
-    setMenu(null);
-    if (made.ok && (made.dc || made.dr)) {
-      shiftView(-made.dc * CELL, -made.dr * CELL);
-      pointing.current = null;
-    }
-    if (made.ok && made.id && kind === "text") {
-      pointing.current = null;
-      // The run is what is selected now, and its ring grows with it as it is typed.
-      setSelection({ tile: made.id });
-      setEditing(made.id);
-    } else resume();
-  };
-
-  const onLeave = () => {
-    pointing.current = null;
-    schedule(camera.current);
-  };
-
-  const mode: Mode = editing || naming
-    ? "typing"
-    : menu
-      ? "menu"
-      : acting
-        ? "list"
-        : held
-          ? "moving"
-          : grow
-            ? "moving"
-            : scene.selected
-              ? scene.selected.invalid
-                ? "invalid"
-                : scene.resizable
-                  ? "scope"
-                  : "selected"
-              : "idle";
+  const openedTile = opened ? grid.tiles.find((x) => x.id === opened.id) : undefined;
+  const rects = ((): { from: Rect; to: Rect } | null => {
+    const host = viewport.current;
+    if (!openedTile || !host) return null;
+    const f = footprint(grid, openedTile);
+    const { x, y, k } = camera.current;
+    const size = CELL * k;
+    return {
+      from: { x: worldX(f.ci) * k + x, y: worldX(f.ri) * k + y, w: size * f.span, h: size * f.rows },
+      to: { x: OPEN_INSET, y: OPEN_INSET, w: host.clientWidth - OPEN_INSET * 2, h: host.clientHeight - OPEN_INSET * 2 },
+    };
+  })();
 
   return (
     <div
       className="viewport"
       ref={viewport}
       onPointerMove={onMove}
-      onPointerLeave={onLeave}
+      onPointerLeave={() => send({ type: "leave" })}
       onPointerDown={onDown}
       onPointerUp={onUp}
       onContextMenu={onContextMenu}
     >
       <canvas className="lattice" ref={canvas} />
       <div className="tiles" ref={layer}>
-        {editing !== null && (
-          <Editor
-            id={editing}
-            onDone={() => setEditing(null)}
-            // Only when it actually changes: this is called during the editor's render,
-            // and a fresh object would never compare equal, so the two would render each
-            // other forever.
-            onShape={(span, rows) =>
-              setEditShape((was) => (was.span === span && was.rows === rows ? was : { span, rows }))
-            }
-          />
+        {overlay?.kind === "edit" && (
+          <Editor id={overlay.id} onDone={() => send({ type: "done" })} onShape={(span, rows) => send({ type: "shape", span, rows })} />
         )}
-        {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
+        {overlay?.kind === "name" && <Namer id={overlay.id} onDone={() => send({ type: "done" })} />}
       </div>
-      {opened && (
+      {opened && openedTile && rects && (
         <Opened
-          kind={(gridRef.current.tiles.find((x) => x.id === opened.id)?.kind ?? "shell") as OccupantKind}
-          name={gridRef.current.tiles.find((x) => x.id === opened.id)?.name}
-          from={opened.from}
-          to={opened.to}
-          onLeave={() => setOpened((o) => (o ? { ...o, leaving: true } : o))}
-          onClose={() => setOpened(null)}
+          kind={openedTile.kind as OccupantKind}
+          name={openedTile.name}
+          from={rects.from}
+          to={rects.to}
+          onLeave={() => send({ type: "leaving" })}
+          onClose={() => send({ type: "closed" })}
         />
       )}
       <Keys mode={mode} hidden={opened !== null && !opened.leaving} />
-      {menu && (
+      {overlay?.kind === "add" && (
         <Menu
-          x={menu.x}
-          y={menu.y}
-          onPick={pick}
-          onClose={() => {
-            setMenu(null);
-            resume();
-          }}
+          x={overlay.at.x}
+          y={overlay.at.y}
+          onPick={(tile, style) => send({ type: "choose", tile, style })}
+          onClose={() => send({ type: "dismiss" })}
         />
       )}
-      {acting && (
+      {overlay?.kind === "tile" && (
         <TileMenu
-          x={acting.x}
-          y={acting.y}
-          isText={grid.tiles.find((x) => x.id === acting.id)?.kind === "text"}
-          onClose={() => {
-            setActing(null);
-            resume();
-          }}
-          onPick={(action) => {
-            const id = acting.id;
-            setActing(null);
-            resume();
-            if (action === "delete") {
-              run({ kind: "remove", id });
-              setSelection(null);
-            }
-            else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {
-              pointing.current = null;
-              setSelection({ tile: id });
-              setEditing(id);
-            }
-            else setNaming(id);
-          }}
+          x={overlay.at.x}
+          y={overlay.at.y}
+          isText={grid.tiles.find((x) => x.id === overlay.id)?.kind === "text"}
+          onClose={() => send({ type: "dismiss" })}
+          onPick={(action) => send({ type: "act", action })}
         />
       )}
     </div>
