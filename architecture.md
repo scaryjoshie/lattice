@@ -13,13 +13,16 @@ Dependencies point down. Nothing lower knows what is above it.
 
 | Layer | What it is | State today |
 |---|---|---|
-| model | The grid as a value. `propose` returns a verdict with every move; `apply` takes the verdict whole | Exists: `model.ts`, `region.ts`. Sound |
-| commands | Every change as data: place, remove, apply moves, set text, set name, select, sweep, open | Partly: the store has five methods and no command type |
-| history | The log of document commands, with undo and redo | Missing |
-| interaction | Selection, pointing, gesture, overlay, opened. One pure step function | Missing: spread across `Grid.tsx` |
+| model | The grid as a value. `propose` returns a verdict with every move; `apply` takes the verdict whole | Exists: `model/grid.ts`, `model/region.ts`. Sound |
+| commands | Every document change as data: move, resize, place, remove, set text, set name | Exists: `model/command.ts`; the store is `propose` and `run`. Session commands (select, sweep, open) not yet |
+| history | The log of document commands, with undo and redo | Exists: snapshots in `store/store.ts`, Cmd-Z. Selection not yet restored |
+| interaction | Selection, pointing, gesture, overlay, opened. One pure step function | Missing: spread across `view/Grid.tsx`. Pointing is one value; the rest is not |
 | scene | A pure projection of model, interaction and camera | Half: a memo, plus fields `draw` derives from refs |
-| paint | Draws a scene and remembers nothing | Exists: `paint.ts`. Sound |
-| view | Translates DOM events into inputs; mounts overlays | `Grid.tsx`, 1,200 lines, should be about 300 |
+| paint | Draws a scene and remembers nothing | Exists: `paint/paint.ts`. Sound. Called paint rather than render because render already means React's re-render in this codebase |
+| view | Translates DOM events into inputs; mounts overlays | `view/Grid.tsx`, 1,070 lines, should be about 300 |
+
+One folder per layer, in this order plus `mock` between model and store for the seed grid,
+and `scripts/check-layers.ts` fails the build on an import that points up.
 
 The test for where a thing lives is unchanged from [model.md](model.md), with one word
 corrected: *would this still be true with no window open?* Yes: model, history, and later
