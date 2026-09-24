@@ -16,10 +16,10 @@ Dependencies point down. Nothing lower knows what is above it.
 | model | The grid as a value. `propose` returns a verdict with every move; `apply` takes the verdict whole | Exists: `model/grid.ts`, `model/region.ts`. Sound |
 | commands | Every document change as data: move, resize, place, remove, set text, set name | Exists: `model/command.ts`; the store is `propose` and `run`. Session commands (select, sweep, open) not yet |
 | history | The log of document commands, with undo and redo | Exists: snapshots in `store/store.ts`, Cmd-Z. Selection not yet restored |
-| interaction | Selection, pointing, gesture, overlay, opened. One pure step function | Missing: spread across `view/Grid.tsx`. Pointing is one value; the rest is not |
-| scene | A pure projection of model, interaction and camera | Half: a memo, plus fields `draw` derives from refs |
+| interaction | Selection, pointing, gesture, overlay, opened. One pure step function | Exists: `session/session.ts` is the value and its reducer, `session/react.ts` the step function, tested from Bun. Held in `store/session.ts` outside React |
+| scene | A pure projection of model, interaction and camera | Exists: `scene/scene.ts`, `sceneOf(grid, session, view)`. Computed per paint |
 | paint | Draws a scene and remembers nothing | Exists: `paint/paint.ts`. Sound. Called paint rather than render because render already means React's re-render in this codebase |
-| view | Translates DOM events into inputs; mounts overlays | `view/Grid.tsx`, 1,070 lines, should be about 300 |
+| view | Translates DOM events into inputs; mounts overlays | `view/Grid.tsx`, 410 lines: hit tests, the scheduler, `toInput`, `dispatch`, the overlays. Decides nothing |
 
 One folder per layer, in this order plus `mock` between model and store for the seed grid,
 and `scripts/check-layers.ts` fails the build on an import that points up.
@@ -108,7 +108,9 @@ function react(grid, session, input): Command[]
 ```
 
 12. `react` is pure, has no React, no DOM and no canvas, and is tested from Bun like the
-    model.
+    model. It returns effects: document commands, session commands, and undo or redo. The
+    view runs them in order, and follows a run that prepended tracks by shifting the
+    camera and telling the session to shift its indices.
 13. The session holds nothing that can be computed. `corners`, `about` and the resize
     lines were stored in the current code and each caused a bug.
 
@@ -131,4 +133,6 @@ and pointer ownership as a stated precedence. Checked against both repositories 
 - Whether the client keeps a copy of the model for previewing proposals before the daemon
   confirms them. `propose` is pure, so it can; whether it should is a latency question to
   answer when the daemon exists.
-- The exact shapes of `Target`, `Input` and `Session` above.
+- The exact shapes above are now the ones in `session/`; `Target` has no `item` or
+  `overlay` kind, since the cell's tile is derived and overlays claim the pointer by DOM
+  membership. Selection is not yet restored on undo.

@@ -89,7 +89,8 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 30. Shift-click on an occupant opens it (105). A run does not open.
 31. Right-click on an item opens the tile menu at the pointer, whichever of its cells was
     hit. Right-click on an empty cell opens the add menu. The browser's own context menu
-    never appears over the canvas.
+    never appears over the canvas. Only the primary button presses on the grid: a
+    right-button press selects nothing and starts nothing.
 32. The tile menu offers rename and delete for an occupant, edit and delete for a run.
 
 ## Menus
@@ -316,7 +317,6 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 Noted rather than resolved.
 
-- The editor reports its shape to the grid during its own render.
 - A cell under a run is not lightness-marked (95).
 - A cap on a run can be set by dragging and cannot be lifted.
 - A run stops when it runs out of room while typing. Only a resize pushes; typing does not.
