@@ -1,4 +1,4 @@
-import { type Grid, type Link, nextId, type Scope, type Tile } from "@lattice/model";
+import { type Grid, type Link, nextId, type Scope, spanFor, type Tile } from "@lattice/model";
 import type { OccupantId } from "../occupants/index.ts";
 import type { Facts } from "../runtime/facts.ts";
 
@@ -43,6 +43,8 @@ export function seed(): { grid: Grid; facts: Facts } {
       columnId: col(c),
       rowId: row(r),
       text,
+      span: spanFor("title", text),
+      rows: 1,
     })),
     ...cells.map(([c, r]) => ({
       id: nextId("t"),

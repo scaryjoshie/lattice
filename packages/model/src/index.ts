@@ -5,5 +5,5 @@
 export * from "./region.ts";
 export * from "./grid.ts";
 export * from "./command.ts";
-export * from "./layout.ts";
+export * from "./extent.ts";
 export * from "./text.ts";

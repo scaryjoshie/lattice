@@ -1,4 +1,4 @@
-import { footprint, indexOfTrack, isRun, METRICS, withText } from "@lattice/model";
+import { extentFor, indexOfTrack, isRun, METRICS } from "@lattice/model";
 import { useLayoutEffect, useState } from "react";
 import { fontOf } from "../paint/measure.ts";
 import { CELL, worldX } from "../scene/geometry.ts";
@@ -35,9 +35,9 @@ export function Editor({
   const m = METRICS[style];
 
   // Where the run reaches with the draft in it: what the words need, bounded by what is
-  // free, capped where the writer fixed an axis. The same layout the scene uses, so the
-  // input and the canvas cannot disagree about the run's cells.
-  const { span, rows } = footprint(withText(grid, id, draft), tile);
+  // free. The same answer the scene draws and the commit stores, so the input, the
+  // canvas and the model cannot disagree about the run's cells.
+  const { span, rows } = extentFor(grid, tile, draft);
   // The canvas draws the run's surface and ruling even while typing; the input contributes
   // only a caret and glyphs, so it says what it currently holds and the scene does the rest.
   useLayoutEffect(() => onDraft(draft), [onDraft, draft]);

@@ -4,6 +4,7 @@ import {
   ensureTracks,
   type Grid,
   holder,
+  isRun,
   type Move,
   nextId,
   proposeMove,
@@ -11,6 +12,7 @@ import {
   removeTile,
   type TextStyle,
 } from "./grid.ts";
+import { extentFor } from "./extent.ts";
 import type { Region } from "./region.ts";
 
 /**
@@ -132,13 +134,16 @@ export function apply(grid: Grid, command: Command): Applied {
     case "remove":
       return { ok: true, grid: removeTile(grid, command.id), dc: 0, dr: 0 };
     case "setText":
+      // The run's cells are fixed here, from what the words need and what is free.
       return {
         ok: true,
         grid: {
           ...grid,
-          tiles: grid.tiles.map((t) =>
-            t.id === command.id ? { ...t, text: command.text } : t,
-          ),
+          tiles: grid.tiles.map((t) => {
+            if (t.id !== command.id || !isRun(t)) return t;
+            const { span, rows } = extentFor(grid, t, command.text);
+            return { ...t, text: command.text, span, rows };
+          }),
         },
         dc: 0,
         dr: 0,

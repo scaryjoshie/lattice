@@ -12,7 +12,6 @@
  * a drag landed on). They are never stored.
  */
 
-import { layout } from "./layout.ts";
 import { cells, contains, covers, overlaps, type Region } from "./region.ts";
 
 export interface Track {
@@ -50,15 +49,13 @@ export interface Run extends Placed {
   readonly style: TextStyle;
   readonly text: string;
   /**
-   * Its extent is not stored: see layout.ts. What its words need, bounded by what is
-   * free, unless capped.
+   * Cells owned, starting at (columnId, rowId). Set when the run is committed, from what
+   * its words needed and what was free (extent.ts), and changed only by dragging an
+   * edge. A run never grows or shrinks because something moved beside it: its cells are
+   * held like a host's.
    */
-  /**
-   * A size the writer fixed by dragging an edge. A capped width is a box the words wrap
-   * inside; a capped height clips them. Uncapped, the run is as big as what it says
-   * needs, bounded by what is free.
-   */
-  readonly cap?: { readonly span?: number; readonly rows?: number };
+  readonly span: number;
+  readonly rows: number;
 }
 
 export type Tile = Host | Run;
@@ -170,7 +167,7 @@ export function addTile(
   if (holder(grid, indexOfTrack(grid.columns, columnId), indexOfTrack(grid.rows, rowId))) return grid;
   const tile: Tile =
     what.family === "text"
-      ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "" }
+      ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "", span: 1, rows: 1 }
       : { id, family: "host", columnId, rowId, surface: what.surface };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
@@ -279,11 +276,14 @@ export function close(grid: Grid, r: Region): Region {
 
 /* Moving ------------------------------------------------------------------ */
 
-/** The cells a tile owns. A host's is its cell; a run's is laid out from its words. */
+/** The cells a tile owns. A host's is its cell; a run's is its stored size. */
 export function footprint(grid: Grid, tile: Tile): Region {
-  const ci = indexOfTrack(grid.columns, tile.columnId);
-  const ri = indexOfTrack(grid.rows, tile.rowId);
-  return (isRun(tile) && layout(grid).get(tile.id)) || { ci, ri, span: 1, rows: 1 };
+  return {
+    ci: indexOfTrack(grid.columns, tile.columnId),
+    ri: indexOfTrack(grid.rows, tile.rowId),
+    span: isRun(tile) ? tile.span : 1,
+    rows: isRun(tile) ? tile.rows : 1,
+  };
 }
 
 /**
@@ -355,9 +355,9 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
       const rowId = m && track(g.rows, m.ri);
       if (!m || !columnId || !rowId) return tile;
       const moved = { ...tile, columnId, rowId };
-      // A size on a run's move is the writer fixing that axis: a cap, kept until lifted.
+      // A size on a run's move is a resize: the run's new cells.
       if (!isRun(tile) || (m.span === undefined && m.rows === undefined)) return moved;
-      return { ...(moved as Run), cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows } };
+      return { ...(moved as Run), span: m.span ?? tile.span, rows: m.rows ?? tile.rows };
     }),
     scopes: g.scopes.map((scope) => {
       const m = at.get(scope.id);
@@ -468,7 +468,7 @@ export interface Resize {
  * Move one edge of a run by `n` cells. A run has no interior lines to insert at, only
  * edges. Outward grows it, pushing whatever is beyond, and refuses if that would take it
  * out of its scope or into one; inward shrinks it and the words reflow. Either way the
- * axis dragged becomes a cap.
+ * run's size is what the drag left it.
  */
 function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): Resize {
   const b = footprint(grid, tile);

@@ -148,8 +148,7 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     size, carrying everything inside: items, and whole scopes with their contents.
 47. It is legal when both regions are well-formed (5). The destination is judged with the
     carried things lifted out, so a thing may slide over its own old cells. Lifted means
-    ignored, not removed: every other run is judged at the extent it has now, never at
-    the extent it would grow to once the carried thing is gone (81).
+    ignored, not removed, so nothing is rebuilt to judge it.
 48. A region overlapping its own destination is a slide, not an exchange, and is allowed
     only into space nothing else is in.
 49. Swapping two items of the same size, moving into free space, a two-cell run trading
@@ -216,19 +215,18 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
 72. A run resizes by its edges through the same operation. Inward shrinks it and the
     words reflow; outward grows it and pushes, and is refused if the run would leave or
-    enter a scope. The axis dragged becomes a cap the editor keeps; a capped width
-    re-derives the height whenever the width changes.
+    enter a scope. The size the drag leaves is the run's size.
 73. Escape during a resize cancels it.
 
 ## Text
 
 74. A title and a note differ only in type size. One drawing path, one editor, and nothing
     else branches on which a run is.
-75. A run's width is what its words need, bounded by what is free beside it, unless a cap
-    fixes it. Its height is its lines times its leading rounded up to whole cells, bounded
-    by what is free below, unless a cap fixes it. Text is measured by arithmetic: the face
-    is monospace and every glyph advances 0.6 em, so a line's width is its length times
-    its size times 0.6, and no canvas is asked.
+75. While a run is typed its width is what its words need, bounded by what is free beside
+    it, and its height is its lines times its leading rounded up to whole cells, bounded
+    by what is free below. Text is measured by arithmetic: the face is monospace and every
+    glyph advances 0.6 em, so a line's width is its length times its size times 0.6, and
+    no canvas is asked.
 76. A run grows cell by cell as it is typed. It stops at the first cell that already holds
     something, and at every scope boundary in both directions: text may not leave a
     scope, and may not enter one.
@@ -242,13 +240,11 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     typed the canvas still owns its surface and its ruling; the input contributes only a
     caret and glyphs, and reports its draft, which the scene lays out like any run.
 80. Text takes the ink of whatever scope it sits in.
-81. A run's span is not stored at all: what the text needs, bounded by what is free, so
-    anything that stops blocking a run lets it breathe with no rule per case. Move a host
-    away and the run grows; undo and it is cut again. Two runs in one row are bounded by
-    the later one's origin and the earlier one's extent, in tile order. A cap is the only
-    stored size. A run yields: anything may be placed or moved into the room a run would
-    like to grow into, and the run is cut; only the cells it shows now are held (4). Text
-    never pushes.
+81. A run's size is fixed when it is committed: what its words needed and what was free
+    at that moment, and nothing else changes it but dragging an edge (72). A run does not
+    grow because something beside it left, and does not shrink because something arrived;
+    its cells are held like a host's (4), and a move onto them is refused like a move onto
+    a host. Editing a run re-fits it to its new words on commit. Text never pushes.
 82. **[proposed]** `*italic*` and `**bold**` mark emphasis inline. Emphasis changes width,
     so it changes the span a run needs.
 
@@ -339,7 +335,6 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 Noted rather than resolved.
 
 - A cell under a run is not lightness-marked (95).
-- A cap on a run can be set by dragging and cannot be lifted.
 - A run stops when it runs out of room while typing. Only a resize pushes; typing does not.
 - A scope's name is in the model and cannot be edited from the grid.
 - Deleting an item removes it from the grid and nothing else, which cannot be what deleting

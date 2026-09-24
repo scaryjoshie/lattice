@@ -40,7 +40,7 @@ function grid(
     tiles: tiles.map(([id, ci, ri, span, rows_]): Tile =>
       span === 1 && rows_ === 1
         ? { id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
-        : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, cap: { span, rows: rows_ } },
+        : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, span, rows: rows_ },
     ),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
       id,
@@ -63,7 +63,7 @@ function seed(): { grid: Grid } {
   const rows = Array.from({ length: 11 }, (_, i) => ({ id: `sr${i}` }));
   const sc = (id: string, name: string, c0: number, c1: number, r0: number, r1: number, hue: number) =>
     ({ id, name, hue, columnStart: `sc${c0}`, columnEnd: `sc${c1}`, rowStart: `sr${r0}`, rowEnd: `sr${r1}` });
-  const title = (id: string, ci: number, ri: number, text: string): Tile => ({ id, family: "text", style: "title", text, columnId: `sc${ci}`, rowId: `sr${ri}` });
+  const title = (id: string, ci: number, ri: number, text: string): Tile => ({ id, family: "text", style: "title", text, columnId: `sc${ci}`, rowId: `sr${ri}`, span: 2, rows: 1 });
   const host = (id: string, ci: number, ri: number): Tile => ({ id, family: "host", surface: "terminal", columnId: `sc${ci}`, rowId: `sr${ri}` });
   return {
     grid: {
@@ -328,7 +328,7 @@ describe("proposeResize", () => {
     }
   });
 
-  test("a run resizes by its edges only, and the axis dragged becomes a cap", () => {
+  test("a run resizes by its edges only, and the drag sets its size", () => {
     const g1 = grid([t("run", 2, 1, 2, 1), t("a", 4, 1)]);
     const out = proposeResize(g1, "run", "col", 4, 1);
     expect(out.ok).toBe(true);
@@ -336,7 +336,7 @@ describe("proposeResize", () => {
     const inward = proposeResize(g1, "run", "col", 4, -1);
     expect(inward.ok).toBe(true);
     const shrunk = applied(g1, inward.moves).grid.tiles.find((x) => x.id === "run");
-    expect(shrunk && isRun(shrunk) ? shrunk.cap : null).toEqual({ span: 1, rows: 1 });
+    expect(shrunk && isRun(shrunk) ? shrunk.span : null).toBe(1);
     expect(proposeResize(g1, "run", "col", 3, 1).ok).toBe(false);
   });
 

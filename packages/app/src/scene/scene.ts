@@ -1,4 +1,4 @@
-import { bounds, cells as cellsOf, close, contains, footprint, type Grid, indexOfTrack, isRun, type Region, scopeAt, wellFormed, withText } from "@lattice/model";
+import { bounds, cells as cellsOf, close, contains, extentFor, footprint, type Grid, indexOfTrack, isRun, type Region, scopeAt, wellFormed } from "@lattice/model";
 import { idleOf, OCCUPANTS, type Stroke } from "../occupants/index.ts";
 import { type Facts, hostedBy } from "../runtime/facts.ts";
 import { invalid, reach } from "../session/react.ts";
@@ -112,11 +112,9 @@ export interface View {
   cursor: { x: number; y: number } | null;
 }
 
-export function sceneOf(document: Grid, facts: Facts, session: Session, view: View): Scene {
+export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View): Scene {
   const { selection, overlay, gesture, pointing, shift } = session;
   const editing = overlay?.kind === "edit" ? overlay : null;
-  // A run being typed is laid out from its draft, so its cells open up as the words do.
-  const grid = editing ? withText(document, editing.id, editing.draft) : document;
   const naming = overlay?.kind === "name" ? overlay.id : null;
   const acting = overlay?.kind === "tile" ? overlay.id : null;
 
@@ -157,7 +155,9 @@ export function sceneOf(document: Grid, facts: Facts, session: Session, view: Vi
   for (const tile of grid.tiles) {
     const [ci, ri] = placed(tile);
     const edited = editing?.id === tile.id;
-    const extent: Region = { ...footprint(grid, tile), ci, ri };
+    // A run being typed reaches as far as its draft does, so its cells open up as the
+    // words do; anything else owns what it stores.
+    const extent: Region = { ...(edited && isRun(tile) ? extentFor(grid, tile, editing!.draft) : footprint(grid, tile)), ci, ri };
     const hue = hueAt(tile);
     tiles.set(tile.id, { ...extent, hue });
     if (!edited) {
