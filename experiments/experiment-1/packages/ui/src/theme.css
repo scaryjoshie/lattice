@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+/* Tokens: a near-greyscale base and one accent. Light is the default. */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --text: #171717;
+  --muted: #737373;
+  --accent: #3b6cf6;
+  --accent-soft: rgba(59, 108, 246, 0.12);
+  --ok: #16a34a;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --dots: rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface-2: #1a1a1a;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --text: #ededed;
+    --muted: #a1a1a1;
+    --accent: #6b8ffb;
+    --accent-soft: rgba(107, 143, 251, 0.16);
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --dots: rgba(255, 255, 255, 0.12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text: #ededed;
+  --muted: #a1a1a1;
+  --accent: #6b8ffb;
+  --accent-soft: rgba(107, 143, 251, 0.16);
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --dots: rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-xl: 12px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    font: 13px / 1.45 var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  * {
+    border-color: var(--border);
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Motion for popovers and dialogs: 150ms ease-out, fade and a touch of scale. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.pop[data-state="open"] {
+  animation: pop-in 150ms ease-out;
+}
+.fade[data-state="open"] {
+  animation: fade-in 150ms ease-out;
+}
+
+/* React Flow */
+.react-flow {
+  background: var(--bg);
+}
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__node {
+  font-family: var(--font-sans);
+}
+.react-flow__node.dimmed {
+  opacity: 0.35;
+}
+.react-flow__node,
+.react-flow__edge {
+  transition: opacity 300ms ease;
+}
+.react-flow__node-repository.selectable:hover,
+.react-flow__node-pane.selectable:hover,
+.react-flow__node-agent.selectable:hover {
+  cursor: pointer;
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+.ask-target > div {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+}
+.ask-target.react-flow__node-agent .agent-circle {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Nodes */
+.repo {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+.pane {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.pane:hover {
+  border-color: var(--border-strong);
+}
+.pane.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.agent-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: border-color 150ms ease;
+}
+.react-flow__node-agent:hover .agent-circle {
+  border-color: var(--border-strong);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.danger {
+  background: var(--danger);
+}
+.dot.muted {
+  background: var(--muted);
+}
+.dot.hollow {
+  border: 1.5px solid var(--muted);
+  background: var(--surface);
+}
+.dot.pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.agent-circle .dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  border: 1.5px solid var(--surface);
+  box-sizing: content-box;
+}
+
+/* Terminal */
+.term,
+.term .xterm {
+  height: 100%;
+}

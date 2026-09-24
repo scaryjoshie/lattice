@@ -1,0 +1,21 @@
+{
+  "name": "pane",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "check": "bunx tsc -p . && bunx biome check . && bun run scripts/check-layers.ts && bun test",
+    "fmt": "bunx biome check --write .",
+    "dev": "bun run scripts/dev.ts",
+    "server": "bun run packages/server/src/main.ts",
+    "ui": "bunx --cwd packages/ui vite",
+    "build": "bunx --cwd packages/ui vite build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "bun-types": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}
