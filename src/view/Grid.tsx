@@ -4,10 +4,7 @@ import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
 import {
   indexOfTrack,
   type Move,
-  proposeMove,
-  applied,
   bounds,
-  proposeResize,
   type Grid,
   type OccupantKind,
   close,
@@ -32,6 +29,7 @@ import { Opened, type Rect } from "./Opened.tsx";
 import { claimed } from "./pointer.ts";
 import { Editor } from "./Editor.tsx";
 import { Namer } from "./Namer.tsx";
+import type { Command } from "../model/command.ts";
 import { sameTarget, type Target } from "../session/target.ts";
 import { useGrid } from "../store/store.ts";
 import { onTheme } from "../paint/theme.ts";
@@ -96,9 +94,8 @@ export function Grid() {
   const pointer = useRef<{ x: number; y: number } | null>(null);
 
   const grid = useGrid((s) => s.grid);
-  const addAt = useGrid((s) => s.addAt);
-  const applyMoves = useGrid((s) => s.apply);
-  const removeTile = useGrid((s) => s.remove);
+  const propose = useGrid((s) => s.propose);
+  const run = useGrid((s) => s.run);
 
   /** Open at the pointer, holding the cell it was asked about. */
   const [menu, setMenu] = useState<{ x: number; y: number; ci: number; ri: number } | null>(null);
@@ -145,12 +142,20 @@ export function Grid() {
     id: string | null;
     from: Region;
     grab: [number, number];
-    /** The proposal as last previewed. The release applies this and proposes nothing. */
-    proposal: { to: Region; ok: boolean; moves: readonly Move[] } | null;
+    /** The move as last previewed. The release runs this same command. */
+    command: Extract<Command, { kind: "move" }> | null;
   } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
   /** A gridline of the selected scope being dragged: which line, and where it started. */
-  const stretching = useRef<{ owner: string; c: number | null; r: number | null; wx: number; wy: number } | null>(null);
+  const stretching = useRef<{
+    owner: string;
+    c: number | null;
+    r: number | null;
+    wx: number;
+    wy: number;
+    /** The resize as last previewed. The release runs this same command. */
+    command: Extract<Command, { kind: "resize" }> | null;
+  } | null>(null);
   /** A rectangle being swept out with shift held: where it started, as a region. */
   const sweeping = useRef<Region | null>(null);
   const [sweep, setSweep] = useState<Region | null>(null);
@@ -713,32 +718,18 @@ export function Grid() {
       const wy = (event.clientY - box.top - y) / k;
       const nc = s.c === null ? 0 : Math.round((wx - s.wx) / CELL);
       const nr = s.r === null ? 0 : Math.round((wy - s.wy) / CELL);
-      // A corner is two resizes, the second proposed on the grid the first would leave.
-      const g0 = gridRef.current;
-      const col = s.c === null ? null : proposeResize(g0, s.owner, "col", s.c, nc);
-      // The intermediate grid may have gained tracks at the front, shifting every index;
-      // the row resize is asked in its terms and answered back in the model's.
-      const mid = col ? applied(g0, col.moves) : { grid: g0, dc: 0, dr: 0 };
-      const back = (r: Region): Region => ({ ...r, ci: r.ci - mid.dc, ri: r.ri - mid.dr });
-      const rowRaw = s.r === null ? null : proposeResize(mid.grid, s.owner, "row", s.r + mid.dr, nr);
-      const row = rowRaw
-        ? {
-            ...rowRaw,
-            after: back(rowRaw.after),
-            band: rowRaw.band ? back(rowRaw.band) : null,
-            moves: rowRaw.moves.map((m) => ({ ...m, ci: m.ci - mid.dc, ri: m.ri - mid.dr })),
-          }
-        : null;
-      const moves = [...(col?.moves ?? []), ...(row?.moves ?? [])];
-      const ok = (col?.ok ?? true) && (row?.ok ?? true);
-      const after = row?.after ?? col?.after ?? null;
-      // A column band spans the rows the scope will have, so a corner's new cells are
-      // all shown, including the block where the two bands meet.
-      const bands: Region[] = [];
-      if (col?.band && after) bands.push({ ...col.band, ri: after.ri, rows: after.rows });
-      if (row?.band) bands.push(row.band);
+      const command: Extract<Command, { kind: "resize" }> = {
+        kind: "resize",
+        owner: s.owner,
+        ...(s.c === null ? {} : { col: { line: s.c, n: nc } }),
+        ...(s.r === null ? {} : { row: { line: s.r, n: nr } }),
+      };
+      const verdict = propose(command);
+      s.command = command;
       pointing.current = null;
-      if (after) setGrow({ after, ok, moves, bands, c: s.c === null ? null : s.c + nc, r: s.r === null ? null : s.r + nr });
+      if (verdict.after) {
+        setGrow({ after: verdict.after, ok: verdict.ok, moves: verdict.moves, bands: verdict.bands, c: s.c === null ? null : s.c + nc, r: s.r === null ? null : s.r + nr });
+      }
       schedule(camera.current);
       return;
     }
@@ -757,10 +748,11 @@ export function Grid() {
         const carry = dragging.current;
         const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
         // From the model, never from the scene: the scene is built from this answer.
-        const verdict = proposeMove(gridRef.current, carry.from, to);
-        carry.proposal = { to, ok: verdict.ok, moves: verdict.moves };
+        const command: Extract<Command, { kind: "move" }> = { kind: "move", from: carry.from, to };
+        const verdict = propose(command);
+        carry.command = command;
         pointing.current = null;
-        setHeld({ id: carry.id, from: carry.from, to, ...verdict });
+        setHeld({ id: carry.id, from: carry.from, to, ok: verdict.ok, swaps: verdict.swaps, moves: verdict.moves });
       }
       return;
     }
@@ -796,7 +788,7 @@ export function Grid() {
       // Taking hold of a gridline of the selected scope or run. The line's world position
       // is where the drag is measured from.
       const { owner, c, r } = target;
-      stretching.current = { owner, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r) };
+      stretching.current = { owner, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r), command: null };
       hold();
       return;
     }
@@ -822,7 +814,7 @@ export function Grid() {
     if (!inside) return;
     const from = selected;
     const id = selection && "tile" in selection ? selection.tile : null;
-    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri], proposal: null };
+    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri], command: null };
     hold();
   };
 
@@ -842,15 +834,14 @@ export function Grid() {
       }
     }
     if (stretching.current) {
+      const s = stretching.current;
       stretching.current = null;
-      const g = grow;
       setGrow(null);
-      if (g?.ok && g.moves.length > 0) {
-        const { dc, dr } = applyMoves(g.moves);
-        if (dc || dr) {
-          shiftView(-dc * CELL, -dr * CELL);
-          pointing.current = null;
-        }
+      // The command previewed is the command run; the store judges it again itself.
+      const done = s.command ? run(s.command) : null;
+      if (done?.ok && (done.dc || done.dr)) {
+        shiftView(-done.dc * CELL, -done.dr * CELL);
+        pointing.current = null;
       }
       return;
     }
@@ -859,19 +850,19 @@ export function Grid() {
       dragging.current = null;
       setHeld(null);
       // A press inside the selection that never travelled is a click on it, not a move.
-      // What lands is what was previewed: the verdict is the one the drag already holds.
-      if (moved && carry.proposal) {
-        const { to, ok, moves } = carry.proposal;
-        if (ok) {
-          const { dc, dr } = applyMoves(moves);
+      // The command previewed is the command run; the store judges it again itself.
+      if (moved && carry.command) {
+        const { to } = carry.command;
+        const done = run(carry.command);
+        if (done.ok) {
           // Tracks prepended on the way shift every index; the view shifts to match.
-          if (dc || dr) {
-            shiftView(-dc * CELL, -dr * CELL);
+          if (done.dc || done.dr) {
+            shiftView(-done.dc * CELL, -done.dr * CELL);
             pointing.current = null;
           }
           // A selected tile follows itself; a selected region has to be told where it went.
           if (carry.id === null && !(selection && "scope" in selection)) {
-            setSelection(selectionOf(gridRef.current, { ...to, ci: to.ci + dc, ri: to.ri + dr }));
+            setSelection(selectionOf(useGrid.getState().grid, { ...to, ci: to.ci + done.dc, ri: to.ri + done.dr }));
           }
         }
         return;
@@ -964,13 +955,13 @@ export function Grid() {
 
   const pick = (kind: TileKind, style?: TextStyle) => {
     if (!menu) return;
-    const made = addAt(menu.ci, menu.ri, kind, style);
+    const made = run({ kind: "place", ci: menu.ci, ri: menu.ri, tile: kind, style });
     setMenu(null);
-    if (made && (made.dc || made.dr)) {
+    if (made.ok && (made.dc || made.dr)) {
       shiftView(-made.dc * CELL, -made.dr * CELL);
       pointing.current = null;
     }
-    if (made && kind === "text") {
+    if (made.ok && made.id && kind === "text") {
       pointing.current = null;
       // The run is what is selected now, and its ring grows with it as it is typed.
       setSelection({ tile: made.id });
@@ -1063,7 +1054,7 @@ export function Grid() {
             setActing(null);
             resume();
             if (action === "delete") {
-              removeTile(id);
+              run({ kind: "remove", id });
               setSelection(null);
             }
             else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {

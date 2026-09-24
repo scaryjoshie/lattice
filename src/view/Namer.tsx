@@ -11,7 +11,7 @@ import { useGrid } from "../store/store.ts";
  */
 export function Namer({ id, onDone }: { id: string; onDone(): void }) {
   const grid = useGrid((s) => s.grid);
-  const setName = useGrid((s) => s.setName);
+  const run = useGrid((s) => s.run);
   const tile = grid.tiles.find((x) => x.id === id);
   const [draft, setDraft] = useState(tile?.name ?? "");
   if (!tile) return null;
@@ -19,7 +19,7 @@ export function Namer({ id, onDone }: { id: string; onDone(): void }) {
   const ri = indexOfTrack(grid.rows, tile.rowId);
   const commit = () => {
     onDone();
-    setName(id, draft);
+    run({ kind: "setName", id, name: draft });
   };
   return (
     <input

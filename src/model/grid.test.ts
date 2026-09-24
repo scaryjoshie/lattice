@@ -32,26 +32,26 @@ function grid(
   scopes: readonly (readonly [string, number, number, number, number])[] = [],
   size = { columns: 12, rows: 8 },
 ): Grid {
-  const columns = Array.from({ length: size.columns }, (_, i) => ({ id: `c${i}` }));
-  const rows = Array.from({ length: size.rows }, (_, i) => ({ id: `r${i}` }));
+  const columns = Array.from({ length: size.columns }, (_, i) => ({ id: `x${i}` }));
+  const rows = Array.from({ length: size.rows }, (_, i) => ({ id: `y${i}` }));
   return {
     columns,
     rows,
     tiles: tiles.map(([id, ci, ri, span, rows_]) => ({
       id,
       kind: span === 1 && rows_ === 1 ? "claude" : "text",
-      columnId: `c${ci}`,
-      rowId: `r${ri}`,
+      columnId: `x${ci}`,
+      rowId: `y${ri}`,
       ...(span === 1 && rows_ === 1 ? {} : { style: "title" as const, text: id, span, rows: rows_ }),
     })),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
       id,
       name: id,
       hue: n,
-      columnStart: `c${ci}`,
-      columnEnd: `c${ci + span - 1}`,
-      rowStart: `r${ri}`,
-      rowEnd: `r${ri + rows_ - 1}`,
+      columnStart: `x${ci}`,
+      columnEnd: `x${ci + span - 1}`,
+      rowStart: `y${ri}`,
+      rowEnd: `y${ri + rows_ - 1}`,
     })),
     links: [],
   };
@@ -105,7 +105,7 @@ describe("tracks", () => {
     const next = insertColumnsAt(g, 1, ["x"]);
     expect(next.tiles).toBe(g.tiles);
     expect(at(next, "a").ci).toBe(4);
-    expect(next.tiles[0]?.columnId).toBe("c3");
+    expect(next.tiles[0]?.columnId).toBe("x3");
   });
 
   test("tracks are made on demand, before and after", () => {

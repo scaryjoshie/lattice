@@ -23,8 +23,7 @@ export function Editor({
   onShape(span: number, rows: number): void;
 }) {
   const grid = useGrid((s) => s.grid);
-  const setText = useGrid((s) => s.setText);
-  const removeTile = useGrid((s) => s.remove);
+  const run = useGrid((s) => s.run);
   const tile = grid.tiles.find((x) => x.id === id);
   const [draft, setDraft] = useState(tile?.text ?? "");
 
@@ -50,8 +49,7 @@ export function Editor({
   onShape(span, rows);
   const commit = () => {
     onDone();
-    if (draft.trim() === "") removeTile(id);
-    else setText(id, draft, span, rows);
+    run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft, span, rows });
   };
 
   return (
@@ -84,7 +82,7 @@ export function Editor({
         }
         if (e.key === "Escape") {
           onDone();
-          if ((tile.text ?? "") === "") removeTile(id);
+          if ((tile.text ?? "") === "") run({ kind: "remove", id });
         }
       }}
     />
