@@ -300,6 +300,18 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 109. The key panel fades and settles a few pixels down while a tile is open, and comes back
      the moment the close begins, not when it ends.
 
+## History
+
+110. Every change to the grid is a command, judged by the model and applied whole or not
+     at all: move, resize, place, remove, set text, set name. The store keeps the grid as
+     it was before each one.
+111. Cmd-Z restores the grid as it was before the last command. Cmd-Shift-Z restores what
+     the last undo replaced. A new command drops what could have been redone.
+112. Undo and redo clear the selection, since it may name something the restored grid
+     does not have. The camera is not undone. Neither key does anything while typing or
+     while a tile is open.
+113. The key panel lists undo when nothing is selected.
+
 ## Gaps and contradictions
 
 Noted rather than resolved.
