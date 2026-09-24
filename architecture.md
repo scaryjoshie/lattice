@@ -116,6 +116,32 @@ function react(grid, session, input): Command[]
 13. The session holds nothing that can be computed. `corners`, `about` and the resize
     lines were stored in the current code and each caused a bug.
 
+## Capabilities
+
+Recorded 24 September for when a third kind of grid object arrives; not built.
+
+14. Every grid object owns a region, and that is baked into what an object is rather than
+    a capability it may have: `wellFormed`, `close`, `proposeMove`, `owners` and `units`
+    are written over "anything that owns a region", which is why a move carries a scope
+    and its contents with no special case and why selection validity and move legality
+    are one rule. Moving needs nothing beyond region knowledge.
+15. What differs between objects is a short list, each today a switch over a closed set of
+    two or three: how a thing resizes (a scope by every line, inserting; a run by its
+    edges, capping), whether it can be named (hosts), whether it can be opened (hosts),
+    whether it focuses and links (hosts), whether it has a handle (scopes), whether it has
+    a text body (runs). The switches are short and correct; the cost is that "a run has
+    no name and cannot open" is re-derived in the step function, the scene, the view and
+    the namer, and nothing makes them agree.
+16. When a third thing wants any of those, that capability becomes one module in the
+    model: a predicate or a record per capability, `resizable(grid, id)`, `nameable(tile)`,
+    `openable(tile)`, asked by the step function, the scene and the view instead of
+    switching on family. TypeScript's form of a trait: an interface plus one place per
+    capability, so a new object kind adds an implementation rather than a branch in six
+    files. Resizing is the nearest candidate. Doing it with two cases would be a rule with
+    a name and no third case, which is the abstraction this project keeps refusing.
+17. The descriptor table is this pattern already applied to occupants, and `model.md`'s
+    "capabilities as data, not types as conditions" is the same rule from the other side.
+
 ## Where this is standard
 
 Unidirectional data flow (Elm, Redux) for input → pure step → view. The command pattern
