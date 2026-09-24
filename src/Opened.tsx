@@ -62,12 +62,12 @@ export function Opened({
   };
 
   // Cmd is the application layer; every other key belongs to what is inside, and Escape
-  // in particular belongs to the agent. Cmd-period leaves: the Mac's own cancel chord. It
-  // was Cmd-Escape, which works in Chromium but never reaches the page in Aside, the
-  // browser this is being looked at in — the browser takes it first.
+  // in particular belongs to the agent. Cmd-Escape leaves. Cmd-period, the Mac's own
+  // cancel chord, leaves too: a browser can take Cmd-Escape before the page sees it, which
+  // Aside did mid-session. In the Tauri shell the webview is ours and this goes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "." && e.metaKey) {
+      if (e.metaKey && (e.key === "Escape" || e.key === ".")) {
         e.preventDefault();
         close();
       }
