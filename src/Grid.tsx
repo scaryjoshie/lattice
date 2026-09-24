@@ -267,6 +267,8 @@ export function Grid() {
     id: string | null;
     from: Region;
     grab: [number, number];
+    /** The proposal as last previewed. The release applies this and proposes nothing. */
+    proposal: { to: Region; ok: boolean; moves: readonly Move[] } | null;
   } | null>(null);
   /** State, not a ref: the scene is derived from it, and it changes a cell at a time. */
   /** A gridline of the selected scope being dragged: which line, and where it started. */
@@ -868,6 +870,7 @@ export function Grid() {
         const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
         // From the model, never from the scene: the scene is built from this answer.
         const verdict = proposeMove(gridRef.current, carry.from, to);
+        carry.proposal = { to, ok: verdict.ok, moves: verdict.moves };
         hover.current = null;
         setHeld({ id: carry.id, from: carry.from, to, ...verdict });
       }
@@ -935,7 +938,7 @@ export function Grid() {
     if (!inside) return;
     const from = selected;
     const id = selection && "tile" in selection ? selection.tile : null;
-    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri] };
+    dragging.current = { id, from, grab: [at[0] - from.ci, at[1] - from.ri], proposal: null };
     (event.target as Element).setPointerCapture?.(event.pointerId);
   };
 
@@ -968,16 +971,15 @@ export function Grid() {
       return;
     }
     if (dragging.current) {
-      const at = cellUnder(event);
       const carry = dragging.current;
       dragging.current = null;
       setHeld(null);
       // A press inside the selection that never travelled is a click on it, not a move.
-      if (at && moved) {
-        const to: Region = { ...carry.from, ci: at[0] - carry.grab[0], ri: at[1] - carry.grab[1] };
-        const verdict = proposeMove(gridRef.current, carry.from, to);
-        if (verdict.ok) {
-          const { dc, dr } = applyMoves(verdict.moves);
+      // What lands is what was previewed: the verdict is the one the drag already holds.
+      if (moved && carry.proposal) {
+        const { to, ok, moves } = carry.proposal;
+        if (ok) {
+          const { dc, dr } = applyMoves(moves);
           // Tracks prepended on the way shift every index; the view shifts to match.
           if (dc || dr) {
             shiftView(-dc * CELL, -dr * CELL);
