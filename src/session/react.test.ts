@@ -169,5 +169,6 @@ describe("overlays", () => {
     const open = drive(g, click(3, 2, true)).session;
     expect(react(g, open, { type: "key", key: "Escape", down: true })).toEqual([]);
     expect(react(g, open, { type: "key", key: "Undo", down: true })).toEqual([]);
+    expect(react(g, initial, { type: "key", key: "Undo", down: true })).toEqual([{ kind: "undo" }]);
   });
 });

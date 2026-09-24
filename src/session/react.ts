@@ -289,10 +289,8 @@ function key(session: Session, input: Extract<Input, { type: "key" }>): Effect[]
   if (!input.down) return [];
   // An opened tile owns every key while it is up, the way an overlay owns the pointer.
   if (session.opened) return [];
-  if (input.key === "Undo" || input.key === "Redo") {
-    // A selection may name something the restored grid does not have.
-    return [{ kind: input.key === "Undo" ? "undo" : "redo" }, select(null)];
-  }
+  // The store hands back the selection each change was made with; the runner applies it.
+  if (input.key === "Undo" || input.key === "Redo") return [{ kind: input.key === "Undo" ? "undo" : "redo" }];
   // Escape cancels the gesture in progress, else clears the selection.
   if (session.gesture) return [gesture(null)];
   return [select(null)];

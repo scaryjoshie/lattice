@@ -5,6 +5,7 @@ import { onTheme } from "../paint/theme.ts";
 import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
 import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
+import type { Selection } from "../session/session.ts";
 import type { Target } from "../session/target.ts";
 import { useRuntime } from "../store/runtime.ts";
 import { useSession } from "../store/session.ts";
@@ -243,13 +244,16 @@ export function Grid() {
           useRuntime.getState().observe(effect);
           break;
         case "undo":
-          useGrid.getState().undo();
+        case "redo": {
+          // Each history entry carries the selection it was made with, as a mark the
+          // document store never reads. Undo restores it along with the grid.
+          const selection = useSession.getState().session.selection;
+          const back = useGrid.getState()[effect.kind](selection);
+          if (back.ok) useSession.getState().apply({ kind: "select", selection: (back.mark as Selection | null | undefined) ?? null });
           break;
-        case "redo":
-          useGrid.getState().redo();
-          break;
+        }
         default: {
-          const done = useGrid.getState().run(effect);
+          const done = useGrid.getState().run(effect, useSession.getState().session.selection);
           if (done.ok && (done.dc || done.dr)) {
             shiftView(-done.dc * CELL, -done.dr * CELL);
             useSession.getState().apply({ kind: "shift", dc: done.dc, dr: done.dr });

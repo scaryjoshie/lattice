@@ -13,17 +13,25 @@ interface Store {
   grid: Grid;
   propose(command: Command): Verdict;
   /** Returns how many tracks were prepended, which shifts every index the caller holds,
-   *  and for a place the new tile's id. */
-  run(command: Command): { ok: boolean; dc: number; dr: number; id?: string };
+   *  and for a place the new tile's id. `mark` is whatever the caller wants back when this
+   *  change is undone — the selection — and the store never looks at it. */
+  run(command: Command, mark?: unknown): { ok: boolean; dc: number; dr: number; id?: string };
   /**
    * History is the grids as they were before each command, since the grid is a small
-   * immutable value and a snapshot cannot be wrong the way an inverse command can. Undo
-   * restores one; redo restores what undo replaced. A new command drops the redo side.
+   * immutable value and a snapshot cannot be wrong the way an inverse command can. Each
+   * entry carries the mark it was made with, so undoing a change hands back what was
+   * selected when it was made, and redo hands back what was selected when it was undone.
+   * Selecting on its own is not a step. A new command drops the redo side.
    */
-  past: readonly Grid[];
-  future: readonly Grid[];
-  undo(): boolean;
-  redo(): boolean;
+  past: readonly Entry[];
+  future: readonly Entry[];
+  undo(mark?: unknown): { ok: boolean; mark?: unknown };
+  redo(mark?: unknown): { ok: boolean; mark?: unknown };
+}
+
+interface Entry {
+  readonly grid: Grid;
+  readonly mark?: unknown;
 }
 
 export const useGrid = create<Store>((set, get) => ({
@@ -31,26 +39,26 @@ export const useGrid = create<Store>((set, get) => ({
   propose(command) {
     return propose(get().grid, command);
   },
-  run(command) {
+  run(command, mark) {
     const { grid, past } = get();
     const made = apply(grid, command);
-    if (made.ok) set({ grid: made.grid, past: [...past, grid], future: [] });
+    if (made.ok) set({ grid: made.grid, past: [...past, { grid, mark }], future: [] });
     return { ok: made.ok, dc: made.dc, dr: made.dr, id: made.id };
   },
   past: [],
   future: [],
-  undo() {
+  undo(mark) {
     const { grid, past, future } = get();
     const before = past[past.length - 1];
-    if (!before) return false;
-    set({ grid: before, past: past.slice(0, -1), future: [grid, ...future] });
-    return true;
+    if (!before) return { ok: false };
+    set({ grid: before.grid, past: past.slice(0, -1), future: [{ grid, mark }, ...future] });
+    return { ok: true, mark: before.mark };
   },
-  redo() {
+  redo(mark) {
     const { grid, past, future } = get();
     const [next, ...rest] = future;
-    if (!next) return false;
-    set({ grid: next, past: [...past, grid], future: rest });
-    return true;
+    if (!next) return { ok: false };
+    set({ grid: next.grid, past: [...past, { grid, mark }], future: rest });
+    return { ok: true, mark: next.mark };
   },
 }));
