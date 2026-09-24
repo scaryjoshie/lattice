@@ -20,8 +20,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
    its shell.
 3. A scope — a worktree — is a named region that items belong to. An item is in a scope
    when its region lies within the scope's bounds.
-4. A cell holds at most one item. The view enforces this; the model does not yet have
-   the rule.
+4. A cell holds at most one item. The model's rule: a cell is held by whichever tile's
+   extent covers it, and a place onto a held cell is refused, whether the cell is a host's
+   or the second cell of a run.
 5. A region is well-formed when nothing it touches is partly inside it: an item it
    touches lies entirely within it, and a scope it touches lies entirely within it or
    entirely around it. Never neither. This is the one rule for a selection and for both
@@ -332,6 +333,5 @@ Noted rather than resolved.
 - A cap on a run can be set by dragging and cannot be lifted.
 - A run stops when it runs out of room while typing. Only a resize pushes; typing does not.
 - A scope's name is in the model and cannot be edited from the grid.
-- Occupancy (4) lives in the view, not the model.
 - Deleting an item removes it from the grid and nothing else, which cannot be what deleting
   an agent means.
