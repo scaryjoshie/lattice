@@ -10,7 +10,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "bun-types"]
   },
   "include": ["src"]
 }
