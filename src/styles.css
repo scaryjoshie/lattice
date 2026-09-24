@@ -244,3 +244,47 @@ body {
 .keys-verb {
   color: var(--ink);
 }
+
+/*
+ * An opened tile. The backdrop takes the pointer so the grid and the camera see nothing
+ * until it is closed; the panel is a transform of its full-size self, so opening is a
+ * scale and nothing reflows.
+ */
+.opened {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+}
+
+.opened-panel {
+  position: absolute;
+  transform-origin: 0 0;
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 28%);
+  overflow: hidden;
+  will-change: transform;
+}
+
+.opened-body {
+  height: 100%;
+  opacity: 0;
+  transition: opacity 180ms ease 240ms;
+  color: var(--muted);
+}
+
+.opened-body[data-shown] {
+  opacity: 1;
+}
+
+.opened-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider);
+  font-size: 12px;
+  color: var(--ink);
+}

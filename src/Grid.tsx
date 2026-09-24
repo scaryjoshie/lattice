@@ -12,6 +12,7 @@ import {
   proposeResize,
   type Axis,
   type Grid,
+  type OccupantKind,
   close,
   footprint,
   wellFormed,
@@ -32,6 +33,7 @@ import {
 import { cellsFor, fontOf, linesFor, METRICS, nameFont, spanFor } from "./measure.ts";
 import { Keys, type Mode } from "./Keys.tsx";
 import { Menu, TileMenu } from "./Menu.tsx";
+import { Opened, type Rect } from "./Opened.tsx";
 import { claimed } from "./pointer.ts";
 import { useGrid } from "./store.ts";
 import { onTheme } from "./theme.ts";
@@ -183,6 +185,9 @@ function selectionOf(grid: Grid, region: Region): { scope: string } | { region: 
   return scope ? { scope: scope.id } : { region };
 }
 
+/** How far an opened tile stops short of the viewport's edge, in screen pixels. */
+const OPEN_INSET = 24;
+
 /** How near a gridline the pointer must be to take hold of it, and how near a crossing to
  *  hold both of its lines, in screen pixels. */
 const LINE_HIT = 9;
@@ -227,6 +232,8 @@ export function Grid() {
   const [editShape, setEditShape] = useState({ span: 1, rows: 1 });
   /** The tile being renamed, if any. */
   const [naming, setNaming] = useState<string | null>(null);
+  /** An occupant opened: which, and the rectangles it scales between. */
+  const [opened, setOpened] = useState<{ id: string; from: Rect; to: Rect } | null>(null);
   /** Right-click on something that is already there. */
   const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
   /**
@@ -731,7 +738,7 @@ export function Grid() {
 
   // While a menu, a rename or an edit is open the camera is still: the press that closes
   // it is spent closing it, and the wheel would slide the cell out from under the menu.
-  const overlay = menu !== null || acting !== null || editing !== null || naming !== null;
+  const overlay = menu !== null || acting !== null || editing !== null || naming !== null || opened !== null;
   const { camera, shift: shiftView } = useCamera(
     viewport,
     schedule,
@@ -778,7 +785,8 @@ export function Grid() {
     };
     const onKey = (e: KeyboardEvent) => {
       set(e.shiftKey);
-      if (e.key === "Escape" && !claimed(e.target)) {
+      // An opened tile owns Escape while it is up, the way an overlay owns the pointer.
+      if (e.key === "Escape" && !claimed(e.target) && !document.querySelector(".opened")) {
         if (dragging.current || stretching.current || sweeping.current) {
           // Cancel the move, the resize or the sweep: drop it and spend the release on nothing.
           dragging.current = null;
@@ -1012,7 +1020,21 @@ export function Grid() {
         setSelection(selectionOf(gridRef.current, close(gridRef.current, reach(anchor, [ci, ri]))));
         return;
       }
-      if (id) return;
+      if (id) {
+        // Shift-click on an occupant opens it, scaling up from where it sits.
+        const tile = gridRef.current.tiles.find((x) => x.id === id);
+        const extent = model.current.tiles.get(id);
+        if (!tile || tile.kind === "text" || !extent) return;
+        const { x, y, k } = camera.current;
+        const size = CELL * k;
+        hover.current = null;
+        setOpened({
+          id,
+          from: { x: worldX(extent.ci) * k + x, y: worldX(extent.ri) * k + y, w: size * extent.span, h: size * extent.rows },
+          to: { x: OPEN_INSET, y: OPEN_INSET, w: host.clientWidth - OPEN_INSET * 2, h: host.clientHeight - OPEN_INSET * 2 },
+        });
+        return;
+      }
       hover.current = null;
       setMenu({ x: event.clientX, y: event.clientY, ci, ri });
       return;
@@ -1084,7 +1106,9 @@ export function Grid() {
     schedule(camera.current);
   };
 
-  const mode: Mode = editing || naming
+  const mode: Mode = opened
+    ? "open"
+    : editing || naming
     ? "typing"
     : menu
       ? "menu"
@@ -1128,6 +1152,15 @@ export function Grid() {
         )}
         {naming !== null && <Namer id={naming} onDone={() => setNaming(null)} />}
       </div>
+      {opened && (
+        <Opened
+          kind={(gridRef.current.tiles.find((x) => x.id === opened.id)?.kind ?? "shell") as OccupantKind}
+          name={gridRef.current.tiles.find((x) => x.id === opened.id)?.name}
+          from={opened.from}
+          to={opened.to}
+          onClose={() => setOpened(null)}
+        />
+      )}
       <Keys mode={mode} />
       {menu && (
         <Menu
