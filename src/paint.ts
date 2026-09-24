@@ -745,10 +745,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     }
   }
 
-  // Hover stays live while something else is focused, except on the focused cell itself,
-  // which already has its ring — and gives way entirely to the extension preview and to
-  // a handle.
-  if (hover && rule > 0 && !extending && !pointing && !lines && !(focus && focus.ci === hover[0] && focus.ri === hover[1])) {
+  // The hovered cell. Whether one is hovered at all was decided upstream, where the one
+  // thing the pointer is on was chosen; the paint does not arbitrate.
+  if (hover && rule > 0) {
     const [ci, ri] = hover;
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;

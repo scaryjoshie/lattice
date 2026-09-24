@@ -197,6 +197,26 @@ const CROSS_HIT = 4;
 /** The scope handle's hit area, in screen pixels. Drawn smaller; a target should be generous. */
 const HANDLE_HIT = 24;
 
+/**
+ * What the pointer is on: exactly one of these at a time. A scope's corner handle, a
+ * gridline of the selected scope or run, or a cell. Their hit areas nest — a handle's
+ * square lies within a line's band, which lies within a cell — so the pointer is on the
+ * most specific thing whose area contains it. `targetAt` is the only place that knows.
+ */
+type Target =
+  | { kind: "cell"; ci: number; ri: number }
+  | { kind: "handle"; scope: string }
+  | { kind: "line"; owner: string; c: number | null; r: number | null };
+
+const sameTarget = (a: Target | null, b: Target | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind) return false;
+  if (a.kind === "cell" && b.kind === "cell") return a.ci === b.ci && a.ri === b.ri;
+  if (a.kind === "handle" && b.kind === "handle") return a.scope === b.scope;
+  if (a.kind === "line" && b.kind === "line") return a.owner === b.owner && a.c === b.c && a.r === b.r;
+  return false;
+};
+
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
   const c0 = Math.min(r.ci, ci);
@@ -213,13 +233,16 @@ export function Grid() {
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
-  const hover = useRef<[number, number] | null>(null);
-  /** Shift is held. A ref, like hover: it changes at key speed and only the paint reads it. */
+  /**
+   * What the pointer is on. Exactly one thing at a time, chosen by `targetAt`, so nothing
+   * downstream arbitrates between rival answers. A ref: it changes at pointer speed and
+   * only the paint reads it.
+   */
+  const pointing = useRef<Target | null>(null);
+  /** Shift is held. A ref, like pointing: it changes at key speed and only the paint reads it. */
   const shift = useRef(false);
-  /** Where the pointer last was, so hover can be picked back up when a menu closes. */
+  /** Where the pointer last was, so pointing can be picked back up when a menu closes. */
   const pointer = useRef<{ x: number; y: number } | null>(null);
-  /** The scope whose handle the pointer is on, if any. A ref like hover. */
-  const hot = useRef<string | null>(null);
 
   const grid = useGrid((s) => s.grid);
   const addAt = useGrid((s) => s.addAt);
@@ -291,8 +314,6 @@ export function Grid() {
     c: number | null;
     r: number | null;
   } | null>(null);
-  /** The gridlines of the selected scope the pointer is on. A ref like hover. */
-  const lineHot = useRef<{ c: number | null; r: number | null } | null>(null);
   const [held, setHeld] = useState<{
     id: string | null;
     from: Region;
@@ -542,10 +563,16 @@ export function Grid() {
       cells, plates, occupied, texts, spots, byCell, links, carried, proposal, subject, about, selected, selectedScope, growing, usable,
     } = model.current;
 
+    // Everything about the pointer comes from the one target. A cell is pointed at only
+    // when nothing with precedence over it is.
+    const target = pointing.current;
+    const cell = target?.kind === "cell" ? target : null;
+    const onHandle = target?.kind === "handle" ? target.scope : null;
+
     // The gridlines of the selected scope the pointer is on, lit as what a drag would move;
     // during a drag, where they have got to. The pointer's own position, so the grip can
     // be drawn under it.
-    const held_ = model.current.growLines ?? lineHot.current;
+    const held_ = model.current.growLines ?? (target?.kind === "line" ? target : null);
     const owner = model.current.resizable;
     const box = host.getBoundingClientRect();
     const cursor = pointer.current ? { x: pointer.current.x - box.left, y: pointer.current.y - box.top } : null;
@@ -561,14 +588,12 @@ export function Grid() {
       .filter(
         (p) =>
           p.id !== selectedScope &&
-          (p.id === hot.current ||
-            (hover.current !== null &&
-              hover.current[0] >= p.c0 && hover.current[0] <= p.c1 &&
-              hover.current[1] >= p.r0 && hover.current[1] <= p.r1)),
+          (p.id === onHandle ||
+            (cell !== null && cell.ci >= p.c0 && cell.ci <= p.c1 && cell.ri >= p.r0 && cell.ri <= p.r1)),
       )
-      .map((p) => ({ ci: p.c0, ri: p.r0, hue: p.hue, name: p.id === hot.current ? p.name : null }));
-    const hotPlate = hot.current ? plates.find((p) => p.id === hot.current) : undefined;
-    const pointing: Scene["pointing"] = hotPlate
+      .map((p) => ({ ci: p.c0, ri: p.r0, hue: p.hue, name: p.id === onHandle ? p.name : null }));
+    const hotPlate = onHandle ? plates.find((p) => p.id === onHandle) : undefined;
+    const pointedScope: Scene["pointing"] = hotPlate
       ? { ci: hotPlate.c0, ri: hotPlate.r0, span: hotPlate.c1 - hotPlate.c0 + 1, rows: hotPlate.r1 - hotPlate.r0 + 1, hue: hotPlate.hue }
       : null;
 
@@ -576,9 +601,9 @@ export function Grid() {
     const sweptRegion = model.current.sweep;
     const extending: Scene["extending"] = sweptRegion
       ? { ...sweptRegion, hue: selected?.hue ?? scopeAt(gridRef.current, sweptRegion.ci, sweptRegion.ri)?.hue ?? null, invalid: !usable(sweptRegion) }
-      : shift.current && selected && hover.current && !proposal && !contains(selected, ...hover.current)
+      : shift.current && selected && cell && !proposal && !contains(selected, cell.ci, cell.ri)
         ? (() => {
-            const r = close(gridRef.current, reach(selected, hover.current));
+            const r = close(gridRef.current, reach(selected, [cell.ci, cell.ri]));
             return { ...r, hue: selected.hue, invalid: !usable(r) };
           })()
         : null;
@@ -597,8 +622,7 @@ export function Grid() {
      * which is a change that says nothing happened when something did.
      */
     let focus: Focus | null = null;
-    const spot =
-      carried?.id ?? subject ?? (hover.current && byCell.get(`${hover.current[0]},${hover.current[1]}`));
+    const spot = carried?.id ?? subject ?? (cell && byCell.get(`${cell.ci},${cell.ri}`));
     if (spot) {
       const here = spots.get(spot);
       if (here) {
@@ -629,11 +653,13 @@ export function Grid() {
         about,
         selected,
         proposal,
-        hover: hover.current,
+        // The hovered cell, unless something already says more about it: the extension
+        // preview, or the focus ring on that same cell.
+        hover: cell && !extending && !(focus && focus.ci === cell.ci && focus.ri === cell.ri) ? [cell.ci, cell.ri] : null,
         shift: shift.current,
         extending,
         handles,
-        pointing,
+        pointing: pointedScope,
         lines,
         growing,
       },
@@ -677,7 +703,7 @@ export function Grid() {
 
   /** The gridlines of the selected scope under a screen point: a column line, a row line,
    *  or both at a corner. Edges count; the boundary is a line like any other. */
-  const linesUnder = (px: number, py: number): { c: number | null; r: number | null } | null => {
+  const linesUnder = (px: number, py: number): Target | null => {
     const owner = model.current.resizable;
     if (!owner) return null;
     const { region: o, edgesOnly } = owner;
@@ -714,7 +740,7 @@ export function Grid() {
       if (dc <= dr) r = null;
       else c = null;
     }
-    return { c, r };
+    return { kind: "line", owner: owner.id, c, r };
   };
 
   /** The scope whose corner handle is under a screen point, if any. */
@@ -728,6 +754,29 @@ export function Grid() {
       if (Math.abs(px - hx) <= half && Math.abs(py - hy) <= half) return plate.id;
     }
     return null;
+  };
+
+  /**
+   * The one thing under a screen point: the most specific of a handle, a gridline of the
+   * selected scope or run, and the cell, tried in that order because each is inside the
+   * next. With no gutter every point is in some cell, so there is always an answer.
+   */
+  const targetAt = (px: number, py: number): Target => {
+    const scope = handleUnder(px, py);
+    if (scope) return { kind: "handle", scope };
+    const line = linesUnder(px, py);
+    if (line) return line;
+    const [ci, ri] = cellAt(camera.current, px, py);
+    return { kind: "cell", ci, ri };
+  };
+
+  /** Point at whatever is under a client position now, and repaint. */
+  const repoint = (clientX: number, clientY: number) => {
+    const host = viewport.current;
+    if (!host) return;
+    const box = host.getBoundingClientRect();
+    pointing.current = targetAt(clientX - box.left, clientY - box.top);
+    schedule(camera.current);
   };
 
   // While a menu, a rename or an edit is open the camera is still: the press that closes
@@ -836,7 +885,7 @@ export function Grid() {
       const bands: Region[] = [];
       if (col?.band && after) bands.push({ ...col.band, ri: after.ri, rows: after.rows });
       if (row?.band) bands.push(row.band);
-      hover.current = null;
+      pointing.current = null;
       if (after) setGrow({ after, ok, moves, bands, c: s.c === null ? null : s.c + nc, r: s.r === null ? null : s.r + nr });
       schedule(camera.current);
       return;
@@ -844,7 +893,7 @@ export function Grid() {
     if (sweeping.current) {
       const at = cellUnder(event);
       if (at) {
-        hover.current = null;
+        pointing.current = null;
         setSweep(close(gridRef.current, reach(sweeping.current, at)));
         schedule(camera.current);
       }
@@ -858,26 +907,16 @@ export function Grid() {
         // From the model, never from the scene: the scene is built from this answer.
         const verdict = proposeMove(gridRef.current, carry.from, to);
         carry.proposal = { to, ok: verdict.ok, moves: verdict.moves };
-        hover.current = null;
+        pointing.current = null;
         setHeld({ id: carry.id, from: carry.from, to, ...verdict });
       }
       return;
     }
     const box = host.getBoundingClientRect();
-    const px = event.clientX - box.left;
-    const py = event.clientY - box.top;
-    const onHandle = handleUnder(px, py);
-    const onLines = linesUnder(px, py);
-    const next = cellAt(camera.current, px, py);
-    const prev = hover.current;
-    const moved = !(prev && prev[0] === next[0] && prev[1] === next[1]);
-    const sameLines =
-      onLines === lineHot.current ||
-      (onLines !== null && lineHot.current !== null && onLines.c === lineHot.current.c && onLines.r === lineHot.current.r);
-    if (!moved && onHandle === hot.current && sameLines && !onLines) return;
-    hover.current = next;
-    hot.current = onHandle;
-    lineHot.current = onLines;
+    const next = targetAt(event.clientX - box.left, event.clientY - box.top);
+    // A lit line repaints on every move, since the grip follows the pointer along it.
+    if (next.kind !== "line" && sameTarget(next, pointing.current)) return;
+    pointing.current = next;
     schedule(camera.current);
   };
 
@@ -900,12 +939,12 @@ export function Grid() {
       press.held = true;
       (event.target as Element).setPointerCapture?.(event.pointerId);
     };
-    const owner = model.current.resizable;
-    if (lineHot.current && owner && !event.shiftKey) {
+    const target = pointing.current;
+    if (target?.kind === "line" && !event.shiftKey) {
       // Taking hold of a gridline of the selected scope or run. The line's world position
       // is where the drag is measured from.
-      const { c, r } = lineHot.current;
-      stretching.current = { owner: owner.id, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r) };
+      const { owner, c, r } = target;
+      stretching.current = { owner, c, r, wx: c === null ? 0 : worldX(c), wy: r === null ? 0 : worldX(r) };
       hold();
       return;
     }
@@ -958,7 +997,7 @@ export function Grid() {
         const { dc, dr } = applyMoves(g.moves);
         if (dc || dr) {
           shiftView(-dc * CELL, -dr * CELL);
-          hover.current = null;
+          pointing.current = null;
         }
       }
       return;
@@ -976,7 +1015,7 @@ export function Grid() {
           // Tracks prepended on the way shift every index; the view shifts to match.
           if (dc || dr) {
             shiftView(-dc * CELL, -dr * CELL);
-            hover.current = null;
+            pointing.current = null;
           }
           // A selected tile follows itself; a selected region has to be told where it went.
           if (carry.id === null && !(selection && "scope" in selection)) {
@@ -992,13 +1031,9 @@ export function Grid() {
       dismissing.current = false;
       setMenu(null);
       setActing(null);
-      // Pick the hover back up where the pointer already is, rather than waiting for it
+      // Point back at whatever is under the pointer already, rather than waiting for it
       // to move before the grid responds again.
-      if (host) {
-        const box = host.getBoundingClientRect();
-        hover.current = cellAt(camera.current, event.clientX - box.left, event.clientY - box.top);
-        schedule(camera.current);
-      }
+      repoint(event.clientX, event.clientY);
       return;
     }
     // A press that moved was a pan, not a click on a cell.
@@ -1022,7 +1057,7 @@ export function Grid() {
         if (!tile || tile.kind === "text" || !extent) return;
         const { x, y, k } = camera.current;
         const size = CELL * k;
-        hover.current = null;
+        pointing.current = null;
         setOpened({
           id,
           from: { x: worldX(extent.ci) * k + x, y: worldX(extent.ri) * k + y, w: size * extent.span, h: size * extent.rows },
@@ -1030,15 +1065,15 @@ export function Grid() {
         });
         return;
       }
-      hover.current = null;
+      pointing.current = null;
       setMenu({ x: event.clientX, y: event.clientY, ci, ri });
       return;
     }
     // Click selects, and clicking what is already selected clears it. A scope's corner
     // handle selects the scope; anywhere else inside it selects the cell.
-    const scope = handleUnder(event.clientX - box.left, event.clientY - box.top);
-    if (scope) {
-      setSelection({ scope });
+    const target = targetAt(event.clientX - box.left, event.clientY - box.top);
+    if (target.kind === "handle") {
+      setSelection({ scope: target.scope });
       return;
     }
     const current = model.current.selected;
@@ -1055,7 +1090,7 @@ export function Grid() {
     const at = cellUnder(event);
     if (!at) return;
     const id = model.current.cells.get(`${at[0]},${at[1]}`)?.tileId;
-    hover.current = null;
+    pointing.current = null;
     // The menu for what is there. On an empty cell that is the add menu, which is also
     // what shift-click offers: the act and the menu are the same thing for a place.
     if (id) {
@@ -1070,14 +1105,9 @@ export function Grid() {
     schedule(camera.current);
   };
 
-  /** Whatever closed a menu, the pointer is still somewhere, and that is still hovered. */
+  /** Whatever closed a menu, the pointer is still somewhere, and that is still pointed at. */
   const resume = () => {
-    const host = viewport.current;
-    const at = pointer.current;
-    if (!host || !at) return;
-    const box = host.getBoundingClientRect();
-    hover.current = cellAt(camera.current, at.x - box.left, at.y - box.top);
-    schedule(camera.current);
+    if (pointer.current) repoint(pointer.current.x, pointer.current.y);
   };
 
   const pick = (kind: TileKind, style?: TextStyle) => {
@@ -1086,10 +1116,10 @@ export function Grid() {
     setMenu(null);
     if (made && (made.dc || made.dr)) {
       shiftView(-made.dc * CELL, -made.dr * CELL);
-      hover.current = null;
+      pointing.current = null;
     }
     if (made && kind === "text") {
-      hover.current = null;
+      pointing.current = null;
       // The run is what is selected now, and its ring grows with it as it is typed.
       setSelection({ tile: made.id });
       setEditing(made.id);
@@ -1097,7 +1127,7 @@ export function Grid() {
   };
 
   const onLeave = () => {
-    hover.current = null;
+    pointing.current = null;
     schedule(camera.current);
   };
 
@@ -1185,7 +1215,7 @@ export function Grid() {
               setSelection(null);
             }
             else if (grid.tiles.find((x) => x.id === id)?.kind === "text") {
-              hover.current = null;
+              pointing.current = null;
               setSelection({ tile: id });
               setEditing(id);
             }
