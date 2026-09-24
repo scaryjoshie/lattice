@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
-    "check": "bunx tsc -p ."
+    "check": "bun scripts/check-layers.ts && bun test && bunx tsc -p .",
+    "test": "bun test"
   },
   "dependencies": {
-    "@lattice/model": "workspace:*"
+    "@lattice/model": "workspace:*",
+    "@lattice/protocol": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "^1.4.2",

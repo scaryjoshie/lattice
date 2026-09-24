@@ -17,6 +17,7 @@ export const paths = () => {
     database: join(root, "lattice.db"),
     socket: join(root, "daemon.sock"),
     log: join(root, "daemon.log"),
+    session: join(root, "session.json"),
     secrets: join(root, "secrets"),
   };
 };

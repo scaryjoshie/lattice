@@ -31,6 +31,7 @@
       "name": "@lattice/daemon",
       "dependencies": {
         "@lattice/model": "workspace:*",
+        "@lattice/protocol": "workspace:*",
       },
       "devDependencies": {
         "bun-types": "^1.4.2",
@@ -39,6 +40,16 @@
     },
     "packages/model": {
       "name": "@lattice/model",
+      "devDependencies": {
+        "bun-types": "^1.4.2",
+        "typescript": "^5.9.0",
+      },
+    },
+    "packages/protocol": {
+      "name": "@lattice/protocol",
+      "dependencies": {
+        "@lattice/model": "workspace:*",
+      },
       "devDependencies": {
         "bun-types": "^1.4.2",
         "typescript": "^5.9.0",
@@ -59,6 +70,8 @@
     "@lattice/daemon": ["@lattice/daemon@workspace:packages/daemon"],
 
     "@lattice/model": ["@lattice/model@workspace:packages/model"],
+
+    "@lattice/protocol": ["@lattice/protocol@workspace:packages/protocol"],
 
     "@lattice/shell": ["@lattice/shell@workspace:packages/shell"],
 

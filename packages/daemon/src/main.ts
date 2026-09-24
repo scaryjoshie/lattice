@@ -1,57 +1,46 @@
-import { unlinkSync } from "node:fs";
+import { Agents } from "./agents/agents.ts";
 import { ensureHome } from "./core/paths.ts";
+import { Store } from "./core/store.ts";
+import { Document } from "./document/document.ts";
+import { seed } from "./document/seed.ts";
+import { listen } from "./server/listen.ts";
+import { Rpc } from "./server/rpc.ts";
 
 /**
- * The daemon. A child of the app: started when the app starts, stopped when it quits.
- * It will own the document and its history, the terminals, and the agent service; today
- * it owns a socket and answers hello, so that the shape exists and every missing piece
- * is a named hole inside a running process rather than an idea.
- *
- * The protocol is newline-delimited JSON over an owner-only Unix socket. No token: a
- * client that can open the socket is the owner.
+ * The daemon. A child of the app: started when the app starts, stopped when it quits. It
+ * owns the document and its history, and what is hosted where; terminals and the agent
+ * service come next. Everything that would still be true with no window open.
  */
-const p = ensureHome();
-try {
-  unlinkSync(p.socket);
-} catch {
-  // Nothing to remove.
+export function start(): { close(): void; session: { port: number; token: string } } {
+  const p = ensureHome();
+  const store = new Store(p.database);
+  const had = store.loadDocument();
+  const fresh = had ? null : seed();
+  const document = new Document(store, had ?? fresh!.grid);
+  if (fresh) store.saveDocument(fresh.grid);
+  // Facts are not persisted: what runs is observed, and nothing runs across a restart yet.
+  const agents = new Agents(store, fresh?.facts ?? { hosting: {} });
+  const rpc = new Rpc(document, agents, p.root);
+  const doors = listen(rpc, { socket: p.socket, session: p.session });
+  return {
+    session: doors.session,
+    close() {
+      doors.close();
+      store.close();
+    },
+  };
 }
 
-interface Hello {
-  kind: "hello";
+if (import.meta.main) {
+  const daemon = start();
+  console.log(`lattice daemon: socket at ${ensureHome().socket}, websocket on ${daemon.session.port}`);
+  const stop = () => {
+    daemon.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+  // A child of the app: when the parent goes away, so does this.
+  process.stdin.on("end", stop);
+  process.stdin.resume();
 }
-type Request = Hello;
-
-const answer = (request: Request): unknown => {
-  switch (request.kind) {
-    case "hello":
-      return { kind: "hello", version: "0.0.0", home: p.root };
-  }
-};
-
-Bun.listen<{ buffer: string }>({
-  unix: p.socket,
-  socket: {
-    open(socket) {
-      socket.data = { buffer: "" };
-    },
-    data(socket, chunk) {
-      socket.data.buffer += chunk.toString();
-      let at: number;
-      while ((at = socket.data.buffer.indexOf("\n")) >= 0) {
-        const line = socket.data.buffer.slice(0, at);
-        socket.data.buffer = socket.data.buffer.slice(at + 1);
-        if (!line.trim()) continue;
-        let request: Request;
-        try {
-          request = JSON.parse(line) as Request;
-        } catch {
-          socket.write(`${JSON.stringify({ kind: "error", error: "not json" })}\n`);
-          continue;
-        }
-        socket.write(`${JSON.stringify(answer(request))}\n`);
-      }
-    },
-  },
-});
-console.log(`lattice daemon listening on ${p.socket}`);
