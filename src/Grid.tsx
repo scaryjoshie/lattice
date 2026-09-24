@@ -1106,9 +1106,7 @@ export function Grid() {
     schedule(camera.current);
   };
 
-  const mode: Mode = opened
-    ? "open"
-    : editing || naming
+  const mode: Mode = editing || naming
     ? "typing"
     : menu
       ? "menu"
@@ -1161,7 +1159,7 @@ export function Grid() {
           onClose={() => setOpened(null)}
         />
       )}
-      <Keys mode={mode} />
+      <Keys mode={mode} hidden={opened !== null} />
       {menu && (
         <Menu
           x={menu.x}

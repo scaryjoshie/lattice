@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { MARKS } from "./marks.ts";
 import type { OccupantKind } from "./model.ts";
 
 /**
@@ -8,6 +7,7 @@ import type { OccupantKind } from "./model.ts";
  * nothing else, so nothing reflows and nothing inside is measured on the way. What is
  * inside fades in once the panel has arrived, because a card and a terminal are different
  * representations rather than two sizes of one thing. For now what is inside is nothing.
+ * Cmd-Escape closes it: Escape itself is the agent's.
  */
 
 export interface Rect {
@@ -57,9 +57,14 @@ export function Opened({
     el.addEventListener("transitionend", onClose, { once: true });
   };
 
+  // Cmd is the application layer; every other key belongs to what is inside, and Escape
+  // in particular belongs to the agent. Cmd-Escape leaves.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape" && e.metaKey) {
+        e.preventDefault();
+        close();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -74,23 +79,7 @@ export function Opened({
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="opened-body" data-shown={(arrived && !leaving) || undefined}>
-          <div className="opened-head">
-            <svg width={16} height={16} viewBox="0 0 24 24" aria-hidden="true">
-              {MARKS[kind].map((s) => (
-                <path
-                  key={s.d}
-                  d={s.d}
-                  fill={s.width === undefined ? "currentColor" : "none"}
-                  fillRule="evenodd"
-                  stroke={s.width === undefined ? "none" : "currentColor"}
-                  strokeWidth={s.width}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ))}
-            </svg>
-            {name && <span>{name}</span>}
-          </div>
+          {/* The terminal, once there is one. */}
         </div>
       </div>
     </div>

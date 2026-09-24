@@ -193,6 +193,12 @@ body {
   color: var(--muted);
   font-size: 12px;
   letter-spacing: 0.02em;
+  transition: opacity 220ms ease;
+}
+
+/* While a tile is open the keys belong to it; the panel fades rather than re-labels. */
+.keys[data-hidden] {
+  opacity: 0;
 }
 
 .keys-row {
@@ -261,8 +267,11 @@ body {
   transform-origin: 0 0;
   transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  border-radius: 12px;
+  /* The menus' surface, a little more solid, since a terminal has to be read. */
+  background: color-mix(in srgb, var(--surface) 58%, transparent);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
   box-shadow: 0 24px 64px rgb(0 0 0 / 28%);
   overflow: hidden;
   will-change: transform;
@@ -272,19 +281,8 @@ body {
   height: 100%;
   opacity: 0;
   transition: opacity 180ms ease 240ms;
-  color: var(--muted);
 }
 
 .opened-body[data-shown] {
   opacity: 1;
-}
-
-.opened-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--divider);
-  font-size: 12px;
-  color: var(--ink);
 }

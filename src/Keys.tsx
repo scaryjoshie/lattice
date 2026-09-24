@@ -5,7 +5,7 @@
  * and anything else as a plain word.
  */
 
-export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu" | "list" | "typing" | "open";
+export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu" | "list" | "typing";
 
 /** A chord is keys, pointer parts and words in order. */
 type Row = readonly [chord: readonly string[], means: string];
@@ -58,7 +58,6 @@ const ROWS: Record<Mode, readonly Row[]> = {
     [["enter"], "pick"],
     [["esc"], "close"],
   ],
-  open: [[["esc"], "close"]],
   typing: [
     [["enter"], "commit"],
     [["esc"], "cancel"],
@@ -102,9 +101,9 @@ function Token({ k }: { k: string }) {
   return <span className="keys-verb">{k}</span>;
 }
 
-export function Keys({ mode }: { mode: Mode }) {
+export function Keys({ mode, hidden }: { mode: Mode; hidden?: boolean }) {
   return (
-    <div className="keys" aria-hidden="true">
+    <div className="keys" aria-hidden="true" data-hidden={hidden || undefined}>
       {ROWS[mode].map(([chord, means]) => (
         <div className="keys-row" key={means + chord.join()}>
           <span className="keys-chord">
