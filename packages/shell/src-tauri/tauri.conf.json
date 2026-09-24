@@ -10,15 +10,7 @@
     "beforeBuildCommand": "bun run --cwd ../app build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Lattice",
-        "width": 1400,
-        "height": 900,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

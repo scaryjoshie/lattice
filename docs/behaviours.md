@@ -336,6 +336,17 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
      tile is open.
 113. The key panel lists undo when nothing is selected.
 
+## The daemon
+
+114. The document lives in the daemon. The app holds the last grid the daemon sent,
+     sends commands, and applies nothing itself; a preview is judged locally and never
+     crosses the wire. The grid survives a reload, and two windows show one grid: a
+     change made in either appears in the other at once, and so does an undo.
+115. With no daemon the key panel says "daemon offline" in place of the keys, and
+     commands are refused rather than lost. Reconnecting replaces the grid.
+116. The shell starts the daemon when it starts and stops it when it quits. Closing the
+     window quits the app, for now.
+
 ## Gaps and contradictions
 
 Noted rather than resolved.

@@ -34,11 +34,9 @@ lattice/
    its own folder, the agents' provider contract, and `core`'s paths and secrets helpers;
    `server` imports anything.
 3. Done on 24 September: `experiment-5` is `packages/app`, `model` is its own package
-   imported as `@lattice/model`, `packages/daemon` listens on the socket and answers
-   hello, and `packages/shell` is a Tauri project that opens the app. `mock` stays in the
-   app until the daemon has real data. Not yet wired: the shell starting the daemon, and
-   the app reaching the daemon's socket, which a webview cannot open itself and the shell
-   must bridge.
+   imported as `@lattice/model`, `packages/protocol` is the wire, `packages/daemon` owns
+   the document and answers on both doors, and `packages/shell` starts the daemon and
+   opens the app on it. The seed lives in the daemon. See [daemon.md](daemon.md).
 
 ## Providers
 

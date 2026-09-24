@@ -1,7 +1,8 @@
 # The daemon
 
-A proposal for review, 24 September 2026. How the daemon is structured, what it stores,
-how the app reaches it, and the order it is built in. Where [runtime.md](runtime.md) and
+Reviewed and being built, 24 September 2026. How the daemon is structured, what it
+stores, how the app reaches it, and the order it is built in; steps 1 to 4 of the order
+are done. Where [runtime.md](runtime.md) and
 [organization.md](organization.md) already decided something, this says how; where this
 adds a decision, it says so.
 
@@ -141,14 +142,16 @@ and is left out.
 
 Each step leaves the app working and the harness green.
 
-2. `packages/protocol`, and the daemon's `core/store` with `document`, `events` and
-   `preferences` tables. Nothing visible.
-3. The daemon loads or seeds the document, runs commands, saves, answers on both
-   transports, writes `session.json`. Nothing visible; tested from Bun against a scratch
-   home.
-4. The app becomes a client, with the dev-server route for the session file. The first
-   visible step: the grid survives a reload, and two tabs show one grid.
-5. The shell starts and stops the daemon and hands the session to the webview.
-6. Preferences: theme first, since it exists, then the default worktree location.
-7. Projects: add a repo, read its worktrees, place them as scopes. The seed goes.
-8. Terminals.
+1. Done. `packages/protocol`, and the daemon's `core/store` with `document`, `events` and
+   `preferences` tables.
+2. Done. The daemon loads or seeds the document, runs commands, saves, answers on both
+   transports, writes `session.json`. Tested from Bun against a scratch home.
+3. Done. The app is a client, with the dev-server route for the session file. The grid
+   survives a reload, and two windows show one grid.
+4. Done. The shell starts the daemon as a child, waits for its session, hands it to the
+   webview as `window.__lattice` before the first script runs, and stops it on exit. In
+   development the child is Bun running the daemon's source; the sidecar binary takes
+   its place when there is a build to ship.
+5. Preferences: theme first, since it exists, then the default worktree location.
+6. Projects: add a repo, read its worktrees, place them as scopes. The seed goes.
+7. Terminals.

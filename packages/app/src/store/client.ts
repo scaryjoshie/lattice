@@ -11,12 +11,14 @@ type Listener<N extends keyof Notifications> = (params: Notifications[N]) => voi
 
 declare global {
   interface Window {
-    __lattice?: { port: number; token: string };
+    /** Set by the shell before the first script runs; null when it found no daemon. */
+    __lattice?: { port: number; token: string } | null;
   }
 }
 
 async function session(): Promise<{ port: number; token: string }> {
   if (window.__lattice) return window.__lattice;
+  if (window.__lattice === null) throw new Error("the shell found no daemon");
   const res = await fetch("/__lattice/session");
   if (!res.ok) throw new Error("no daemon session");
   return (await res.json()) as { port: number; token: string };
