@@ -38,9 +38,16 @@ lattice/
 
 ## Providers
 
-4. A provider is an agent: Claude Code, Codex, and not necessarily a program in a
-   terminal, since a browser agent would be one too. A shell is what a terminal shows when
-   it hosts no agent, and a browser is a family of the grid; neither is a provider.
+4. The grid knows two families: a *host*, one cell holding one thing, and a run. A host
+   carries the *surface* it was made for, terminal or webview, as a name the model stores
+   and never branches on. What a host holds is an *occupant*, a fact the runtime observes;
+   a host with nothing in it shows its surface's idle occupant, a terminal its shell. A
+   *provider* is an occupant that is an agent: Claude Code, Codex, and not necessarily a
+   program in a terminal, since a browser agent would be one too. A shell and a browser
+   page are the grid's own occupants, under `occupants/`, and are not providers.
+   Surfaces are a registry, `occupants/surfaces.ts`; adding one is a row and a view
+   component that mounts it. Terminals are most hosts, so the terminal is the default
+   surface and the daemon allocates a PTY unless a surface says otherwise.
 5. A provider is one folder that defines everything about itself, in two halves. The
    *descriptor* is data: its mark, its label, the controls it offers. The *adapter* is
    code: how it is started, resumed, identified, delivered to, and what hosts it. Both live
@@ -48,7 +55,9 @@ lattice/
 6. Descriptors are shared, so the client draws a mark and offers a control without knowing
    how anything is started. Adapters run only in the daemon. A registry, `providers/index.ts`,
    lists the folders and knows nothing about them but their names. Built as far as the
-   descriptors: `experiment-5/src/providers/{claude,codex}`.
+   descriptors: `experiment-5/src/providers/{claude,codex}` and
+   `experiment-5/src/occupants/{shell,browser}`, with `occupants/index.ts` the registry over
+   both.
 7. Adding a provider is one folder and one line in the registry. Nothing in `model`,
    `session` or `paint` changes, which is the test that the tile's `kind` has left the
    model.
