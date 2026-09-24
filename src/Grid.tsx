@@ -675,11 +675,14 @@ export function Grid() {
   }, []);
 
   /**
-   * A trackpad emits wheel events faster than the display refreshes, and painting on each
-   * one does work nobody sees. One paint per frame, always the latest camera.
+   * Every paint goes through here, and there is one frame at a time. A trackpad emits
+   * wheel events faster than the display refreshes, and painting on each one does work
+   * nobody sees; a scene change and a camera move in one frame are one paint, not two.
+   * While something animates, the frame asks for the next one itself, and stops asking the
+   * moment nothing does — so an idle canvas paints nothing.
    */
   const queued = useRef(0);
-  /** Advances only while something is focused, so an idle canvas paints nothing. */
+  /** The shared crawl. Advances once per animated frame. */
   const dash = useRef(0);
   const running = useRef(false);
   /**
@@ -693,12 +696,25 @@ export function Grid() {
     (next: Camera) => {
       latest.current = next;
       if (queued.current) return;
-      queued.current = requestAnimationFrame(() => {
+      const frame = () => {
         queued.current = 0;
         draw(latest.current);
-      });
+        if (!running.current) return;
+        dash.current += 0.6;
+        queued.current = requestAnimationFrame(frame);
+      };
+      queued.current = requestAnimationFrame(frame);
     },
     [draw],
+  );
+  // On unmount, drop the pending frame and say so, or a remount would think one was
+  // still queued and never paint again. StrictMode mounts twice in development.
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(queued.current);
+      queued.current = 0;
+    },
+    [],
   );
 
   /** The gridlines of the selected scope under a screen point: a column line, a row line,
@@ -785,25 +801,10 @@ export function Grid() {
   const overlay = menu !== null || acting !== null || editing !== null || naming !== null || opened !== null;
   const { camera, shift: shiftView } = useCamera(viewport, schedule, () => overlay || pressed.current?.held === true);
 
-  // The dashes crawl, which is what makes a live connection look live. The loop exists
-  // only while a focus does; with nothing focused the canvas is still and costs nothing.
+  // A scene change wants a paint, on the same frame as anything else that does.
   useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      if (running.current) {
-        dash.current += 0.6;
-        draw(latest.current);
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [draw]);
-
-  // Redraw on model change and on resize. Both are human-paced.
-  useEffect(() => {
-    draw(camera.current);
-  }, [draw, camera, scene]);
+    schedule(camera.current);
+  }, [schedule, camera, scene]);
 
   useEffect(() => onTheme(() => schedule(camera.current)), [schedule, camera]);
 
