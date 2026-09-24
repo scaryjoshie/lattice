@@ -352,16 +352,43 @@ export interface Move {
   rows?: number;
 }
 
-/** A grid with moves applied. Positions are ids, so a move is a track lookup. */
-export function applied(grid: Grid, moves: readonly Move[]): Grid {
-  const at = new Map(moves.map((m) => [m.id, m]));
+/**
+ * A grid with moves applied, whole. Positions are ids, so a move is a track lookup — and
+ * a destination past the tracks gets tracks made first, never dropped. Tracks prepended
+ * on the way shift every index by `dc` and `dr`, which the caller must carry into any
+ * index it still holds.
+ */
+export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: number; dr: number } {
+  if (moves.length === 0) return { grid, dc: 0, dr: 0 };
+  const size = (m: Move) => {
+    const tile = grid.tiles.find((x) => x.id === m.id);
+    if (tile) return { span: m.span ?? tile.span ?? 1, rows: m.rows ?? tile.rows ?? 1 };
+    const scope = grid.scopes.find((x) => x.id === m.id);
+    const b = scope ? bounds(grid, scope) : { span: 1, rows: 1 };
+    return { span: m.span ?? b.span, rows: m.rows ?? b.rows };
+  };
+  const reach = moves.reduce(
+    (r, m) => {
+      const s = size(m);
+      return {
+        ci: Math.min(r.ci, m.ci),
+        ri: Math.min(r.ri, m.ri),
+        c1: Math.max(r.c1, m.ci + s.span),
+        r1: Math.max(r.r1, m.ri + s.rows),
+      };
+    },
+    { ci: Infinity, ri: Infinity, c1: -Infinity, r1: -Infinity },
+  );
+  const made = ensureTracks(grid, { ci: reach.ci, ri: reach.ri, span: reach.c1 - reach.ci, rows: reach.r1 - reach.ri });
+  const g = made.grid;
+  const at = new Map(moves.map((m) => [m.id, { ...m, ci: m.ci + made.dc, ri: m.ri + made.dr }]));
   const track = (tracks: readonly Track[], i: number) => tracks[i]?.id;
-  return {
-    ...grid,
-    tiles: grid.tiles.map((tile) => {
+  const next: Grid = {
+    ...g,
+    tiles: g.tiles.map((tile) => {
       const m = at.get(tile.id);
-      const columnId = m && track(grid.columns, m.ci);
-      const rowId = m && track(grid.rows, m.ri);
+      const columnId = m && track(g.columns, m.ci);
+      const rowId = m && track(g.rows, m.ri);
       if (!m || !columnId || !rowId) return tile;
       const moved = { ...tile, columnId, rowId };
       // A size on a run's move is the writer fixing that axis: a cap, kept until lifted.
@@ -373,19 +400,20 @@ export function applied(grid: Grid, moves: readonly Move[]): Grid {
         cap: { span: m.span ?? tile.cap?.span, rows: m.rows ?? tile.cap?.rows },
       };
     }),
-    scopes: grid.scopes.map((scope) => {
+    scopes: g.scopes.map((scope) => {
       const m = at.get(scope.id);
       if (!m) return scope;
-      const b = bounds(grid, scope);
-      const columnStart = track(grid.columns, m.ci);
-      const columnEnd = track(grid.columns, m.ci + (m.span ?? b.span) - 1);
-      const rowStart = track(grid.rows, m.ri);
-      const rowEnd = track(grid.rows, m.ri + (m.rows ?? b.rows) - 1);
+      const b = bounds(g, scope);
+      const columnStart = track(g.columns, m.ci);
+      const columnEnd = track(g.columns, m.ci + (m.span ?? b.span) - 1);
+      const rowStart = track(g.rows, m.ri);
+      const rowEnd = track(g.rows, m.ri + (m.rows ?? b.rows) - 1);
       return columnStart && columnEnd && rowStart && rowEnd
         ? { ...scope, columnStart, columnEnd, rowStart, rowEnd }
         : scope;
     }),
   };
+  return { grid: next, dc: made.dc, dr: made.dr };
 }
 
 /**
@@ -510,7 +538,7 @@ function resizeRun(grid: Grid, tile: Tile, axis: Axis, line: number, n: number):
   const world = applied(grid, moves);
   const home = scopeAt(grid, b.ci, b.ri)?.id ?? null;
   for (const [ci, ri] of cells(after)) {
-    if ((scopeAt(world, ci, ri)?.id ?? null) !== home) return { ...refuse, band };
+    if ((scopeAt(world.grid, ci + world.dc, ri + world.dr)?.id ?? null) !== home) return { ...refuse, band };
   }
   return { ok: true, after, band, moves };
 }

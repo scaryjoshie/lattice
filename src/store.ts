@@ -3,7 +3,6 @@ import { cellsFor, linesFor, spanFor } from "./measure.ts";
 import {
   addTile,
   applied,
-  bounds,
   ensureTracks,
   type Grid,
   indexOfTrack,
@@ -117,32 +116,9 @@ export const useGrid = create<Store>((set, get) => ({
   },
   /** Every move a proposal produced, applied together — a swap is not two moves. */
   apply(moves) {
-    const still = { dc: 0, dr: 0 };
-    if (moves.length === 0) return still;
-    // Tracks for every destination first, so no move is ever dropped for lack of one.
-    const before = get().grid;
-    const shape = (m: Move) => {
-      const tile = before.tiles.find((x) => x.id === m.id);
-      if (tile) return { span: tile.span ?? 1, rows: tile.rows ?? 1 };
-      const scope = before.scopes.find((x) => x.id === m.id);
-      const b = scope ? bounds(before, scope) : { span: 1, rows: 1 };
-      return { span: m.span ?? b.span, rows: m.rows ?? b.rows };
-    };
-    const reach = moves.reduce(
-      (r, m) => {
-        const s = shape(m);
-        return {
-          ci: Math.min(r.ci, m.ci),
-          ri: Math.min(r.ri, m.ri),
-          c1: Math.max(r.c1, m.ci + s.span),
-          r1: Math.max(r.r1, m.ri + s.rows),
-        };
-      },
-      { ci: Infinity, ri: Infinity, c1: -Infinity, r1: -Infinity },
-    );
-    const made = ensureTracks(before, { ci: reach.ci, ri: reach.ri, span: reach.c1 - reach.ci, rows: reach.r1 - reach.ri });
-    const g = made.grid;
-    set({ grid: refit(applied(g, moves.map((m) => ({ ...m, ci: m.ci + made.dc, ri: m.ri + made.dr })))) });
+    if (moves.length === 0) return { dc: 0, dr: 0 };
+    const made = applied(get().grid, moves);
+    set({ grid: refit(made.grid) });
     return { dc: made.dc, dr: made.dr };
   },
 }));

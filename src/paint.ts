@@ -753,10 +753,11 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     const cell = at(ci, ri);
     const colour = hue(cell?.hue ?? null).edge;
     const inset = FOCUS_EDGE / 2;
-    // Whatever is under the pointer is ringed whole, not by the cell it was touched on —
-    // unless it is inside the selection, which is already the thing being pointed at.
+    // Whatever is under the pointer is ringed whole, not by the cell it was touched on. An
+    // empty cell inside the selection is not: the selection is already the thing pointed
+    // at. A tile inside it is still a thing, and is.
     const box = cell?.extent ?? { ci, ri, span: 1, rows: 1 };
-    if (!(selected && contains(selected, ci, ri))) {
+    if (cell?.occupied || !(selected && contains(selected, ci, ri))) {
       const x = sx(box.ci);
       const y = sy(box.ri);
       ctx.lineWidth = FOCUS_EDGE;

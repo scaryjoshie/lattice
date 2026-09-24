@@ -818,8 +818,19 @@ export function Grid() {
       // A corner is two resizes, the second proposed on the grid the first would leave.
       const g0 = gridRef.current;
       const col = s.c === null ? null : proposeResize(g0, s.owner, "col", s.c, nc);
-      const g1 = col ? applied(g0, col.moves) : g0;
-      const row = s.r === null ? null : proposeResize(g1, s.owner, "row", s.r, nr);
+      // The intermediate grid may have gained tracks at the front, shifting every index;
+      // the row resize is asked in its terms and answered back in the model's.
+      const mid = col ? applied(g0, col.moves) : { grid: g0, dc: 0, dr: 0 };
+      const back = (r: Region): Region => ({ ...r, ci: r.ci - mid.dc, ri: r.ri - mid.dr });
+      const rowRaw = s.r === null ? null : proposeResize(mid.grid, s.owner, "row", s.r + mid.dr, nr);
+      const row = rowRaw
+        ? {
+            ...rowRaw,
+            after: back(rowRaw.after),
+            band: rowRaw.band ? back(rowRaw.band) : null,
+            moves: rowRaw.moves.map((m) => ({ ...m, ci: m.ci - mid.dc, ri: m.ri - mid.dr })),
+          }
+        : null;
       const moves = [...(col?.moves ?? []), ...(row?.moves ?? [])];
       const ok = (col?.ok ?? true) && (row?.ok ?? true);
       const after = row?.after ?? col?.after ?? null;
