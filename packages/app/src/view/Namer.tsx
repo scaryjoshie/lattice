@@ -39,7 +39,10 @@ export function Namer({ id, onDone }: { id: string; onDone(): void }) {
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
-        if (e.key === "Escape") onDone();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onDone();
+        }
       }}
     />
   );

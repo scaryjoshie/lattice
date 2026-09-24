@@ -75,6 +75,8 @@ export function Editor({
           e.currentTarget.blur();
         }
         if (e.key === "Escape") {
+          // Abandoning is the editor's: say so, or the window reads it as cancel.
+          e.preventDefault();
           onDone();
           if (tile.text === "") run({ kind: "remove", id });
         }
