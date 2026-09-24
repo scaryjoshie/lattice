@@ -1,6 +1,6 @@
 import { type Command, propose } from "../model/command.ts";
 import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, wellFormed } from "../model/grid.ts";
-import type { ProgramId } from "../providers/index.ts";
+import type { ProviderId } from "../providers/index.ts";
 import type { RuntimeCommand } from "../runtime/facts.ts";
 import { contains, type Region } from "../model/region.ts";
 import type { Gesture, Selection, Session, SessionCommand } from "./session.ts";
@@ -48,7 +48,7 @@ export type Effect = Command | SessionCommand | RuntimeCommand | { kind: "undo" 
 export type Choice =
   | { family: "text"; style: TextStyle }
   | { family: "browser" }
-  | { family: "terminal"; program: ProgramId };
+  | { family: "terminal"; provider?: ProviderId };
 
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 export function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
@@ -138,8 +138,8 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       if (choice.family === "text") {
         return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })];
       }
-      // A terminal is placed as a terminal; what runs in it is the runtime's to start.
-      const start: Effect[] = choice.family === "terminal" && choice.program !== "shell" ? [{ kind: "start", terminal: id, program: choice.program }] : [];
+      // A terminal is placed as a terminal; an agent in it is the runtime's to start.
+      const start: Effect[] = choice.family === "terminal" && choice.provider ? [{ kind: "start", host: id, provider: choice.provider }] : [];
       return [overlay(null), place, ...start];
     }
     case "act": {

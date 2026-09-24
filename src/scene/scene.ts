@@ -1,7 +1,7 @@
 import { bounds, close, type Grid, indexOfTrack, isRun, scopeAt, wellFormed } from "../model/grid.ts";
-import { PROGRAMS, type Stroke } from "../providers/index.ts";
-import { type Facts, programOf } from "../runtime/facts.ts";
-import { BROWSER } from "./marks.ts";
+import { PROVIDERS, type Stroke } from "../providers/index.ts";
+import { type Facts, hostedBy } from "../runtime/facts.ts";
+import { BROWSER, SHELL } from "./marks.ts";
 import { cells as cellsOf, contains, type Region } from "../model/region.ts";
 import { invalid, reach } from "../session/react.ts";
 import type { Session } from "../session/session.ts";
@@ -167,8 +167,9 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
       // While a run is typed the input draws its glyphs, but its cells stay unruled.
       texts.push({ ...extent, style: tile.style, text: edited ? "" : tile.text, hue });
     } else {
-      // The mark is what is observed to be running there, or the browser's own.
-      const mark = tile.family === "browser" ? BROWSER : PROGRAMS[programOf(facts, tile.id)].mark;
+      // The mark is the agent observed to be hosted there, else the family's own.
+      const provider = tile.family === "terminal" ? hostedBy(facts, tile.id) : null;
+      const mark = tile.family === "browser" ? BROWSER : provider ? PROVIDERS[provider].mark : SHELL;
       const spot: Occupant = { ci, ri, mark, name: naming === tile.id ? undefined : tile.name, hue };
       occupied.push(spot);
       spots.set(tile.id, spot);

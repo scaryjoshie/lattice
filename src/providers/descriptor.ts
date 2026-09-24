@@ -1,15 +1,17 @@
 /**
- * What a provider says about itself. The descriptor half: data the client can draw and
- * offer from without knowing how the program is launched. The adapter half — launching,
- * resuming, finding a session id, delivering text — lives in the daemon when there is
- * one, in the same folder as the descriptor, so a provider is one folder that defines
- * everything about itself.
+ * What a provider says about itself. A provider is an agent — Claude Code, Codex — and
+ * not necessarily a program in a terminal: a browser agent would be one too. How a
+ * provider is hosted is its adapter's business, and a terminal is the first host, not
+ * the only one.
+ *
+ * This is the descriptor half: data the client can draw and offer from without knowing
+ * how the agent is started. The adapter half — starting, resuming, finding a session,
+ * delivering text — lives in the daemon when there is one, in the same folder, so a
+ * provider is one folder that defines everything about itself.
  */
 export interface Descriptor<Id extends string = string> {
   readonly id: Id;
   readonly label: string;
-  /** An agent, as opposed to a utility. The add menu groups by this; the canvas does not. */
-  readonly agent: boolean;
   /** Its mark, as path data on a 24-unit grid, drawn by the painter and the menu alike. */
   readonly mark: readonly Stroke[];
 }

@@ -1,14 +1,13 @@
 import { type Group, Popup } from "./Popup.tsx";
 import type { TextStyle } from "../model/grid.ts";
-import { PROGRAMS, type Stroke } from "../providers/index.ts";
-import { BROWSER } from "../scene/marks.ts";
+import { PROVIDERS, type Stroke } from "../providers/index.ts";
+import { BROWSER, SHELL } from "../scene/marks.ts";
 import type { Choice } from "../session/react.ts";
 
 /**
- * What can go in a cell, grouped by what a thing is rather than by what it does. Text and
- * the browser are families of the grid; the agents and the plain terminal are programs
- * from the descriptor table, so adding a provider adds a row here without this file
- * changing.
+ * What can go in a cell, grouped by what a thing is rather than by what it does. Text,
+ * the terminal and the browser are families of the grid; the agents come from the
+ * provider registry, so adding a provider adds a row here without this file changing.
  *
  * Typing filters. The input is there from the moment the menu opens so that keystrokes are
  * never lost, but stays invisible until there is something to show — the menu is a list
@@ -21,7 +20,6 @@ interface Item {
   mark: readonly Stroke[] | TextStyle;
 }
 
-const programs = Object.values(PROGRAMS);
 const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
   {
     heading: "text",
@@ -33,13 +31,13 @@ const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
   {
     heading: "utilities",
     items: [
-      ...programs.filter((p) => !p.agent).map((p) => ({ label: p.label, choice: { family: "terminal", program: p.id } as const, mark: p.mark })),
+      { label: "terminal", choice: { family: "terminal" }, mark: SHELL },
       { label: "browser", choice: { family: "browser" }, mark: BROWSER },
     ],
   },
   {
     heading: "agents",
-    items: programs.filter((p) => p.agent).map((p) => ({ label: p.label, choice: { family: "terminal", program: p.id } as const, mark: p.mark })),
+    items: Object.values(PROVIDERS).map((p) => ({ label: p.label, choice: { family: "terminal", provider: p.id } as const, mark: p.mark })),
   },
 ];
 

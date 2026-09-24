@@ -1,5 +1,5 @@
 import { type Grid, type Link, nextId, type Scope, type Tile } from "../model/grid.ts";
-import type { ProgramId } from "../providers/index.ts";
+import type { ProviderId } from "../providers/index.ts";
 import type { Facts } from "../runtime/facts.ts";
 
 /**
@@ -29,12 +29,12 @@ export function seed(): { grid: Grid; facts: Facts } {
   ];
 
 
-  const cells: [number, number, ProgramId][] = [
+  const cells: [number, number, ProviderId | null][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
     [4, 7, "claude"], [5, 7, "claude"], [5, 8, "codex"],
     [13, 7, "claude"],
-    [8, 4, "shell"],
+    [8, 4, null],
   ];
   const tiles: Tile[] = [
     ...texts.map(([c, r, span, text]) => ({
@@ -56,10 +56,10 @@ export function seed(): { grid: Grid; facts: Facts } {
   ];
   const terminals = tiles.filter((x) => x.family === "terminal");
   const agent = (n: number) => terminals[n]?.id ?? "";
-  // What the mock says is running in each terminal. A shell has no entry.
-  const programs: Record<string, ProgramId> = {};
-  cells.forEach(([, , program], n) => {
-    if (program !== "shell") programs[agent(n)] = program;
+  // What the mock says each terminal is hosting. A terminal showing its shell has no entry.
+  const hosting: Record<string, ProviderId> = {};
+  cells.forEach(([, , provider], n) => {
+    if (provider) hosting[agent(n)] = provider;
   });
   const links: Link[] = [
     { from: agent(0), to: agent(3) },
@@ -68,7 +68,7 @@ export function seed(): { grid: Grid; facts: Facts } {
     { from: agent(5), to: agent(6) },
     { from: agent(1), to: agent(9) },
   ];
-  return { grid: { columns, rows, tiles, scopes, links }, facts: { programs } };
+  return { grid: { columns, rows, tiles, scopes, links }, facts: { hosting } };
 }
 
 /** The one seed the stores share: made once, so the facts name the grid's terminals. */
