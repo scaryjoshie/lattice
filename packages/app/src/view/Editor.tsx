@@ -20,13 +20,14 @@ export function Editor({
 }: {
   id: string;
   onDone(): void;
-  onDraft(text: string): void;
+  onDraft(text: string, caret: number): void;
 }) {
   const grid = useGrid((s) => s.grid);
   const run = useGrid((s) => s.run);
   const found = grid.tiles.find((x) => x.id === id);
   const tile = found && isRun(found) ? found : undefined;
   const [draft, setDraft] = useState(tile?.text ?? "");
+  const [caret, setCaret] = useState(tile?.text.length ?? 0);
 
   if (!tile) return null;
   const ci = indexOfTrack(grid.columns, tile.columnId);
@@ -38,9 +39,10 @@ export function Editor({
   // free. The same answer the scene draws and the commit stores, so the input, the
   // canvas and the model cannot disagree about the run's cells.
   const { span, rows } = extentFor(grid, tile, draft);
-  // The canvas draws the run's surface and ruling even while typing; the input contributes
-  // only a caret and glyphs, so it says what it currently holds and the scene does the rest.
-  useLayoutEffect(() => onDraft(draft), [onDraft, draft]);
+  // The canvas draws the run's surface, its ruling and its caret even while typing; the
+  // input contributes glyphs, and says what it holds and where its caret is. Its own caret
+  // is hidden: a textarea's is as tall as its line box, a whole cell for a title.
+  useLayoutEffect(() => onDraft(draft, caret), [onDraft, draft, caret]);
   const commit = () => {
     onDone();
     run(draft.trim() === "" ? { kind: "remove", id } : { kind: "setText", id, text: draft });
@@ -66,7 +68,11 @@ export function Editor({
         // line box to be the cell for one line to sit where the input's did.
         lineHeight: `${CELL * m.leading}px`,
       }}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        setCaret(e.target.selectionEnd);
+      }}
+      onSelect={(e) => setCaret(e.currentTarget.selectionEnd)}
       onBlur={commit}
       onKeyDown={(e) => {
         // Enter commits. Shift-enter is a line break, which the textarea inserts itself.

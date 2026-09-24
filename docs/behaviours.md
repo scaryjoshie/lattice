@@ -230,15 +230,19 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 76. A run grows cell by cell as it is typed. It stops at the first cell that already holds
     something, and at every scope boundary in both directions: text may not leave a
     scope, and may not enter one.
-77. A run that runs out of width wraps if there is room below at that width. When there
-    is no room in either direction, the words are cut with an ellipsis, on both axes,
-    while typing and once committed.
+77. A run that runs out of width wraps if there is room below at that width, by words as
+    the browser does: a word that would overflow starts the next line, and the spaces
+    after a word stay on its line. When there is no room in either direction, the words
+    are cut with an ellipsis, on both axes, while typing and once committed.
 78. Shift-enter is a line break, kept when the run is drawn. Enter commits. Escape
     abandons, and removes the run if it was new. Clicking away commits. Committing an
     empty run removes it.
 79. The ruling is omitted inside a run rather than painted over. While a run is being
-    typed the canvas still owns its surface and its ruling; the input contributes only a
-    caret and glyphs, and reports its draft, which the scene lays out like any run.
+    typed the canvas owns its surface, its ruling and its caret; the input contributes
+    glyphs, and reports its draft and where its caret is. The caret is drawn at the
+    font's height on whichever line it is on, blinking on the shared counter from the
+    moment the run opens, and follows the arrow keys. The input's own caret is hidden,
+    since a textarea's is as tall as its line box, a whole cell for a title.
 80. Text takes the ink of whatever scope it sits in.
 81. A run's size is fixed when it is committed: what its words needed and what was free
     at that moment, and nothing else changes it but dragging an edge (72). A run does not

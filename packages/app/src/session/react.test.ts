@@ -151,7 +151,7 @@ describe("overlays", () => {
     const id = place?.kind === "place" ? place.id : undefined;
     expect(id).toBeDefined();
     expect(session.selection).toEqual({ tile: id as string });
-    expect(session.overlay).toEqual({ kind: "edit", id: id as string, draft: "" });
+    expect(session.overlay).toEqual({ kind: "edit", id: id as string, draft: "", caret: 0 });
   });
 
   test("delete from the tile menu removes and deselects", () => {

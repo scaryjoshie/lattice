@@ -132,6 +132,9 @@ body {
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
+  /* The canvas draws the caret, at the font's height; the textarea's would be as tall as
+     its line box, a whole cell for a title. */
+  caret-color: transparent;
 }
 
 /*

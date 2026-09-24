@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { apply } from "./command.ts";
 import { extentFor } from "./extent.ts";
 import { footprint, type Grid, proposeMove, type Run, type Tile } from "./grid.ts";
-import { cellsFor, clip, fits, linesFor, spanFor, wrap } from "./text.ts";
+import { caretAt, cellsFor, clip, fits, linesFor, spanFor, wrap } from "./text.ts";
 
 function world(tiles: Tile[], scopes: Grid["scopes"] = []): Grid {
   return {
@@ -31,10 +31,21 @@ describe("text by arithmetic", () => {
 
   test("wrapping keeps the writer's breaks and fits by count", () => {
     expect(fits(0.19, 1.6)).toBe(14);
-    expect(wrap("note", "the quick brown fox jumps", 2)).toEqual(["the quick", "brown fox", "jumps"]);
+    // Spaces after a word stay on its line, so every character is on exactly one line.
+    expect(wrap("note", "the quick brown fox jumps", 2)).toEqual(["the quick ", "brown fox ", "jumps"]);
     expect(wrap("note", "a\n\nb", 3)).toEqual(["a", "", "b"]);
+    expect(wrap("title", "  lead", 4)).toEqual(["  lead"]);
     expect(cellsFor("note", linesFor("note", "the quick brown fox jumps", 2))).toBe(2);
     expect(cellsFor("title", 2)).toBe(2);
+  });
+
+  test("a caret's place in the text is a place on a line", () => {
+    const text = "the quick brown fox jumps";
+    expect(caretAt("note", text, 2, 0)).toEqual({ line: 0, column: 0 });
+    expect(caretAt("note", text, 2, 9)).toEqual({ line: 0, column: 9 });
+    expect(caretAt("note", text, 2, 10)).toEqual({ line: 1, column: 0 });
+    expect(caretAt("note", text, 2, text.length)).toEqual({ line: 2, column: 5 });
+    expect(caretAt("title", "a\nb", 3, 2)).toEqual({ line: 1, column: 0 });
   });
 
   test("a cut ends in an ellipsis", () => {

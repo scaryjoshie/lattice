@@ -1,4 +1,4 @@
-import { bounds, cells as cellsOf, close, contains, extentFor, footprint, type Grid, indexOfTrack, isRun, type Region, scopeAt, wellFormed } from "@lattice/model";
+import { bounds, caretAt, cells as cellsOf, close, contains, extentFor, footprint, type Grid, indexOfTrack, isRun, type Region, scopeAt, wellFormed } from "@lattice/model";
 import { idleOf, OCCUPANTS, type Stroke } from "../occupants/index.ts";
 import { type Facts, hostedBy } from "../runtime/facts.ts";
 import { invalid, reach } from "../session/react.ts";
@@ -94,6 +94,9 @@ export interface Scene {
   lines: { region: Region; hue: number | null; c: number | null; r: number | null; cursor: { x: number; y: number } | null } | null;
   /** A resize being proposed: bounds after, the cells made or unmade, whether it may. */
   growing: (Region & { ok: boolean; bands: readonly Region[] }) | null;
+  /** The caret of the run being typed: which line of the run, and how many characters
+   *  along it. Drawn by the canvas at the font's height, blinking. */
+  caret: { ci: number; ri: number; style: "title" | "note"; line: number; column: number; hue: number | null } | null;
   /** What the pointer is over, as the cursor should say it: a grab inside the selection, a
    *  resize on a line, else nothing special. */
   cursor: "default" | "grab" | "grabbing" | "col-resize" | "row-resize" | "nwse-resize" | "nesw-resize" | "move";
@@ -143,6 +146,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
 
   const cells = new Map<string, Cell>();
   const plates: Plate[] = [];
+  let caret: Scene["caret"] = null;
   for (const scope of grid.scopes) {
     const b = placedScope(scope);
     plates.push({ id: scope.id, name: scope.name, hue: scope.hue, c0: b.ci, c1: b.ci + b.span - 1, r0: b.ri, r1: b.ri + b.rows - 1 });
@@ -158,6 +162,10 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
     // A run being typed reaches as far as its draft does, so its cells open up as the
     // words do; anything else owns what it stores.
     const extent: Region = { ...(edited && isRun(tile) ? extentFor(grid, tile, editing!.draft) : footprint(grid, tile)), ci, ri };
+    if (edited && isRun(tile)) {
+      const { line, column } = caretAt(tile.style, editing!.draft, extent.span, editing!.caret);
+      caret = { ci, ri, style: tile.style, line, column, hue: hueAt(tile) };
+    }
     const hue = hueAt(tile);
     tiles.set(tile.id, { ...extent, hue });
     if (!edited) {
@@ -302,6 +310,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
     pointing: pointedScope,
     lines,
     growing,
+    caret,
     cursor: cursorOf(session, line, resizable, within),
     selectedScope: selectedScope?.id ?? null,
     resizable,
@@ -338,7 +347,8 @@ function cursorOf(
 }
 
 /** Whether anything in a scene is animating: crawling dashes, flowing chevrons, a preview. */
-export const animating = (scene: Scene): boolean => scene.focus !== null || scene.proposal !== null || scene.extending !== null;
+export const animating = (scene: Scene): boolean =>
+  scene.focus !== null || scene.proposal !== null || scene.extending !== null || scene.caret !== null;
 
 /** The mode the key panel describes: what the grid is in the middle of. */
 export type Mode = "idle" | "selected" | "scope" | "invalid" | "moving" | "menu" | "list" | "typing";

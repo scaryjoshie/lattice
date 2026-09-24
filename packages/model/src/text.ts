@@ -51,27 +51,46 @@ export function spanFor(style: TextStyle, text: string): number {
 }
 
 /**
- * Break a run into lines that fit the width it has been given, in cells. A line break the
- * writer typed is kept: each paragraph wraps on its own, and an empty one is an empty line.
+ * Where each line of a run begins and ends in its text, at a width in cells. Greedy by
+ * words, as the browser wraps: a word that would overflow starts the next line, and the
+ * spaces after a word stay on its line and may hang past the edge. A line break the
+ * writer typed always breaks. Every character belongs to exactly one line, so a caret's
+ * place in the text is a place on a line.
  */
-export function wrap(style: TextStyle, text: string, span: number): string[] {
+export function lines(style: TextStyle, text: string, span: number): { start: number; end: number }[] {
   const m = METRICS[style];
   const room = fits(m.size, span - m.inset * 2);
-  const lines: string[] = [];
+  const out: { start: number; end: number }[] = [];
+  let at = 0;
   for (const paragraph of text.split("\n")) {
-    let line = "";
-    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-      const next = line ? `${line} ${word}` : word;
-      if (line && next.length > room) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = next;
+    let start = at;
+    let shown = 0;
+    for (const token of paragraph.match(/\s+|\S+\s*/g) ?? []) {
+      const visible = token.trimEnd().length;
+      if (shown > 0 && shown + visible > room && visible > 0) {
+        out.push({ start, end: at });
+        start = at;
+        shown = 0;
       }
+      at += token.length;
+      shown += token.length;
     }
-    lines.push(line);
+    out.push({ start, end: at });
+    at += 1;
   }
-  return lines;
+  return out;
+}
+
+/** The lines themselves. */
+export const wrap = (style: TextStyle, text: string, span: number): string[] =>
+  lines(style, text, span).map(({ start, end }) => text.slice(start, end));
+
+/** The line and column a caret at `index` sits on. */
+export function caretAt(style: TextStyle, text: string, span: number, index: number): { line: number; column: number } {
+  const all = lines(style, text, span);
+  let line = 0;
+  for (let i = 0; i < all.length; i++) if (all[i]!.start <= index) line = i;
+  return { line, column: index - all[line]!.start };
 }
 
 /** How many lines a run's text takes at a width in cells. */

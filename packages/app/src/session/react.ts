@@ -34,7 +34,7 @@ export type Input =
   /** What the overlays report back. */
   | { type: "choose"; choice: Choice }
   | { type: "act"; action: "rename" | "delete" }
-  | { type: "draft"; text: string }
+  | { type: "draft"; text: string; caret: number }
   | { type: "done" }
   | { type: "dismiss" }
   | { type: "leaving" }
@@ -125,7 +125,7 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       const { choice } = input;
       if (choice.family === "text") {
         const place: Command = { kind: "place", ci, ri, what: { family: "text", style: choice.style }, id };
-        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: "" })];
+        return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: "", caret: 0 })];
       }
       // A host is placed with the surface its occupant needs; the occupant is the
       // runtime's to start, unless it is what that surface shows anyway.
@@ -140,12 +140,12 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       if (input.action === "delete") return [overlay(null), { kind: "remove", id }, select(null)];
       const tile = grid.tiles.find((t) => t.id === id);
       return tile && tile.family === "text"
-        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: tile.text })]
+        ? [point(null), select({ tile: id }), overlay({ kind: "edit", id, draft: tile.text, caret: tile.text.length })]
         : [overlay({ kind: "name", id })];
     }
     case "draft":
-      return session.overlay?.kind === "edit" && session.overlay.draft !== input.text
-        ? [overlay({ ...session.overlay, draft: input.text })]
+      return session.overlay?.kind === "edit" && (session.overlay.draft !== input.text || session.overlay.caret !== input.caret)
+        ? [overlay({ ...session.overlay, draft: input.text, caret: input.caret })]
         : [];
     case "done":
     case "dismiss":

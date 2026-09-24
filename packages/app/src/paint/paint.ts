@@ -1,4 +1,4 @@
-import { cells as cellsOf, clip, contains, fits, METRICS, NAME, type Region, wrap } from "@lattice/model";
+import { ADVANCE, cells as cellsOf, clip, contains, fits, METRICS, NAME, type Region, wrap } from "@lattice/model";
 import { CELL, visible, worldX } from "../scene/geometry.ts";
 import { MARK, MARK_UNITS, path } from "../scene/marks.ts";
 import { FONT, fontOf, nameFont } from "./measure.ts";
@@ -58,6 +58,10 @@ const LANE = 11;
 const NAME_FROM = 34;
 const NAME_FADE = 14;
 
+/** The caret's width in screen pixels, and how many counter ticks it stays on or off. */
+const CARET = 2;
+const CARET_BLINK = 20;
+
 /** Corner radius as a fraction of the cell, so the turn scales with the grid. */
 const LINK_TURN = 0.3;
 
@@ -113,7 +117,7 @@ function mark(
 
 export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): void {
   const {
-    camera, width, height, dpr, plates, cells, occupied, texts, focus, about, selected, proposal, hover, shift, extending, handles, pointing, lines, growing,
+    camera, width, height, dpr, plates, cells, occupied, texts, focus, about, selected, proposal, hover, shift, extending, handles, pointing, lines, growing, caret,
   } = scene;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const palette = theme();
@@ -167,7 +171,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     const shown = Math.max(1, Math.floor((box.h - size * m.pad) / leading));
     for (let i = 0; i < Math.min(lines.length, shown); i++) {
       const last = i === shown - 1 && lines.length > shown;
-      const line = lines[i] as string;
+      const line = (lines[i] as string).trimEnd();
       ctx.fillText(
         clip(last ? `${line} ${lines[i + 1] ?? ""}` : line, room),
         x + inset,
@@ -288,6 +292,20 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     if (run.ci + run.span - 1 < c0 || run.ci > c1) continue;
     if (run.ri + run.rows - 1 < r0 || run.ri > r1) continue;
     drawRun(run, run);
+  }
+
+  /*
+   * The caret of the run being typed: a bar at the font's height, where the input says its
+   * caret is, blinking on the shared counter. The input's own caret is hidden, since a
+   * textarea's is as tall as its line box, a whole cell for a title.
+   */
+  if (caret && rule > 0 && Math.floor(dash / CARET_BLINK) % 2 === 0) {
+    const m = METRICS[caret.style];
+    const cx = sx(caret.ci) + size * m.inset + caret.column * size * m.size * ADVANCE;
+    const cy = sy(caret.ri) + size * m.pad + size * m.leading * (caret.line + 0.5);
+    const half = size * m.size * 0.62;
+    ctx.fillStyle = hue(caret.hue).ink;
+    ctx.fillRect(Math.round(cx), Math.round(cy - half), CARET, Math.round(half * 2));
   }
 
   /*
