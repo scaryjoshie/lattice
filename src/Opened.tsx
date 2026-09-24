@@ -22,12 +22,15 @@ export function Opened({
   name,
   from,
   to,
+  onLeave,
   onClose,
 }: {
   kind: OccupantKind;
   name?: string;
   from: Rect;
   to: Rect;
+  /** Closing has begun: the panel is on its way back. */
+  onLeave(): void;
   onClose(): void;
 }) {
   const [arrived, setArrived] = useState(false);
@@ -53,6 +56,7 @@ export function Opened({
     const el = panel.current;
     if (!el || leaving) return;
     setLeaving(true);
+    onLeave();
     el.style.transform = start;
     el.addEventListener("transitionend", onClose, { once: true });
   };

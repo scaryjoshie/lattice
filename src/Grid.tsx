@@ -233,7 +233,7 @@ export function Grid() {
   /** The tile being renamed, if any. */
   const [naming, setNaming] = useState<string | null>(null);
   /** An occupant opened: which, and the rectangles it scales between. */
-  const [opened, setOpened] = useState<{ id: string; from: Rect; to: Rect } | null>(null);
+  const [opened, setOpened] = useState<{ id: string; from: Rect; to: Rect; leaving?: boolean } | null>(null);
   /** Right-click on something that is already there. */
   const [acting, setActing] = useState<{ x: number; y: number; id: string } | null>(null);
   /**
@@ -1156,10 +1156,11 @@ export function Grid() {
           name={gridRef.current.tiles.find((x) => x.id === opened.id)?.name}
           from={opened.from}
           to={opened.to}
+          onLeave={() => setOpened((o) => (o ? { ...o, leaving: true } : o))}
           onClose={() => setOpened(null)}
         />
       )}
-      <Keys mode={mode} hidden={opened !== null} />
+      <Keys mode={mode} hidden={opened !== null && !opened.leaving} />
       {menu && (
         <Menu
           x={menu.x}
