@@ -1,6 +1,6 @@
 import { type Command, propose } from "../model/command.ts";
 import { bounds, close, footprint, type Grid, nextId, tileAt, type TextStyle, wellFormed } from "../model/grid.ts";
-import type { ProviderId } from "../providers/index.ts";
+import { idleOf, OCCUPANTS, type OccupantId } from "../occupants/index.ts";
 import type { RuntimeCommand } from "../runtime/facts.ts";
 import { contains, type Region } from "../model/region.ts";
 import type { Gesture, Selection, Session, SessionCommand } from "./session.ts";
@@ -44,11 +44,8 @@ export type Input =
 
 export type Effect = Command | SessionCommand | RuntimeCommand | { kind: "undo" } | { kind: "redo" };
 
-/** What the add menu offers: a family to place, and for a terminal, what to start in it. */
-export type Choice =
-  | { family: "text"; style: TextStyle }
-  | { family: "browser" }
-  | { family: "terminal"; provider?: ProviderId };
+/** What the add menu offers: text in a style, or an occupant, which brings its own surface. */
+export type Choice = { family: "text"; style: TextStyle } | { family: "host"; occupant: OccupantId };
 
 /** The smallest region holding both a region and a cell: what shift-click extends to. */
 export function reach(r: Region, [ci, ri]: readonly [number, number]): Region {
@@ -134,12 +131,15 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       // that follow can refer to it before it exists.
       const id = nextId("t");
       const { choice } = input;
-      const place: Command = { kind: "place", ci, ri, family: choice.family, style: choice.family === "text" ? choice.style : undefined, id };
       if (choice.family === "text") {
+        const place: Command = { kind: "place", ci, ri, what: { family: "text", style: choice.style }, id };
         return [overlay(null), place, point(null), select({ tile: id }), overlay({ kind: "edit", id, span: 1, rows: 1 })];
       }
-      // A terminal is placed as a terminal; an agent in it is the runtime's to start.
-      const start: Effect[] = choice.family === "terminal" && choice.provider ? [{ kind: "start", host: id, provider: choice.provider }] : [];
+      // A host is placed with the surface its occupant needs; the occupant is the
+      // runtime's to start, unless it is what that surface shows anyway.
+      const { surface } = OCCUPANTS[choice.occupant];
+      const place: Command = { kind: "place", ci, ri, what: { family: "host", surface }, id };
+      const start: Effect[] = choice.occupant === idleOf(surface) ? [] : [{ kind: "start", host: id, occupant: choice.occupant }];
       return [overlay(null), place, ...start];
     }
     case "act": {

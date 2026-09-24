@@ -1,13 +1,12 @@
 import { type Group, Popup } from "./Popup.tsx";
 import type { TextStyle } from "../model/grid.ts";
-import { PROVIDERS, type Stroke } from "../providers/index.ts";
-import { BROWSER, SHELL } from "../scene/marks.ts";
+import { OCCUPANTS, type Stroke } from "../occupants/index.ts";
 import type { Choice } from "../session/react.ts";
 
 /**
- * What can go in a cell, grouped by what a thing is rather than by what it does. Text,
- * the terminal and the browser are families of the grid; the agents come from the
- * provider registry, so adding a provider adds a row here without this file changing.
+ * What can go in a cell, grouped by what a thing is rather than by what it does. Text is
+ * the grid's; everything else is an occupant from the registry, grouped by whether it is
+ * an agent, so adding one adds a row here without this file changing.
  *
  * Typing filters. The input is there from the moment the menu opens so that keystrokes are
  * never lost, but stays invisible until there is something to show — the menu is a list
@@ -20,6 +19,10 @@ interface Item {
   mark: readonly Stroke[] | TextStyle;
 }
 
+const occupants = Object.values(OCCUPANTS);
+const offer = (agent: boolean): Item[] =>
+  occupants.filter((o) => o.agent === agent).map((o) => ({ label: o.label, choice: { family: "host", occupant: o.id }, mark: o.mark }));
+
 const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
   {
     heading: "text",
@@ -28,17 +31,8 @@ const GROUPS: readonly { heading: string; items: readonly Item[] }[] = [
       { label: "note", choice: { family: "text", style: "note" }, mark: "note" },
     ],
   },
-  {
-    heading: "utilities",
-    items: [
-      { label: "terminal", choice: { family: "terminal" }, mark: SHELL },
-      { label: "browser", choice: { family: "browser" }, mark: BROWSER },
-    ],
-  },
-  {
-    heading: "agents",
-    items: Object.values(PROVIDERS).map((p) => ({ label: p.label, choice: { family: "terminal", provider: p.id } as const, mark: p.mark })),
-  },
+  { heading: "utilities", items: offer(false) },
+  { heading: "agents", items: offer(true) },
 ];
 
 export function Menu({

@@ -1,5 +1,5 @@
 import { type Grid, type Link, nextId, type Scope, type Tile } from "../model/grid.ts";
-import type { ProviderId } from "../providers/index.ts";
+import type { OccupantId } from "../occupants/index.ts";
 import type { Facts } from "../runtime/facts.ts";
 
 /**
@@ -29,7 +29,7 @@ export function seed(): { grid: Grid; facts: Facts } {
   ];
 
 
-  const cells: [number, number, ProviderId | null][] = [
+  const cells: [number, number, OccupantId | null][] = [
     [3, 2, "claude"], [3, 3, "codex"], [2, 3, "claude"],
     [12, 2, "codex"], [13, 2, "claude"],
     [4, 7, "claude"], [5, 7, "claude"], [5, 8, "codex"],
@@ -49,17 +49,18 @@ export function seed(): { grid: Grid; facts: Facts } {
     })),
     ...cells.map(([c, r]) => ({
       id: nextId("t"),
-      family: "terminal" as const,
+      family: "host" as const,
+      surface: "terminal",
       columnId: col(c),
       rowId: row(r),
     })),
   ];
-  const terminals = tiles.filter((x) => x.family === "terminal");
+  const terminals = tiles.filter((x) => x.family === "host");
   const agent = (n: number) => terminals[n]?.id ?? "";
-  // What the mock says each terminal is hosting. A terminal showing its shell has no entry.
-  const hosting: Record<string, ProviderId> = {};
-  cells.forEach(([, , provider], n) => {
-    if (provider) hosting[agent(n)] = provider;
+  // What the mock says each host is holding. A terminal showing its shell has no entry.
+  const hosting: Record<string, OccupantId> = {};
+  cells.forEach(([, , occupant], n) => {
+    if (occupant) hosting[agent(n)] = occupant;
   });
   const links: Link[] = [
     { from: agent(0), to: agent(3) },

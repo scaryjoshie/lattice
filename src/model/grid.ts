@@ -21,12 +21,12 @@ export interface Track {
 /**
  * Two families, and they are not variants of each other.
  *
- * A *terminal* is a place: it fills one cell, and what runs in it is a fact the runtime
- * observes, never a field here. A *browser* is a view, one cell too. A *run* is text
+ * A *host* is a place: one cell, holding one thing. What it holds is a fact the runtime
+ * observes, never a field here. Its surface — a terminal, a webview — is what it was made
+ * for and what it keeps, stored as a name the model never branches on. A *run* is text
  * written on the canvas: no process, and a size decided by what it says rather than by
  * the grid. A title grows sideways; a note is a block the words wrap inside. Those are
- * different geometries, which is the real reason text is its own record rather than an
- * occupant with extra fields.
+ * different geometries, which is the real reason text is its own record.
  */
 export type TextStyle = "title" | "note";
 export type Family = Tile["family"];
@@ -37,14 +37,10 @@ interface Placed {
   readonly rowId: string;
 }
 
-export interface Terminal extends Placed {
-  readonly family: "terminal";
+export interface Host extends Placed {
+  readonly family: "host";
+  readonly surface: string;
   /** What this one is called, if named. */
-  readonly name?: string;
-}
-
-export interface Browser extends Placed {
-  readonly family: "browser";
   readonly name?: string;
 }
 
@@ -63,7 +59,7 @@ export interface Run extends Placed {
   readonly cap?: { readonly span?: number; readonly rows?: number };
 }
 
-export type Tile = Terminal | Browser | Run;
+export type Tile = Host | Run;
 
 export const isRun = (tile: Tile): tile is Run => tile.family === "text";
 
@@ -156,15 +152,14 @@ export function addTile(
   grid: Grid,
   columnId: string,
   rowId: string,
-  family: Family,
+  what: { family: "text"; style?: TextStyle } | { family: "host"; surface: string },
   id = nextId("t"),
-  style?: TextStyle,
 ): Grid {
   if (tileAt(grid, columnId, rowId)) return grid;
   const tile: Tile =
-    family === "text"
-      ? { id, family, columnId, rowId, style: style ?? "title", text: "", span: 1, rows: 1 }
-      : { id, family, columnId, rowId };
+    what.family === "text"
+      ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "", span: 1, rows: 1 }
+      : { id, family: "host", columnId, rowId, surface: what.surface };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
 

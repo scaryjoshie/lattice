@@ -40,7 +40,7 @@ function grid(
     rows,
     tiles: tiles.map(([id, ci, ri, span, rows_]): Tile =>
       span === 1 && rows_ === 1
-        ? { id, family: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
+        ? { id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
         : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, span, rows: rows_ },
     ),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
