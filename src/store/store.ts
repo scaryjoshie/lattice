@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { apply, type Command, propose, type Verdict } from "../model/command.ts";
-import { type Grid, indexOfTrack, rowsFor, seed } from "../model/grid.ts";
+import { type Grid, indexOfTrack, rowsFor } from "../model/grid.ts";
+import { seed } from "../mock/seed.ts";
 import { cellsFor, linesFor, spanFor } from "../paint/measure.ts";
 
 /**

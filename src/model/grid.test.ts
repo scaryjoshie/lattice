@@ -10,10 +10,10 @@ import {
   proposeMove,
   proposeResize,
   push,
-  seed,
   type Tile,
   wellFormed,
 } from "./grid.ts";
+import { seed } from "../mock/seed.ts";
 import { cells, contains, covers, overlaps, type Region } from "./region.ts";
 
 /**

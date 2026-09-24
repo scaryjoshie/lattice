@@ -8,7 +8,7 @@ import { join, relative, resolve } from "node:path";
  * folder not listed fails, so a new file has to be placed before it builds. `main.tsx` at
  * the root may import anything.
  */
-const LAYERS = ["model", "store", "session", "scene", "paint", "view"] as const;
+const LAYERS = ["model", "mock", "store", "session", "scene", "paint", "view"] as const;
 
 /** Debts: imports the rule forbids, allowed by name until the debt is paid. */
 const DEBTS: Record<string, readonly string[]> = {
