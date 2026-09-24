@@ -14,8 +14,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
    the same place have the same region.
 2. An item owns a region. A terminal or a browser owns one cell. A run owns the cells
    its words need. Nothing anywhere treats one cell as a special size. A terminal is a
-   place: which program it shows — a shell, Claude Code, Codex — is a fact the runtime
-   observes, not a property of the tile, and its mark is that program's.
+   place: which agent it hosts — Claude Code, Codex, or none, in which case it shows its
+   shell — is a fact the runtime observes, not a property of the tile, and its mark is
+   that agent's, or the shell's.
 3. A scope — a worktree — is a named region that items belong to. An item is in a scope
    when its region lies within the scope's bounds.
 4. A cell holds at most one item. The view enforces this; the model does not yet have
@@ -100,8 +101,8 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 33. A menu opens at the pointer, not at the cell it is about, and rings what it is about:
     the item, or for the add menu the cell.
 34. The add menu is grouped: text (title, note), utilities (terminal, browser), agents
-    (claude code, codex). The programs come from the descriptor table; a new provider is
-    one row there.
+    (claude code, codex). The agents come from the provider registry; a new provider is
+    one folder and one line there.
 35. Typing in the add menu filters it. The input exists from the moment it opens, so no
     keystroke is lost, and is invisible until it contains something. Group headings match
     the query as well as item labels.

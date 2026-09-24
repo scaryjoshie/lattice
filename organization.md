@@ -38,18 +38,21 @@ lattice/
 
 ## Providers
 
-4. A provider is one folder that defines everything about itself, in two halves. The
-   *descriptor* is data: its mark, its label, the controls it offers, how it is launched,
-   how it is resumed, how its session id is found. The *adapter* is code that does those
-   things against the real program. Both live in `providers/<name>/`.
-5. Descriptors are shared, so the client draws a mark and offers a control without knowing
-   how anything is launched. Adapters run only in the daemon. A registry, `providers/index.ts`,
+4. A provider is an agent: Claude Code, Codex, and not necessarily a program in a
+   terminal, since a browser agent would be one too. A shell is what a terminal shows when
+   it hosts no agent, and a browser is a family of the grid; neither is a provider.
+5. A provider is one folder that defines everything about itself, in two halves. The
+   *descriptor* is data: its mark, its label, the controls it offers. The *adapter* is
+   code: how it is started, resumed, identified, delivered to, and what hosts it. Both live
+   in `providers/<name>/`. A terminal is the first host, not the only one.
+6. Descriptors are shared, so the client draws a mark and offers a control without knowing
+   how anything is started. Adapters run only in the daemon. A registry, `providers/index.ts`,
    lists the folders and knows nothing about them but their names. Built as far as the
-   descriptors: `experiment-5/src/providers/{claude,codex,shell}`.
-6. Adding a provider is one folder and one descriptor. Nothing in `model`, `session` or
-   `paint` changes. That is the test that the tile's `kind` has left the model: today
-   adding one touches all three, which [model.md](model.md) forbids.
-7. Two model changes came before the daemon, because its protocol is written against the
+   descriptors: `experiment-5/src/providers/{claude,codex}`.
+7. Adding a provider is one folder and one line in the registry. Nothing in `model`,
+   `session` or `paint` changes, which is the test that the tile's `kind` has left the
+   model.
+8. Two model changes came before the daemon, because its protocol is written against the
    model's shape, and both are done: the provider is off the tile and is a fact the
    runtime observes (`runtime/facts.ts`) looked up in the descriptor table
    (`providers/descriptors.ts`); and a run is its own record beside terminals and
@@ -57,9 +60,9 @@ lattice/
 
 ## Preferences
 
-8. A third persisted value beside the document and the session. Theme, the key panel,
+9. A third persisted value beside the document and the session. Theme, the key panel,
    the default location for new worktrees, provider configuration such as paths and flags.
-9. Owned by the daemon's store, changed by their own commands, not undoable, pushed to the
+10. Owned by the daemon's store, changed by their own commands, not undoable, pushed to the
    client the way the grid is. Not in the session, because they outlive the window; not in
    the document, because they are not about any project.
 
@@ -73,21 +76,21 @@ lattice/
   secrets/        one owner-only file per provider, replaced through a temporary file and rename
 ```
 
-10. The directory and every file in it are owner-only. That protects against other users
+11. The directory and every file in it are owner-only. That protects against other users
     on the machine and not against other programs running as you: the same trust model as
     `~/.modelbus` and every developer tool's dotfolder, and the right one for a local daemon.
-11. `daemon/core/paths.ts` is the only module that knows where `~/.lattice` is. Tests run
+12. `daemon/core/paths.ts` is the only module that knows where `~/.lattice` is. Tests run
     against a temporary directory by overriding one value.
-12. `daemon/core/secrets.ts` is the only module that reads or writes `secrets/`. A provider
+13. `daemon/core/secrets.ts` is the only module that reads or writes `secrets/`. A provider
     asks it for its own secret and cannot reach the database.
-13. The socket needs no token. A client that can open an owner-only socket is the owner.
+14. The socket needs no token. A client that can open an owner-only socket is the owner.
 
 ## Tokens
 
-14. Lattice runs the providers' own programs and never calls their APIs, so it holds no
+15. Lattice runs the providers' own programs and never calls their APIs, so it holds no
     API keys. Claude Code and Codex keep their own logins.
-15. What it may hold: a per-provider delivery token, if pushing text into a running Claude
+16. What it may hold: a per-provider delivery token, if pushing text into a running Claude
     uses its inbox mechanism as modelbus does. In `secrets/`, owned by that provider's
     adapter.
-16. Cloud or sync credentials, if they ever exist, go in the macOS Keychain through
+17. Cloud or sync credentials, if they ever exist, go in the macOS Keychain through
     Tauri's plugin, not in a file. Not now.
