@@ -1,0 +1,164 @@
+:root {
+  --bg: #0a0a0c;
+  --pane: #0e0e12;
+  --border: #22222b;
+  --border-hover: #3c3c4a;
+  --ring: rgb(120 120 150 / 12%);
+  --text: #e4e4e8;
+  --dim: #6f6f7c;
+  --busy: #7dd88f;
+  --idle: #45454f;
+  --dead: #d8737d;
+  --radius: 20px;
+  --font: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.react-flow__background {
+  color: #17171d;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+
+/* Panes ------------------------------------------------------------------ */
+
+.pane {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--pane);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition:
+    border-color 140ms ease,
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.react-flow__node:hover .pane {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 10px var(--ring);
+}
+
+.pane[data-dead] {
+  opacity: 0.45;
+}
+
+.pane-watermark {
+  width: 72px;
+  height: 72px;
+  color: #1d1d25;
+}
+
+.pane-label {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--dim);
+  letter-spacing: -0.01em;
+  pointer-events: none;
+}
+
+/* Expanded --------------------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(5 5 7 / 62%);
+  backdrop-filter: blur(3px);
+  z-index: 40;
+}
+
+.pane.expanded {
+  position: fixed;
+  z-index: 41;
+  border-color: var(--border-hover);
+  box-shadow: 0 40px 120px rgb(0 0 0 / 65%);
+  cursor: default;
+  /* The whole pane is one composited layer, so scaling it stays cheap. */
+  will-change: transform;
+}
+
+.pane-screen {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.term {
+  line-height: 0;
+}
+
+/* The grid rarely divides the box exactly; the remainder letterboxes evenly. */
+.pane.expanded .xterm {
+  padding: 0;
+}
+
+.offline {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: var(--dead);
+  z-index: 50;
+}
+
+/* Menu ------------------------------------------------------------------- */
+
+.menu {
+  min-width: 200px;
+  padding: 6px;
+  background: #101015;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 55%);
+  z-index: 60;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  cursor: pointer;
+  outline: none;
+}
+
+.menu-item[data-highlighted] {
+  background: #1c1c24;
+}
+
+.menu-mark {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
