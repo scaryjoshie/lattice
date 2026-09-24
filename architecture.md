@@ -15,7 +15,7 @@ Dependencies point down. Nothing lower knows what is above it.
 |---|---|---|
 | model | The grid as a value. `propose` returns a verdict with every move; `apply` takes the verdict whole | Exists: `model/grid.ts`, `model/region.ts`. Sound |
 | commands | Every document change as data: move, resize, place, remove, set text, set name | Exists: `model/command.ts`; the store is `propose` and `run`. Session commands (select, sweep, open) not yet |
-| history | The log of document commands, with undo and redo | Exists: snapshots in `store/store.ts`, Cmd-Z. Selection not yet restored |
+| history | The log of document commands, with undo and redo | Exists: snapshots in `store/store.ts`, Cmd-Z, selection restored with each |
 | interaction | Selection, pointing, gesture, overlay, opened. One pure step function | Exists: `session/session.ts` is the value and its reducer, `session/react.ts` the step function, tested from Bun. Held in `store/session.ts` outside React |
 | scene | A pure projection of model, interaction and camera | Exists: `scene/scene.ts`, `sceneOf(grid, session, view)`. Computed per paint |
 | paint | Draws a scene and remembers nothing | Exists: `paint/paint.ts`. Sound. Called paint rather than render because render already means React's re-render in this codebase |
@@ -163,4 +163,4 @@ and pointer ownership as a stated precedence. Checked against both repositories 
   answer when the daemon exists.
 - The exact shapes above are now the ones in `session/`; `Target` has no `item` or
   `overlay` kind, since the cell's tile is derived and overlays claim the pointer by DOM
-  membership. Selection is not yet restored on undo.
+  membership.

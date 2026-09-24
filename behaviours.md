@@ -320,9 +320,10 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
      it was before each one.
 111. Cmd-Z restores the grid as it was before the last command. Cmd-Shift-Z restores what
      the last undo replaced. A new command drops what could have been redone.
-112. Undo and redo clear the selection, since it may name something the restored grid
-     does not have. The camera is not undone. Neither key does anything while typing or
-     while a tile is open.
+112. Undo restores the selection the change was made with, along with the grid; redo
+     restores what was selected when the change was undone. Selecting on its own is not
+     a step. The camera is not undone. Neither key does anything while typing or while a
+     tile is open.
 113. The key panel lists undo when nothing is selected.
 
 ## Gaps and contradictions
