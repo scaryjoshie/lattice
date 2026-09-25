@@ -128,3 +128,8 @@ choice wins, because it was made about something real.
     Any rectangle: squares were considered and not required, since nothing yet depends on
     the shape. Decided 24 September 2026; supersedes the one-cell tile in
     [grid.md](grid.md).
+65. A host's outline is drawn on the gridline segments around it, once each, rather than
+    inside its cells. An outline inside the cells doubled wherever two hosts touched. A
+    frame set in from the edge was tried and dropped: at a fixed inset it risked reading
+    wrong across zoom, and at an inset that scaled it became a box floating inside the
+    tile when zoomed in. The shared edge is the gridline, so it has neither problem.

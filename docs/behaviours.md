@@ -216,7 +216,10 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
 72. A host or a run resizes by its edges through the same operation, and has no interior
     lines. Any rectangle, not only squares. A host's mark sits in its middle and its
-    interior is unruled, as a run's is. Inward shrinks it, and a run's words reflow; outward grows it and pushes, and is refused if the run would leave or
+    interior is unruled, as a run's is. A host is outlined faintly on the gridlines
+    around it, in its scope's edge hue at about a third of the strength, so neighbours read
+    as two things. An edge two hosts share is one segment and is drawn once, so every
+    outline is one gridline thick. Always weaker than a hover or selection ring. Inward shrinks it, and a run's words reflow; outward grows it and pushes, and is refused if the run would leave or
     enter a scope. Inside a scope it pushes its neighbours there one by one, as an edge
     dragged inward does (68), and is refused when the run or anything it pushes would
     have to leave the scope. The size the drag leaves is the run's size.

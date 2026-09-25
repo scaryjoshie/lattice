@@ -28,6 +28,10 @@ const FADE_TO = 24;
 /** Screen pixels, independent of zoom. */
 const RULE = 1;
 const FOCUS_EDGE = 2.5;
+/** A host's own outline: the ruling's width, in its edge hue at this strength, so it is
+ *  always weaker than a hover or selection ring, which is that hue at full strength and
+ *  more than twice as wide. */
+const RIM = 0.35;
 /** The arm of a selection's corner bracket, in screen pixels. */
 const CORNER = 10;
 /** A lit gridline's weight, the grip's thickness and length, and the hatch spacing of new
@@ -204,6 +208,52 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.fillRect(x, y, w, h);
     mark(ctx, spot, x, y, size);
   };
+  /*
+   * A host's outline is the gridline segments around it, drawn in its edge hue, once
+   * each. An edge two hosts share is one segment, so it is drawn once and is exactly as
+   * thick as every other edge. Drawn after the hosts it borders are painted.
+   */
+  const rims = (spots: Iterable<Occupant>) => {
+    if (rule <= 0) return;
+    const seen = new Set<string>();
+    const paths = new Map<number | null, Path2D>();
+    const add = (key: string, spot: Occupant, x0: number, y0: number, x1: number, y1: number) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      const path = paths.get(spot.hue) ?? new Path2D();
+      paths.set(spot.hue, path);
+      path.moveTo(x0, y0);
+      path.lineTo(x1, y1);
+    };
+    for (const spot of spots) {
+      for (let r = spot.ri; r < spot.ri + spot.rows; r++) {
+        for (const c of [spot.ci, spot.ci + spot.span]) add(`v${c},${r}`, spot, snap(sx(c)), sy(r), snap(sx(c)), sy(r) + size);
+      }
+      for (let c = spot.ci; c < spot.ci + spot.span; c++) {
+        for (const r of [spot.ri, spot.ri + spot.rows]) add(`h${c},${r}`, spot, sx(c), snap(sy(r)), sx(c) + size, snap(sy(r)));
+      }
+    }
+    ctx.save();
+    ctx.globalAlpha = RIM * rule;
+    ctx.lineWidth = RULE;
+    for (const [h, path] of paths) {
+      ctx.strokeStyle = hue(h).edge;
+      ctx.stroke(path);
+    }
+    ctx.restore();
+  };
+  /** Repaint regions over whatever was drawn, hosts with their outlines. */
+  const repaint = (regions: readonly Region[]) => {
+    const spots = new Set<Occupant>();
+    for (const r of regions) {
+      for (const [ci, ri] of cellsOf(r)) {
+        paintCell(ci, ri);
+        const spot = spotAt.get(`${ci},${ri}`);
+        if (spot) spots.add(spot);
+      }
+    }
+    rims(spots);
+  };
   const paintCell = (ci: number, ri: number) => {
     const spot = spotAt.get(`${ci},${ri}`);
     if (spot) {
@@ -304,10 +354,9 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   // Occupied cells after the ruling, so it does not cross them.
-  for (const spot of occupied) {
-    if (spot.ci + spot.span - 1 < c0 || spot.ci > c1 || spot.ri + spot.rows - 1 < r0 || spot.ri > r1) continue;
-    paintSpot(spot);
-  }
+  const shown = occupied.filter((spot) => !(spot.ci + spot.span - 1 < c0 || spot.ci > c1 || spot.ri + spot.rows - 1 < r0 || spot.ri > r1));
+  for (const spot of shown) paintSpot(spot);
+  rims(shown);
 
   // Text, each run whole. A run under a veil or inside a proposal is redrawn per cell by
   // paintCell, clipped to that cell, so it composes with whatever is repainted around it.
@@ -344,7 +393,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.fillRect(0, 0, width, height);
 
     const h = hue(focus.hue);
-    for (const r of [...focus.partners, focus]) for (const [ci, ri] of cellsOf(r)) paintCell(ci, ri);
+    repaint([...focus.partners, focus]);
 
     /*
      * Lines run over the tiles rather than stopping at their edges, and end in a dot at
@@ -473,9 +522,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
      * veil happened to restore, which lit a cell only when it was a link partner of the
      * dragged agent and so worked or did not depending on something unrelated.
      */
-    for (const r of [proposal.from, proposal.to]) {
-      for (const [ci, ri] of cellsOf(r)) paintCell(ci, ri);
-    }
+    repaint([proposal.from, proposal.to]);
 
     const [ax, ay] = centre(proposal.from);
     const [bx, by] = centre(proposal.to);
