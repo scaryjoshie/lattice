@@ -7,6 +7,7 @@ import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
 import type { Selection } from "../session/session.ts";
 import type { Target } from "../session/target.ts";
+import { usePreferences } from "../store/preferences.ts";
 import { useRuntime } from "../store/runtime.ts";
 import { useSession } from "../store/session.ts";
 import { useGrid } from "../store/store.ts";
@@ -17,6 +18,7 @@ import { Menu, TileMenu } from "./Menu.tsx";
 import { Namer } from "./Namer.tsx";
 import { Opened, type Rect } from "./Opened.tsx";
 import { claimed } from "./pointer.ts";
+import { Toolbar } from "./Toolbar.tsx";
 
 /**
  * The view. Two layers over one camera: the canvas paints every cell, and a transparent
@@ -41,8 +43,10 @@ const HANDLE_HIT = 24;
 /** A press that travels further than this is a drag, never a click. */
 const CLICK = 3;
 
-export function Grid() {
+export function Grid({ onSettings }: { onSettings(): void }) {
   const viewport = useRef<HTMLDivElement>(null);
+  /** The toolbar's zoom, written by the camera as it moves. */
+  const zoom = useRef<HTMLSpanElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   /** Where the pointer last was, in client pixels: for the grip, and to re-point after a menu. */
@@ -56,6 +60,7 @@ export function Grid() {
   // pointer speed and never pass through a render.
   const grid = useGrid((s) => s.grid);
   const connected = useGrid((s) => s.connected);
+  const showKeys = usePreferences((s) => s.preferences.keys);
   const overlay = useSession((s) => s.session.overlay);
   const opened = useSession((s) => s.session.opened);
   const mode = useSession((s) => modeOf(grid, s.session));
@@ -109,6 +114,7 @@ export function Grid() {
   const schedule = useCallback(
     (next: Camera) => {
       latest.current = next;
+      if (zoom.current) zoom.current.textContent = `${Math.round(next.k * 100)}%`;
       if (queued.current) return;
       const frame = () => {
         queued.current = 0;
@@ -133,7 +139,7 @@ export function Grid() {
 
   // While an overlay or an opened tile is up the camera is still, and a press the grid
   // holds is not a pan. Every gesture is a held press.
-  const { camera, shift: shiftView } = useCamera(viewport, schedule, () => {
+  const { camera, shift: shiftView, glide } = useCamera(viewport, schedule, () => {
     const s = useSession.getState().session;
     return s.overlay !== null || s.opened !== null || s.gesture !== null;
   });
@@ -404,7 +410,30 @@ export function Grid() {
           onClose={() => send({ type: "closed" })}
         />
       )}
-      <Keys mode={mode} hidden={opened !== null && !opened.leaving} offline={!connected} />
+      <Keys mode={mode} hidden={!showKeys || (opened !== null && !opened.leaving)} offline={!connected} />
+      <Toolbar
+        zoom={zoom}
+        hidden={opened !== null && !opened.leaving}
+        onUndo={() => send({ type: "key", key: "Undo", down: true })}
+        onRedo={() => send({ type: "key", key: "Redo", down: true })}
+        onHome={() => {
+          // The middle of the grid, at the size it is drawn.
+          const host = viewport.current;
+          if (!host) return;
+          const { grid } = useGrid.getState();
+          glide({ x: host.clientWidth / 2 - worldX(grid.columns.length) / 2, y: host.clientHeight / 2 - worldX(grid.rows.length) / 2, k: 1 });
+        }}
+        onActualSize={() => {
+          // Where the view is, at the size it is drawn: about the middle of the window.
+          const host = viewport.current;
+          if (!host) return;
+          const { x, y, k } = camera.current;
+          const cx = host.clientWidth / 2;
+          const cy = host.clientHeight / 2;
+          glide({ x: cx - (cx - x) / k, y: cy - (cy - y) / k, k: 1 });
+        }}
+        onSettings={onSettings}
+      />
       {overlay?.kind === "add" && (
         <Menu
           x={overlay.at.x}

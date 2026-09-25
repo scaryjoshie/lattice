@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { dark, followSystem, light, setTheme } from "../paint/theme.ts";
 import { client } from "../store/client.ts";
+import { usePreferences } from "../store/preferences.ts";
 import { Grid } from "./Grid.tsx";
-import { dark, followSystem, light, setTheme, theme } from "../paint/theme.ts";
+import { Settings } from "./Settings.tsx";
 
 export function App() {
   // The daemon is where the document is. Connect once, for the life of the app.
@@ -10,21 +12,21 @@ export function App() {
     return () => client.stop();
   }, []);
 
+  // The theme is a setting: the system's, or one chosen.
+  const choice = usePreferences((s) => s.preferences.theme);
   useEffect(() => {
-    const stop = followSystem();
-    // `t` flips it, so both can be seen without changing the system appearance.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "t" || e.metaKey || e.ctrlKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
-      setTheme(theme().name === "dark" ? light : dark);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      stop();
-      window.removeEventListener("keydown", onKey);
-    };
-  }, []);
+    if (choice === "system") return followSystem();
+    setTheme(choice === "dark" ? dark : light);
+  }, [choice]);
 
-  return <Grid />;
+  const [settings, setSettings] = useState(false);
+  const toggle = useCallback(() => setSettings((open) => !open), []);
+  const close = useCallback(() => setSettings(false), []);
+
+  return (
+    <>
+      <Grid onSettings={() => setSettings(true)} />
+      <Settings open={settings} onToggle={toggle} onClose={close} />
+    </>
+  );
 }

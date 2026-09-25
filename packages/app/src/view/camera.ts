@@ -18,6 +18,8 @@ import type { Camera } from "../scene/geometry.ts";
 
 const MIN_K = 0.25;
 const MAX_K = 3;
+/** How long a glide takes: the key panel's settling time. */
+const GLIDE_MS = 320;
 
 export function useCamera(
   ref: RefObject<HTMLElement | null>,
@@ -25,11 +27,17 @@ export function useCamera(
   /** Input the grid wants for itself: any while an overlay is open, and a press that
    *  starts inside a selection. */
   yields: (event: MouseEvent) => boolean,
-): { camera: RefObject<Camera>; shift: (dx: number, dy: number) => void } {
+): {
+  camera: RefObject<Camera>;
+  shift: (dx: number, dy: number) => void;
+  /** Glide to a camera, the way a drag would move it. */
+  glide: (to: Camera) => void;
+} {
   const camera = useRef<Camera>({ x: 0, y: 0, k: 1 });
   /** Move the view by a world distance, so that when the world's origin moves the picture
    *  does not. Set once the behaviour exists. */
   const shift = useRef<(dx: number, dy: number) => void>(() => {});
+  const glide = useRef<(to: Camera) => void>(() => {});
   const handler = useRef(onChange);
   handler.current = onChange;
   const claim = useRef(yields);
@@ -54,10 +62,28 @@ export function useCamera(
     sel.call(behaviour).on("dblclick.zoom", null);
     sel.call(behaviour.transform, zoomIdentity.translate(80, 80));
     shift.current = (dx, dy) => sel.call(behaviour.translateBy, dx, dy);
+    // Through the behaviour, frame by frame, so d3 keeps its own idea of the camera and a
+    // drag that starts halfway continues from where the glide has got to.
+    let frame = 0;
+    glide.current = (to) => {
+      cancelAnimationFrame(frame);
+      const from = camera.current;
+      const k = Math.min(MAX_K, Math.max(MIN_K, to.k));
+      const start = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / GLIDE_MS);
+        const e = 1 - (1 - t) ** 3;
+        const at = (a: number, b: number) => a + (b - a) * e;
+        sel.call(behaviour.transform, zoomIdentity.translate(at(from.x, to.x), at(from.y, to.y)).scale(at(from.k, k)));
+        if (t < 1) frame = requestAnimationFrame(step);
+      };
+      frame = requestAnimationFrame(step);
+    };
     return () => {
+      cancelAnimationFrame(frame);
       sel.on(".zoom", null);
     };
   }, [ref]);
 
-  return { camera, shift: (dx, dy) => shift.current(dx, dy) };
+  return { camera, shift: (dx, dy) => shift.current(dx, dy), glide: (to) => glide.current(to) };
 }

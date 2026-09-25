@@ -103,7 +103,7 @@ export function TileMenu({
 }
 
 /** The same path data the canvas draws, rendered as SVG for the menu. */
-function Mark({ mark }: { mark: readonly Stroke[] }) {
+export function Mark({ mark }: { mark: readonly Stroke[] }) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
       {mark.map((stroke) => (

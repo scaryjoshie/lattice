@@ -9,7 +9,7 @@
  * This was previously three separate answers: the menu stopped propagation itself, the
  * camera tested a selector of its own, and the grid's handlers tested nothing at all.
  */
-export const OVERLAY = ".editor, .namer, .menu, .opened";
+export const OVERLAY = ".editor, .namer, .menu, .opened, .toolbar";
 
 export const claimed = (target: EventTarget | null): boolean =>
   Boolean((target as Element | null)?.closest?.(OVERLAY));
