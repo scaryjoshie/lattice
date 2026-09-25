@@ -134,6 +134,7 @@ function write(theme: Theme): void {
   root.setProperty("--muted", theme.chrome.muted);
   root.setProperty("--hover", theme.chrome.hover);
   root.setProperty("--flow", theme.flow);
+  root.setProperty("--warn", theme.warn);
   document.documentElement.dataset.theme = theme.name;
 }
 

@@ -471,7 +471,8 @@ body {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 8px 10px 0;
+  /* Room at the end for the panel's close, so no tab slides under it. */
+  padding: 8px 44px 0 10px;
 }
 
 .browser-tab {
@@ -601,6 +602,61 @@ body {
 .browser-mark svg {
   width: 72px;
   height: 72px;
+}
+
+/* The close is the panel's own top-right corner: flush with its top and right edges, sharing
+   its rounded corner, set off from the rest by a line along its inner sides. It fades in when
+   the pointer is near and is red under it. A terminal's corner is large; a browser's is the
+   end of its tab row, the row's height, where the row leaves room for it. */
+.opened-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 11px 0 12px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    background 120ms ease,
+    color 120ms ease;
+  pointer-events: none;
+}
+
+.opened-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.opened-close[data-small] {
+  width: 38px;
+  height: 38px;
+  border-radius: 0 11px 0 10px;
+}
+
+.opened-close[data-small] svg {
+  width: 14px;
+  height: 14px;
+}
+
+.opened-close[data-near] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.opened-close:hover {
+  background: var(--warn);
+  color: #fff;
 }
 
 .opened-body {

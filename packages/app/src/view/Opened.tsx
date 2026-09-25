@@ -14,6 +14,10 @@ import { Term } from "./Term.tsx";
  * agent's.
  */
 
+/** The close's side: a terminal's corner, and a browser's, which is its tab row's height. */
+const CLOSE = 60;
+const CLOSE_SMALL = 38;
+
 export interface Rect {
   x: number;
   y: number;
@@ -48,6 +52,17 @@ export function Opened({
   /** The opening has finished: the panel is still, and may be frosted. */
   const [settled, setSettled] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** The pointer is nearly over the close's corner, so the close is showing. */
+  const [near, setNear] = useState(false);
+  // The close is a square corner: a terminal's large, a browser's the height of its tab row,
+  // so the top right of the page is still the page's. It shows while the pointer is within a
+  // little more than its own size of its middle, and goes the moment the pointer is not.
+  const side = browser ? CLOSE_SMALL : CLOSE;
+  const watch = (e: React.PointerEvent) => {
+    const r = panel.current?.getBoundingClientRect();
+    if (!r) return;
+    setNear(Math.hypot(e.clientX - (r.right - side / 2), e.clientY - (r.top + side / 2)) < side * 1.1);
+  };
   /** The panel has shrunk back into its tile, whose outline then fades. */
   const [absorbed, setAbsorbed] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
@@ -134,7 +149,24 @@ export function Opened({
         data-leaving={leaving || undefined}
         style={{ left: to.x, top: to.y, width: to.w, height: to.h }}
         onPointerDown={(e) => e.stopPropagation()}
+        onPointerMove={watch}
+        onPointerLeave={() => setNear(false)}
       >
+        {/* The close, which comes up in the corner when the pointer is near it. The panel
+            watches the pointer itself, so nothing is laid over the corner until it is there. */}
+        <button
+          type="button"
+          className="opened-close"
+          data-small={browser ? "" : undefined}
+          data-near={(near && settled && !leaving) || undefined}
+          aria-label="close"
+          onClick={close}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
         <div className="opened-body" data-shown={(arrived && !leaving) || undefined}>
           {terminal && <Term host={terminal} width={to.w} height={to.h} />}
           {browser && <Browser host={browser} shown={settled && !leaving} />}
