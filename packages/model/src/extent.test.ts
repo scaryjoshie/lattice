@@ -13,7 +13,7 @@ function world(tiles: Tile[], scopes: Grid["scopes"] = []): Grid {
     links: [],
   };
 }
-const host = (id: string, ci: number, ri: number): Tile => ({ id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}` });
+const host = (id: string, ci: number, ri: number): Tile => ({ id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}`, span: 1, rows: 1 });
 /** A run as placed: one cell, its text not yet committed. */
 const run = (id: string, ci: number, ri: number, text: string, style: "title" | "note" = "title"): Run =>
   ({ id, family: "text", style, text, columnId: `x${ci}`, rowId: `y${ri}`, span: 1, rows: 1 });

@@ -40,22 +40,18 @@ export interface TextRun {
   hue: number | null;
 }
 
-export interface Occupant {
-  ci: number;
-  ri: number;
+export interface Occupant extends Region {
   mark: readonly Stroke[];
   name?: string;
   hue: number | null;
 }
 
 /** The focused occupant and everyone it is talking to. */
-export interface Focus {
-  ci: number;
-  ri: number;
+export interface Focus extends Region {
   /** Where the lines leave from. While it is being carried, where it was picked up. */
-  anchor: { ci: number; ri: number };
+  anchor: Region;
   hue: number | null;
-  partners: readonly { ci: number; ri: number }[];
+  partners: readonly Region[];
 }
 
 export interface Proposal {
@@ -179,13 +175,13 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
     } else {
       // The mark is the occupant observed there, else the one its surface shows when idle.
       const mark = OCCUPANTS[hostedBy(facts, tile.id) ?? idleOf(tile.surface)].mark;
-      const spot: Occupant = { ci, ri, mark, name: naming === tile.id ? undefined : tile.name, hue };
+      const spot: Occupant = { ...extent, mark, name: naming === tile.id ? undefined : tile.name, hue };
       occupied.push(spot);
       spots.set(tile.id, spot);
     }
   }
   const byCell = new Map<string, string>();
-  for (const [id, spot] of spots) byCell.set(`${spot.ci},${spot.ri}`, id);
+  for (const [id, spot] of spots) for (const [c, r] of cellsOf(spot)) byCell.set(`${c},${r}`, id);
 
   /*
    * Two rings, for two questions. `about` is what a menu, a rename or an edit is about;
@@ -231,7 +227,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
   const selectedTile = selection && "tile" in selection ? grid.tiles.find((x) => x.id === selection.tile) : undefined;
   const resizable: Scene["resizable"] = selectedScope
     ? { id: selectedScope.id, region: placedScope(selectedScope), edgesOnly: false }
-    : selectedTile && isRun(selectedTile) && tiles.get(selectedTile.id)
+    : selectedTile && tiles.get(selectedTile.id)
       ? { id: selectedTile.id, region: tiles.get(selectedTile.id) as Region, edgesOnly: true }
       : null;
 
@@ -281,7 +277,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
       .filter((l) => l.from === spot || l.to === spot)
       .map((l) => spots.get(l.from === spot ? l.to : l.from))
       .filter((s): s is Occupant => Boolean(s));
-    const anchor = carrying?.id === spot ? { ci: carrying.from.ci, ri: carrying.from.ri } : { ci: here.ci, ri: here.ri };
+    const anchor: Region = carrying?.id === spot ? carrying.from : here;
     focus = { ...here, anchor, partners };
   }
 

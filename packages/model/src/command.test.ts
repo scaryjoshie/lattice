@@ -11,8 +11,8 @@ function world(): Grid {
     columns,
     rows,
     tiles: [
-      { id: "a", family: "host", surface: "terminal", columnId: "x3", rowId: "y2" },
-      { id: "b", family: "host", surface: "terminal", columnId: "x7", rowId: "y2" },
+      { id: "a", family: "host", surface: "terminal", columnId: "x3", rowId: "y2", span: 1, rows: 1 },
+      { id: "b", family: "host", surface: "terminal", columnId: "x7", rowId: "y2", span: 1, rows: 1 },
     ],
     scopes: [{ id: "auth", name: "auth", hue: 0, columnStart: "x2", columnEnd: "x4", rowStart: "y1", rowEnd: "y4" }],
     links: [],
@@ -51,9 +51,9 @@ describe("commands", () => {
 
   test("a refused resize still says what it would have made", () => {
     const g: Grid = { ...world(), tiles: [
-      { id: "a", family: "host", surface: "terminal", columnId: "x2", rowId: "y2" },
-      { id: "b", family: "host", surface: "terminal", columnId: "x3", rowId: "y2" },
-      { id: "c", family: "host", surface: "terminal", columnId: "x4", rowId: "y2" },
+      { id: "a", family: "host", surface: "terminal", columnId: "x2", rowId: "y2", span: 1, rows: 1 },
+      { id: "b", family: "host", surface: "terminal", columnId: "x3", rowId: "y2", span: 1, rows: 1 },
+      { id: "c", family: "host", surface: "terminal", columnId: "x4", rowId: "y2", span: 1, rows: 1 },
     ] };
     const v = propose(g, { kind: "resize", owner: "auth", col: { line: 5, n: -1 } });
     expect(v.ok).toBe(false);
@@ -82,5 +82,11 @@ describe("commands", () => {
     expect(apply(g, { kind: "remove", id: "b" }).grid.tiles.map((t) => t.id)).toEqual(["a"]);
     expect((apply(g, { kind: "setName", id: "a", name: "  ada  " }).grid.tiles[0] as Host).name).toBe("ada");
     expect((apply(g, { kind: "setName", id: "a", name: "  " }).grid.tiles[0] as Host).name).toBeUndefined();
+  });
+
+  test("a tile's corner resizes both ways at once, neither axis undoing the other", () => {
+    const done = apply(world(), { kind: "resize", owner: "a", col: { line: 4, n: 1 }, row: { line: 3, n: 1 } });
+    expect(done.ok).toBe(true);
+    expect(at(done.grid, "a")).toEqual({ ci: 3, ri: 2, span: 2, rows: 2 });
   });
 });

@@ -1,6 +1,12 @@
 import { apply, type Command, type Grid } from "@lattice/model";
 import type { Store } from "../core/store.ts";
 
+/** A document saved before hosts had a size: a tile without one is one cell. */
+export const upgrade = (grid: Grid): Grid => ({
+  ...grid,
+  tiles: grid.tiles.map((t) => ({ ...t, span: t.span ?? 1, rows: t.rows ?? 1 })),
+});
+
 /**
  * The document, owned here. A command is judged and applied through the model, whole or
  * not at all, then saved and recorded. History is snapshots with the marks they were

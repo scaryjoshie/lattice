@@ -1,4 +1,4 @@
-import { type Grid, indexOfTrack, isRun, type Run, scopeAt } from "./grid.ts";
+import { footprint, type Grid, indexOfTrack, type Run, scopeAt } from "./grid.ts";
 import { contains, type Region } from "./region.ts";
 import { cellsFor, linesFor, spanFor } from "./text.ts";
 
@@ -17,7 +17,7 @@ export function extentFor(grid: Grid, run: Run, text: string): Region {
   const home = scopeAt(grid, ci, ri);
   const free = (c: number, r: number): boolean =>
     scopeAt(grid, c, r) === home &&
-    !grid.tiles.some((t) => t.id !== run.id && contains(footprintOf(grid, t), c, r));
+    !grid.tiles.some((t) => t.id !== run.id && contains(footprint(grid, t), c, r));
   const wantSpan = spanFor(run.style, text);
   let span = 1;
   while (span < wantSpan && free(ci + span, ri)) span += 1;
@@ -32,11 +32,3 @@ export function extentFor(grid: Grid, run: Run, text: string): Region {
   while (rows < wantRows && row(rows)) rows += 1;
   return { ci, ri, span, rows };
 }
-
-/** A tile's cells, from what it stores. Here rather than grid.ts to keep the import one way. */
-const footprintOf = (grid: Grid, t: Grid["tiles"][number]): Region => ({
-  ci: indexOfTrack(grid.columns, t.columnId),
-  ri: indexOfTrack(grid.rows, t.rowId),
-  span: isRun(t) ? t.span : 1,
-  rows: isRun(t) ? t.rows : 1,
-});

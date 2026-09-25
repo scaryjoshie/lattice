@@ -71,14 +71,19 @@ const PLUS_EDGE = 2;
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
-/** One occupant's mark, scaled from its own 24-unit space into the cell. */
+/**
+ * One occupant's mark, scaled from its own 24-unit space into a cell at the middle of the
+ * host, however many cells the host owns. `x` and `y` are the host's first cell.
+ */
 function mark(
   ctx: CanvasRenderingContext2D,
   spot: Occupant,
-  x: number,
-  y: number,
+  x0: number,
+  y0: number,
   size: number,
 ): void {
+  const x = x0 + (size * (spot.span - 1)) / 2;
+  const y = y0 + (size * (spot.rows - 1)) / 2;
   const side = size * MARK;
   const scale = side / MARK_UNITS;
   // The mark sits in the same place whether or not the tile has a name. Moving it to make
@@ -102,7 +107,7 @@ function mark(
   }
   ctx.restore();
 
-  // The name, under the mark, cut to the one cell it has. It disappears before it becomes
+  // The name, under the mark, cut to the width the host has. It disappears before it becomes
   // unreadable rather than shrinking into a smudge.
   if (!spot.name || size <= NAME_FROM) return;
   ctx.save();
@@ -111,7 +116,7 @@ function mark(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = hue(spot.hue).ink;
-  ctx.fillText(clip(spot.name, fits(NAME.size, 0.86)), x + size / 2, y + size * 0.79);
+  ctx.fillText(clip(spot.name, fits(NAME.size, spot.span - 0.14)), x + size / 2, y + size * 0.79);
   ctx.restore();
 }
 
@@ -181,15 +186,33 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.restore();
   };
 
-  const spotAt = new Map(occupied.map((s) => [`${s.ci},${s.ri}`, s]));
+  const spotAt = new Map<string, Occupant>();
+  for (const spot of occupied) for (const [ci, ri] of cellsOf(spot)) spotAt.set(`${ci},${ri}`, spot);
   const runAt = new Map<string, TextRun>();
   for (const run of texts) for (const [ci, ri] of cellsOf(run)) runAt.set(`${ci},${ri}`, run);
+  /*
+   * A host is filled as one rectangle, never cell by cell: adjacent fills at fractional
+   * positions antialias along their shared edge and leave a faint seam where no line is
+   * drawn. Repainting any of its cells repaints all of it, which is the same pixels.
+   */
+  const paintSpot = (spot: Occupant) => {
+    const x = sx(spot.ci);
+    const y = sy(spot.ri);
+    const w = size * spot.span;
+    const h = size * spot.rows;
+    ctx.fillStyle = hue(spot.hue).fill;
+    ctx.fillRect(x, y, w, h);
+    mark(ctx, spot, x, y, size);
+  };
   const paintCell = (ci: number, ri: number) => {
     const spot = spotAt.get(`${ci},${ri}`);
+    if (spot) {
+      paintSpot(spot);
+      return;
+    }
     const cell = at(ci, ri);
-    ctx.fillStyle = spot ? hue(spot.hue).fill : cell?.hue == null ? palette.page : hue(cell.hue).tint;
+    ctx.fillStyle = cell?.hue == null ? palette.page : hue(cell.hue).tint;
     ctx.fillRect(sx(ci), sy(ri), size, size);
-    if (spot) mark(ctx, spot, sx(ci), sy(ri), size);
     const run = runAt.get(`${ci},${ri}`);
     if (run) drawRun(run, { ci, ri, span: 1, rows: 1 });
   };
@@ -207,21 +230,21 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   }
 
   /*
-   * Boundaries that fall inside a text run, which the ruling omits.
+   * Boundaries that fall inside a tile, which the ruling omits.
    *
-   * A run's extent is canonical — it owns whole cells — so the lines inside it are known
+   * A tile's extent is canonical — it owns whole cells — so the lines inside it are known
    * and can simply not be drawn. The previous version drew them and then painted over
    * them, which is why the ends came out uneven: painting over a line at a fractional
    * position antialiases differently cell by cell, and the overdraw needed to close the
    * seams spilled into whatever was next door.
    */
-  const insideRun = new Set<string>();
-  for (const run of texts) {
+  const inside = new Set<string>();
+  for (const run of [...texts, ...occupied]) {
     for (let dy = 0; dy < run.rows; dy++) {
-      for (let dx = 1; dx < run.span; dx++) insideRun.add(`v${run.ci + dx},${run.ri + dy}`);
+      for (let dx = 1; dx < run.span; dx++) inside.add(`v${run.ci + dx},${run.ri + dy}`);
     }
     for (let dy = 1; dy < run.rows; dy++) {
-      for (let dx = 0; dx < run.span; dx++) insideRun.add(`h${run.ci + dx},${run.ri + dy}`);
+      for (let dx = 0; dx < run.span; dx++) inside.add(`h${run.ci + dx},${run.ri + dy}`);
     }
   }
 
@@ -231,7 +254,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       for (let ci = a; ci <= b + 1; ci++) {
         const x = snap(sx(ci));
         for (let ri = p; ri <= q; ri++) {
-          if (insideRun.has(`v${ci},${ri}`)) continue;
+          if (inside.has(`v${ci},${ri}`)) continue;
           const y = sy(ri);
           path.moveTo(x, y);
           path.lineTo(x, y + size);
@@ -240,7 +263,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       for (let ri = p; ri <= q + 1; ri++) {
         const y = snap(sy(ri));
         for (let ci = a; ci <= b; ci++) {
-          if (insideRun.has(`h${ci},${ri}`)) continue;
+          if (inside.has(`h${ci},${ri}`)) continue;
           const x = sx(ci);
           path.moveTo(x, y);
           path.lineTo(x + size, y);
@@ -282,8 +305,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
 
   // Occupied cells after the ruling, so it does not cross them.
   for (const spot of occupied) {
-    if (spot.ci < c0 || spot.ci > c1 || spot.ri < r0 || spot.ri > r1) continue;
-    paintCell(spot.ci, spot.ri);
+    if (spot.ci + spot.span - 1 < c0 || spot.ci > c1 || spot.ri + spot.rows - 1 < r0 || spot.ri > r1) continue;
+    paintSpot(spot);
   }
 
   // Text, each run whole. A run under a veil or inside a proposal is redrawn per cell by
@@ -316,13 +339,12 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    * inside a focus — which is what keeps a canvas of relationships from becoming a web.
    */
   if (focus) {
-    const centre = (c: number, r: number) => [sx(c) + size / 2, sy(r) + size / 2] as const;
+    const centre = (r: Region) => [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
     ctx.fillStyle = palette.veil;
     ctx.fillRect(0, 0, width, height);
 
     const h = hue(focus.hue);
-    for (const partner of focus.partners) paintCell(partner.ci, partner.ri);
-    paintCell(focus.ci, focus.ri);
+    for (const r of [...focus.partners, focus]) for (const [ci, ri] of cellsOf(r)) paintCell(ci, ri);
 
     /*
      * Lines run over the tiles rather than stopping at their edges, and end in a dot at
@@ -332,7 +354,18 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
      * The route turns rather than cutting across: a diagonal ignores the grid it is drawn
      * on, and on a ruled surface that reads as a mistake. One corner, rounded.
      */
-    const [fx, fy] = centre(focus.anchor.ci, focus.anchor.ri);
+    const [fx, fy] = centre(focus.anchor);
+    const halfW = (size * focus.anchor.span) / 2;
+    const halfH = (size * focus.anchor.rows) / 2;
+    /** Where a line to a partner leaves the focused agent's edge: straight out of the side
+     *  facing the partner when the partner lies within its width or height, else from the
+     *  middle of the side it turns toward. */
+    const leave = (px: number, py: number): readonly [number, number] =>
+      Math.abs(px - fx) < halfW
+        ? [px, fy + Math.sign(py - fy) * halfH]
+        : Math.abs(py - fy) < halfH
+          ? [fx + Math.sign(px - fx) * halfW, py]
+          : [fx + Math.sign(px - fx) * halfW, fy];
     ctx.strokeStyle = h.edge;
     ctx.lineWidth = LINK_EDGE;
     ctx.lineCap = "round";
@@ -340,12 +373,10 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     ctx.lineDashOffset = -dash;
     ctx.beginPath();
     for (const partner of focus.partners) {
-      const [px, py] = centre(partner.ci, partner.ri);
+      const [px, py] = centre(partner);
       // The focused agent is already ringed, so its line leaves from the edge rather than
       // from under its own mark. Partners are only identified by what arrives at them.
-      const half = size / 2;
-      const out: readonly [number, number] =
-        px === fx ? [fx, fy + Math.sign(py - fy) * half] : [fx + Math.sign(px - fx) * half, fy];
+      const out = leave(px, py);
       ctx.moveTo(out[0], out[1]);
       const turn = Math.min(size * LINK_TURN, Math.abs(px - out[0]), Math.abs(py - out[1]));
       if (turn > 0.5) ctx.arcTo(px, out[1], px, py, turn);
@@ -362,22 +393,20 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.arc(x, y, LINK_DOT, 0, Math.PI * 2);
       ctx.fill();
     };
-    for (const partner of focus.partners) stop(...centre(partner.ci, partner.ri));
+    for (const partner of focus.partners) stop(...centre(partner));
     // And where each line leaves the focused agent, so a connection is marked at both
     // ends. Two partners in the same direction share a departure point, which is correct:
     // the dot says links leave this way, not how many.
     for (const partner of focus.partners) {
-      const [px, py] = centre(partner.ci, partner.ri);
-      const half = size / 2;
+      const [px, py] = centre(partner);
       if (px === fx && py === fy) continue;
-      if (px === fx) stop(fx, fy + Math.sign(py - fy) * half);
-      else stop(fx + Math.sign(px - fx) * half, fy);
+      stop(...leave(px, py));
     }
 
     ctx.lineWidth = FOCUS_EDGE;
     ctx.strokeStyle = h.edge;
     const inset = FOCUS_EDGE / 2;
-    ctx.strokeRect(sx(focus.ci) + inset, sy(focus.ri) + inset, size - FOCUS_EDGE, size - FOCUS_EDGE);
+    ctx.strokeRect(sx(focus.ci) + inset, sy(focus.ri) + inset, size * focus.span - FOCUS_EDGE, size * focus.rows - FOCUS_EDGE);
   }
 
   // What is being acted on stays ringed for as long as it is being acted on, so a menu or

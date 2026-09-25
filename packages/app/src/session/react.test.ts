@@ -11,9 +11,9 @@ function world(): Grid {
     columns,
     rows,
     tiles: [
-      { id: "a", family: "host", surface: "terminal", columnId: "x3", rowId: "y2" },
+      { id: "a", family: "host", surface: "terminal", columnId: "x3", rowId: "y2", span: 1, rows: 1 },
       { id: "run", family: "text", style: "title", text: "auth", columnId: "x2", rowId: "y1", span: 2, rows: 1 },
-      { id: "b", family: "host", surface: "terminal", columnId: "x8", rowId: "y4" },
+      { id: "b", family: "host", surface: "terminal", columnId: "x8", rowId: "y4", span: 1, rows: 1 },
     ],
     scopes: [{ id: "auth", name: "auth", hue: 0, columnStart: "x2", columnEnd: "x4", rowStart: "y1", rowEnd: "y4" }],
     links: [],

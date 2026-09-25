@@ -80,8 +80,8 @@ choice wins, because it was made about something real.
 
 ## Text
 
-42. Text is its own family, not a kind of occupant. An occupant fills one cell; text is
-    sized by what it says.
+42. Text is its own family, not a kind of occupant. An occupant's host is sized by
+    dragging its edges; text is sized by what it says.
 43. A **title** is one row and grows sideways. A **note** is a block and the words wrap
     inside it.
 44. Text is canvas content, not DOM, so it stays crisp at every zoom.
@@ -121,3 +121,10 @@ choice wins, because it was made about something real.
 62. Brand marks come from `@lobehub/icons-static-svg`. A shell is not a brand, so it gets a
     prompt glyph rather than a borrowed logo.
 63. Marks are path data drawn on the canvas, and the menu renders the same data as SVG.
+
+## Size
+
+64. Hosts resize by their edges, the same operation as a run, pushing what is beyond.
+    Any rectangle: squares were considered and not required, since nothing yet depends on
+    the shape. Decided 24 September 2026; supersedes the one-cell tile in
+    [grid.md](grid.md).

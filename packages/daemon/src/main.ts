@@ -1,7 +1,7 @@
 import { Agents } from "./agents/agents.ts";
 import { ensureHome } from "./core/paths.ts";
 import { Store } from "./core/store.ts";
-import { Document } from "./document/document.ts";
+import { Document, upgrade } from "./document/document.ts";
 import { seed } from "./document/seed.ts";
 import { listen } from "./server/listen.ts";
 import { Rpc } from "./server/rpc.ts";
@@ -14,7 +14,8 @@ import { Rpc } from "./server/rpc.ts";
 export function start(): { close(): void; session: { port: number; token: string } } {
   const p = ensureHome();
   const store = new Store(p.database);
-  const had = store.loadDocument();
+  const saved = store.loadDocument();
+  const had = saved && upgrade(saved);
   const fresh = had ? null : seed();
   const document = new Document(store, had ?? fresh!.grid);
   if (fresh) store.saveDocument(fresh.grid);

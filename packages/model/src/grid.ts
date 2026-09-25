@@ -21,8 +21,8 @@ export interface Track {
 /**
  * Two families, and they are not variants of each other.
  *
- * A *host* is a place: one cell, holding one thing. What it holds is a fact the runtime
- * observes, never a field here. Its surface — a terminal, a webview — is what it was made
+ * A *host* is a place holding one thing. What it holds is a fact the runtime observes,
+ * never a field here. Its surface — a terminal, a webview — is what it was made
  * for and what it keeps, stored as a name the model never branches on. A *run* is text
  * written on the canvas: no process, and a size decided by what it says rather than by
  * the grid. A title grows sideways; a note is a block the words wrap inside. Those are
@@ -35,6 +35,14 @@ interface Placed {
   readonly id: string;
   readonly columnId: string;
   readonly rowId: string;
+  /**
+   * Cells owned, starting at (columnId, rowId), and changed only by dragging an edge.
+   * Nothing grows or shrinks because something moved beside it. A host is placed at one
+   * cell; a run is sized when it is committed, from what its words needed and what was
+   * free (extent.ts).
+   */
+  readonly span: number;
+  readonly rows: number;
 }
 
 export interface Host extends Placed {
@@ -48,14 +56,6 @@ export interface Run extends Placed {
   readonly family: "text";
   readonly style: TextStyle;
   readonly text: string;
-  /**
-   * Cells owned, starting at (columnId, rowId). Set when the run is committed, from what
-   * its words needed and what was free (extent.ts), and changed only by dragging an
-   * edge. A run never grows or shrinks because something moved beside it: its cells are
-   * held like a host's.
-   */
-  readonly span: number;
-  readonly rows: number;
 }
 
 export type Tile = Host | Run;
@@ -168,7 +168,7 @@ export function addTile(
   const tile: Tile =
     what.family === "text"
       ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "", span: 1, rows: 1 }
-      : { id, family: "host", columnId, rowId, surface: what.surface };
+      : { id, family: "host", columnId, rowId, surface: what.surface, span: 1, rows: 1 };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
 
@@ -276,14 +276,9 @@ export function close(grid: Grid, r: Region): Region {
 
 /* Moving ------------------------------------------------------------------ */
 
-/** The cells a tile owns. A host's is its cell; a run's is its stored size. */
+/** The cells a tile owns. */
 export function footprint(grid: Grid, tile: Tile): Region {
-  return {
-    ci: indexOfTrack(grid.columns, tile.columnId),
-    ri: indexOfTrack(grid.rows, tile.rowId),
-    span: isRun(tile) ? tile.span : 1,
-    rows: isRun(tile) ? tile.rows : 1,
-  };
+  return { ci: indexOfTrack(grid.columns, tile.columnId), ri: indexOfTrack(grid.rows, tile.rowId), span: tile.span, rows: tile.rows };
 }
 
 /**
@@ -354,10 +349,8 @@ export function applied(grid: Grid, moves: readonly Move[]): { grid: Grid; dc: n
       const columnId = m && track(g.columns, m.ci);
       const rowId = m && track(g.rows, m.ri);
       if (!m || !columnId || !rowId) return tile;
-      const moved = { ...tile, columnId, rowId };
-      // A size on a run's move is a resize: the run's new cells.
-      if (!isRun(tile) || (m.span === undefined && m.rows === undefined)) return moved;
-      return { ...(moved as Run), span: m.span ?? tile.span, rows: m.rows ?? tile.rows };
+      // A size on a move is a resize: the tile's new cells.
+      return { ...tile, columnId, rowId, span: m.span ?? tile.span, rows: m.rows ?? tile.rows };
     }),
     scopes: g.scopes.map((scope) => {
       const m = at.get(scope.id);
@@ -465,12 +458,12 @@ export interface Resize {
 }
 
 /**
- * Move one edge of a run by `n` cells. A run has no interior lines to insert at, only
+ * Move one edge of a tile by `n` cells. A tile has no interior lines to insert at, only
  * edges. Outward grows it, pushing whatever is beyond, and refuses if that would take it
- * out of its scope or into one; inward shrinks it and the words reflow. Either way the
- * run's size is what the drag left it.
+ * out of its scope or into one; inward shrinks it, and a run's words reflow. Either way
+ * the tile's size is what the drag left it.
  */
-function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): Resize {
+function resizeTile(grid: Grid, tile: Tile, axis: Axis, line: number, n: number): Resize {
   const b = footprint(grid, tile);
   const P = axis === "col" ? "ci" : "ri";
   const S = axis === "col" ? "span" : "rows";
@@ -485,14 +478,14 @@ function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): 
     if (k >= b[S]) return { ...refuse, band: { ...b, [P]: line === start ? start : end - k, [S]: k } };
     const after: Region = { ...b, [P]: line === start ? start + k : start, [S]: b[S] - k };
     const band: Region = { ...b, [P]: line === start ? start : end - k, [S]: k };
-    return { ok: true, after, band, moves: [{ id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] }] };
+    return { ok: true, after, band, moves: [{ id: tile.id, ci: after.ci, ri: after.ri, span: after.span, rows: after.rows }] };
   }
   const after: Region = { ...b, [P]: line === start ? start - k : start, [S]: b[S] + k };
   const band: Region = { ...b, [P]: line === start ? start - k : end, [S]: k };
-  const grown: Move = { id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] };
+  const grown: Move = { id: tile.id, ci: after.ci, ri: after.ri, span: after.span, rows: after.rows };
   const sign = n > 0 ? 1 : -1;
-  // In a scope, the run pushes its neighbours there, each alone, the way an edge dragged
-  // inward pushes a scope's contents; refused when the run or anything it pushes would
+  // In a scope, the tile pushes its neighbours there, each alone, the way an edge dragged
+  // inward pushes a scope's contents; refused when the tile or anything it pushes would
   // have to leave the scope.
   const home = scopeAt(grid, b.ci, b.ri);
   if (home) {
@@ -507,7 +500,7 @@ function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): 
       });
     return fits ? { ok: true, after, band, moves: [grown, ...pushed] } : { ...refuse, band };
   }
-  // Out of every scope, a scope is pushed whole like any unit, and the run stays out of
+  // Out of every scope, a scope is pushed whole like any unit, and the tile stays out of
   // every scope once everything has been pushed.
   const moves: Move[] = [grown, ...push(grid, b, after, axis, sign, new Set([tile.id]))];
   const world = applied(grid, moves);
@@ -518,8 +511,8 @@ function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): 
 }
 
 export function proposeResize(grid: Grid, ownerId: string, axis: Axis, line: number, n: number): Resize {
-  const run = grid.tiles.find((x): x is Run => x.id === ownerId && isRun(x));
-  if (run) return resizeRun(grid, run, axis, line, n);
+  const tile = grid.tiles.find((x) => x.id === ownerId);
+  if (tile) return resizeTile(grid, tile, axis, line, n);
   const scope = grid.scopes.find((s) => s.id === ownerId);
   if (!scope) return { ok: false, after: { ci: 0, ri: 0, span: 1, rows: 1 }, band: null, moves: [] };
   const b = bounds(grid, scope);

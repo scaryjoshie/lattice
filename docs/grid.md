@@ -19,7 +19,8 @@ A cell carries the screen's aspect ratio, and a tile is exactly 1x1. A screen is
 wider than it is tall, so a 1x1 tile on an aspect-correct cell *is* a wide rectangle —
 "2x1" and "1x1 on the right cell" are one idea said twice, and only one of them needs span
 arithmetic. Larger tiles stay available later but must be square in cell count, or the
-shape stops matching the screen.
+shape stops matching the screen. *Superseded 24 September 2026: hosts resize by their
+edges to any rectangle; see choices.md 64.*
 
 **Position is `(columnId, rowId)`, not `(col, row)`.** The grid is two ordered lists of
 tracks, each track with a stable id; a cell is named by the pair of ids, never by an index.

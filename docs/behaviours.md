@@ -12,7 +12,8 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 1. A cell is a position. A region is a rectangle of cells, and is a value: two things at
    the same place have the same region.
-2. An item owns a region. A host owns one cell. A run owns the cells its words need.
+2. An item owns a region. A host is placed at one cell and owns what its edges were
+   dragged to (72). A run owns the cells its words need.
    Nothing anywhere treats one cell as a special size. A host is a place with a surface,
    a terminal or a webview: what it holds — a shell, a browser page, Claude Code, Codex —
    is a fact the runtime observes, not a property of the tile, and its mark is that
@@ -213,8 +214,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     direction, so it cannot cycle, and it never fails.
 71. The cells being made are hatched in the hue; a shrink hatches the cells going. A
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
-72. A run resizes by its edges through the same operation. Inward shrinks it and the
-    words reflow; outward grows it and pushes, and is refused if the run would leave or
+72. A host or a run resizes by its edges through the same operation, and has no interior
+    lines. Any rectangle, not only squares. A host's mark sits in its middle and its
+    interior is unruled, as a run's is. Inward shrinks it, and a run's words reflow; outward grows it and pushes, and is refused if the run would leave or
     enter a scope. Inside a scope it pushes its neighbours there one by one, as an edge
     dragged inward does (68), and is refused when the run or anything it pushes would
     have to leave the scope. The size the drag leaves is the run's size.
@@ -260,7 +262,7 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 
 83. An occupant may be named: right-click, rename. A name is typed in the place it will
     sit, at the size it will be.
-84. A name is cut with an ellipsis to the one cell its item occupies. It never spills, and
+84. A name is cut with an ellipsis to the width its item occupies. It never spills, and
     the mark does not move to make room for it.
 85. Names stop being drawn below about 34 screen pixels of cell, fading over the next 14.
 86. A run is not named; it is what it says.

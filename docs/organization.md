@@ -40,7 +40,7 @@ lattice/
 
 ## Providers
 
-4. The grid knows two families: a *host*, one cell holding one thing, and a run. A host
+4. The grid knows two families: a *host*, a place holding one thing, and a run. A host
    carries the *surface* it was made for, terminal or webview, as a name the model stores
    and never branches on. What a host holds is an *occupant*, a fact the runtime observes;
    a host with nothing in it shows its surface's idle occupant, a terminal its shell. A

@@ -27,7 +27,7 @@ export function seed(): { grid: Grid; facts: Facts } {
   ];
   const tiles: Tile[] = [
     ...texts.map(([c, r, text]): Tile => ({ id: nextId("t"), family: "text", style: "title", columnId: col(c), rowId: row(r), text, span: spanFor("title", text), rows: 1 })),
-    ...cells.map(([c, r]): Tile => ({ id: nextId("t"), family: "host", surface: "terminal", columnId: col(c), rowId: row(r) })),
+    ...cells.map(([c, r]): Tile => ({ id: nextId("t"), family: "host", surface: "terminal", columnId: col(c), rowId: row(r), span: 1, rows: 1 })),
   ];
   const hosts = tiles.filter((x) => x.family === "host");
   const host = (n: number) => hosts[n]?.id ?? "";

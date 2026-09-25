@@ -39,7 +39,7 @@ function grid(
     rows,
     tiles: tiles.map(([id, ci, ri, span, rows_]): Tile =>
       span === 1 && rows_ === 1
-        ? { id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}` }
+        ? { id, family: "host", surface: "terminal", columnId: `x${ci}`, rowId: `y${ri}`, span: 1, rows: 1 }
         : { id, family: "text", style: "title", text: id, columnId: `x${ci}`, rowId: `y${ri}`, span, rows: rows_ },
     ),
     scopes: scopes.map(([id, ci, ri, span, rows_], n) => ({
@@ -64,7 +64,7 @@ function seed(): { grid: Grid } {
   const sc = (id: string, name: string, c0: number, c1: number, r0: number, r1: number, hue: number) =>
     ({ id, name, hue, columnStart: `sc${c0}`, columnEnd: `sc${c1}`, rowStart: `sr${r0}`, rowEnd: `sr${r1}` });
   const title = (id: string, ci: number, ri: number, text: string): Tile => ({ id, family: "text", style: "title", text, columnId: `sc${ci}`, rowId: `sr${ri}`, span: 2, rows: 1 });
-  const host = (id: string, ci: number, ri: number): Tile => ({ id, family: "host", surface: "terminal", columnId: `sc${ci}`, rowId: `sr${ri}` });
+  const host = (id: string, ci: number, ri: number): Tile => ({ id, family: "host", surface: "terminal", columnId: `sc${ci}`, rowId: `sr${ri}`, span: 1, rows: 1 });
   return {
     grid: {
       columns,
@@ -359,6 +359,25 @@ describe("proposeResize", () => {
     scopesKeepTheirTiles(g1, after);
     // One more row would push the host out of the scope's bottom edge.
     expect(proposeResize(g1, "run", "row", 2, 3).ok).toBe(false);
+  });
+
+  test("a host resizes by its edges like a run, and moves whole at its size", () => {
+    const g1 = grid([t("a", 3, 2), t("b", 4, 2)], [s("auth", 2, 1, 4, 4)]);
+    const wide = proposeResize(g1, "a", "col", 4, 1);
+    expect(wide.ok).toBe(true);
+    const g2 = applied(g1, wide.moves).grid;
+    expect(at(g2, "a")).toEqual(region(3, 2, 2, 1));
+    expect(at(g2, "b")).toEqual(region(5, 2));
+    const tall = proposeResize(g2, "a", "row", 3, 1);
+    expect(tall.ok).toBe(true);
+    const g3 = applied(g2, tall.moves).grid;
+    expect(at(g3, "a")).toEqual(region(3, 2, 2, 2));
+    noOverlap(g3);
+    // Interior lines are not a host's: it has only edges.
+    expect(proposeResize(g3, "a", "col", 4, 1).ok).toBe(false);
+    const moved = proposeMove(g3, at(g3, "a"), region(8, 5, 2, 2));
+    expect(moved.ok).toBe(true);
+    expect(at(applied(g3, moved.moves).grid, "a")).toEqual(region(8, 5, 2, 2));
   });
 
   test("a corner is two resizes, the second on the grid the first leaves", () => {
