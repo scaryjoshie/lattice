@@ -26,8 +26,21 @@ export interface Hue {
   ink: string;
 }
 
+/**
+ * A terminal's colours. Its background is none: the opened panel's surface shows through,
+ * so the terminal and its panel are one surface. The sixteen colours are what programs ask
+ * for by number, tuned for each theme so none vanishes into the surface.
+ */
+export interface TerminalColours {
+  foreground: string;
+  cursor: string;
+  selection: string;
+  ansi: readonly [string, string, string, string, string, string, string, string, string, string, string, string, string, string, string, string];
+}
+
 export interface Theme {
   name: "light" | "dark";
+  terminal: TerminalColours;
   page: string;
   /** How far back everything outside a focus is pushed toward the page. */
   veil: string;
@@ -50,6 +63,13 @@ export interface Theme {
 
 export const light: Theme = {
   name: "light",
+  terminal: {
+    foreground: "#2e2e36",
+    cursor: "#3a3a42",
+    selection: "rgba(63, 96, 150, 0.2)",
+    // black, red, green, yellow, blue, magenta, cyan, white, then the bright eight.
+    ansi: ["#3a3a42", "#c24a46", "#3c8255", "#a06a17", "#3f6096", "#7a55b8", "#2c8383", "#8a8d99", "#6f727e", "#d25f5a", "#4e9c70", "#b8801f", "#5b87d4", "#8f6fcf", "#379c9c", "#a2a5b0"],
+  },
   page: "#f5f5f6",
   veil: "rgba(245, 245, 246, 0.68)",
   warn: "#c9524e",
@@ -73,6 +93,12 @@ export const light: Theme = {
 
 export const dark: Theme = {
   name: "dark",
+  terminal: {
+    foreground: "#e4e4e8",
+    cursor: "#e4e4e8",
+    selection: "rgba(255, 255, 255, 0.18)",
+    ansi: ["#2a2b33", "#d76b66", "#6fbf8e", "#e0b36a", "#7aa2e8", "#b3a0e2", "#6cc4c4", "#c8cad3", "#71747f", "#e88a85", "#93cfab", "#ecc98c", "#9dbcef", "#c9b8ee", "#93d8d8", "#eeeef2"],
+  },
   page: "#131317",
   veil: "rgba(19, 19, 23, 0.68)",
   warn: "#d76b66",

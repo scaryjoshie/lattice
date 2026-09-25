@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Term } from "./Term.tsx";
 
 /**
  * A tile opened: the same rectangle, drawn bigger. The panel lives at its full size and is
  * shown scaled down to the tile's own rectangle, then scaled up to 1 — a transform and
  * nothing else, so nothing reflows and nothing inside is measured on the way. What is
  * inside fades in once the panel has arrived, because a card and a terminal are different
- * representations rather than two sizes of one thing. For now what is inside is nothing.
- * Cmd-period closes it: Escape itself is the agent's.
+ * representations rather than two sizes of one thing. A terminal host holds its terminal;
+ * anything else, nothing yet. Cmd-Escape or Cmd-period closes it: Escape itself is the
+ * agent's.
  */
 
 export interface Rect {
@@ -18,12 +20,15 @@ export interface Rect {
 
 export function Opened({
   name,
+  terminal,
   from,
   to,
   onLeave,
   onClose,
 }: {
   name?: string;
+  /** The host whose terminal this shows, when it is a terminal host. */
+  terminal?: string;
   from: Rect;
   to: Rect;
   /** Closing has begun: the panel is on its way back. */
@@ -31,6 +36,8 @@ export function Opened({
   onClose(): void;
 }) {
   const [arrived, setArrived] = useState(false);
+  /** The opening has finished: the panel is still, and may be frosted. */
+  const [settled, setSettled] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -42,11 +49,21 @@ export function Opened({
     if (!el) return;
     el.style.transform = start;
     // Next frame, so the start is painted before the transition begins.
+    // The panel's own transform, not a transition inside it bubbling up.
+    const done = (e: TransitionEvent) => {
+      if (e.target !== el || e.propertyName !== "transform") return;
+      el.removeEventListener("transitionend", done);
+      setSettled(true);
+    };
+    el.addEventListener("transitionend", done);
     const frame = requestAnimationFrame(() => {
       el.style.transform = "translate(0, 0) scale(1, 1)";
       setArrived(true);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      el.removeEventListener("transitionend", done);
+    };
   }, [start]);
 
   const close = () => {
@@ -78,11 +95,12 @@ export function Opened({
       <div
         ref={panel}
         className="opened-panel"
+        data-settled={(settled && !leaving) || undefined}
         style={{ left: to.x, top: to.y, width: to.w, height: to.h }}
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="opened-body" data-shown={(arrived && !leaving) || undefined}>
-          {/* The terminal, once there is one. */}
+          {terminal && <Term host={terminal} width={to.w} height={to.h} />}
         </div>
       </div>
     </div>

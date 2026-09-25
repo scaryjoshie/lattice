@@ -404,6 +404,7 @@ export function Grid({ onSettings }: { onSettings(): void }) {
       {opened && openedTile && rects && (
         <Opened
           name={openedTile.family === "text" ? undefined : openedTile.name}
+          terminal={openedTile.family === "host" && openedTile.surface === "terminal" ? openedTile.id : undefined}
           from={rects.from}
           to={rects.to}
           onLeave={() => send({ type: "leaving" })}

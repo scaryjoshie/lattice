@@ -1,3 +1,11 @@
+/* The Nerd Font icons alone (MIT, fonts/SymbolsNerdFont-LICENSE): a fallback behind the
+   terminal's type, so a prompt's icons show whatever font draws the letters. */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("./fonts/SymbolsNerdFontMono-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
 :root {
   /* --page, --ink, --surface, --border, --divider, --muted, --hover and --flow are written
      from theme.ts, so the DOM and the canvas cannot disagree about what a colour means. */
@@ -278,22 +286,46 @@ body {
 .opened-panel {
   position: absolute;
   transform-origin: 0 0;
-  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--settle);
   border: 1px solid var(--border);
   border-radius: 12px;
-  /* The menus' surface, a little more solid, since a terminal has to be read. */
+  /* The menus' surface, a little more solid, since a terminal has to be read. The terminal
+     has no background of its own, so panel and terminal are one surface. */
   background: color-mix(in srgb, var(--surface) 58%, transparent);
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
   box-shadow: 0 24px 64px rgb(0 0 0 / 28%);
   overflow: hidden;
   will-change: transform;
 }
 
+/* Frosted once it has landed: blurring what is behind a panel while it scales was, measured,
+   the stutter in opening. It lands as the terminal inside fades up, so the two read as one
+   change. */
+.opened-panel[data-settled] {
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+/* The grid rarely divides the room exactly; the remainder letterboxes evenly. */
+.term {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.term .xterm {
+  padding: 0;
+}
+
+.term .xterm-viewport {
+  background: transparent !important;
+}
+
 .opened-body {
   height: 100%;
   opacity: 0;
-  transition: opacity 180ms ease 240ms;
+  transition: opacity 160ms ease 180ms;
 }
 
 .opened-body[data-shown] {

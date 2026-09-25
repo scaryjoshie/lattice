@@ -8,11 +8,15 @@ import type { Message, Methods, Notifications, Response } from "@lattice/protoco
  * app can refuse commands it cannot deliver.
  *
  * A listener that arrives late is told the state as it is: whether it is connected, and
- * the last of each notification, the way the daemon greets a client that attaches. So a
- * store made after the connection opened, as hot reload makes them, is not left
- * believing it is offline with an empty grid.
+ * the last of each notification that is state rather than an event, the way the daemon
+ * greets a client that attaches. So a store made after the connection opened, as hot
+ * reload makes them, is not left believing it is offline with an empty grid. A terminal's
+ * output is an event: a late listener is not handed someone else's last chunk.
  */
 type Listener<N extends keyof Notifications> = (params: Notifications[N]) => void;
+
+/** Notifications that say what is, as opposed to what happened. */
+const STATE: ReadonlySet<keyof Notifications> = new Set(["grid", "facts"]);
 
 declare global {
   interface Window {
@@ -100,7 +104,7 @@ export class Client {
         if (reply.error) pending.reject(new Error(reply.error.message));
         else pending.resolve(reply.result);
       } else {
-        this.last.set(message.method, message.params);
+        if (STATE.has(message.method)) this.last.set(message.method, message.params);
         for (const listen of this.listeners.get(message.method) ?? []) listen(message.params as never);
       }
     };
