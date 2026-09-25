@@ -49,7 +49,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     an edge and running over the partner to its middle, with a dot at each end, so two
     neighbours' link is never hidden between them. It leaves and enters by the edges that
     face each other on the axis where the two are further apart: a straight line when
-    those centres line up, else a Z turning halfway between, its corners rounded. Every occupant does this, linked or not; the add menu
+    those centres line up, else a Z turning halfway between, its corners rounded. It
+    always goes forward out of its edge at least half a cell before it turns, never
+    sideways first; between close neighbours the turn is over the partner, an L. Every occupant does this, linked or not; the add menu
     distinguishes agents from utilities and the canvas does not.
 12. Nothing inside the selection is hovered: no ring on a cell or an item, no veil, no
     links. The selection is already the thing pointed at, and a press there moves the

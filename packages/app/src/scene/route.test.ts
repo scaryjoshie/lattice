@@ -26,6 +26,12 @@ describe("route", () => {
     expect(route(R(0, 0), R(1, 0))).toEqual([P(1, 0.5), P(1.5, 0.5)]);
   });
 
+  test("a touching neighbour off to one side: forward half a cell, then turn, never sideways", () => {
+    // A 2x2 host with a partner against its right edge, level with its top half: the line
+    // goes out half a cell, over the partner, then up into its middle. An L.
+    expect(route(R(0, 0, 2, 2), R(2, 0))).toEqual([P(2, 1), P(2.5, 1), P(2.5, 0.5)]);
+  });
+
   test("a partner above and to the side: up, across halfway, up", () => {
     // A wide host with a partner above it, overlapping it across: the ends face top to
     // bottom, and the turn is halfway between, never on either of them.
@@ -40,7 +46,7 @@ describe("route", () => {
     expect(path.at(-1)).toEqual(P(3, 5.5));
   });
 
-  test("any two things: straight or a Z, from an edge centre into the partner's middle", () => {
+  test("any two things: from an edge centre, forward first, into the partner's middle", () => {
     let seed = 7;
     const rand = (n: number) => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -52,7 +58,13 @@ describe("route", () => {
       const apart = a.ci + a.span <= b.ci || b.ci + b.span <= a.ci || a.ri + a.rows <= b.ri || b.ri + b.rows <= a.ri;
       if (!apart) continue;
       const path = route(a, b);
-      expect([2, 4]).toContain(path.length);
+      expect([2, 3, 4]).toContain(path.length);
+      // The first stretch goes straight out of the edge it leaves, for half a cell at least.
+      const [s0, s1] = [path[0]!, path[1]!];
+      const out = s0.c === a.ci || s0.c === a.ci + a.span ? { along: "c", sign: s0.c === a.ci ? -1 : 1 } : { along: "r", sign: s0.r === a.ri ? -1 : 1 };
+      const step = out.along === "c" ? (s1.c - s0.c) * out.sign : (s1.r - s0.r) * out.sign;
+      expect(out.along === "c" ? s1.r === s0.r : s1.c === s0.c).toBe(true);
+      expect(step).toBeGreaterThanOrEqual(0.5);
       expect(edgeCentres(a).some((p) => same(p, path[0]!))).toBe(true);
       expect(same(path.at(-1)!, P(b.ci + b.span / 2, b.ri + b.rows / 2))).toBe(true);
       for (let j = 1; j < path.length; j++) {
@@ -60,15 +72,10 @@ describe("route", () => {
         const q = path[j]!;
         // Every segment runs along one axis.
         expect(p.c === q.c || p.r === q.r).toBe(true);
-        // No segment passes through the source, and only the last enters the partner,
-        // through the centre of the edge it faces.
-        const last = j === path.length - 1;
+        // No segment passes back through the source.
         for (let t = 0; t <= 20; t++) {
-          const x = P(p.c + ((q.c - p.c) * t) / 20, p.r + ((q.r - p.r) * t) / 20);
-          expect(inside(a, x)).toBe(false);
-          if (!last) expect(inside(b, x)).toBe(false);
+          expect(inside(a, P(p.c + ((q.c - p.c) * t) / 20, p.r + ((q.r - p.r) * t) / 20))).toBe(false);
         }
-        if (last) expect(edgeCentres(b).some((e) => (e.c === q.c && Math.min(p.r, q.r) <= e.r && e.r <= Math.max(p.r, q.r)) || (e.r === q.r && Math.min(p.c, q.c) <= e.c && e.c <= Math.max(p.c, q.c)))).toBe(true);
       }
     }
   });
