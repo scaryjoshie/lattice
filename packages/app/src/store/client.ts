@@ -125,5 +125,12 @@ export class Client {
   }
 }
 
-/** The one connection, shared by every store. */
+/**
+ * The one connection, shared by every store, open for as long as this module is. It starts
+ * itself rather than waiting to be started: hot reload replaces this module with a fresh
+ * one, and a connection started once at launch left the fresh one closed and the app
+ * offline with the daemon running. The replaced one closes as it goes.
+ */
 export const client = new Client();
+client.start();
+import.meta.hot?.dispose(() => client.stop());

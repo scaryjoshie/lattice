@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { dark, followSystem, light, setTheme } from "../paint/theme.ts";
-import { client } from "../store/client.ts";
 import { usePreferences } from "../store/preferences.ts";
 import { Grid } from "./Grid.tsx";
 import { Settings } from "./Settings.tsx";
 
 export function App() {
-  // The daemon is where the document is. Connect once, for the life of the app.
-  useEffect(() => {
-    client.start();
-    return () => client.stop();
-  }, []);
-
   // The theme is a setting: the system's, or one chosen.
   const choice = usePreferences((s) => s.preferences.theme);
   useEffect(() => {
