@@ -30,3 +30,25 @@ export function cellAt(camera: Camera, sx: number, sy: number): [number, number]
     Math.floor((sy - camera.y) / camera.k / PITCH),
   ];
 }
+
+/**
+ * The camera that shows every region whole, centred in a viewport with `margin` screen
+ * pixels clear on every side, at no more than the drawn size: home frames what is there
+ * rather than a fixed place. With nothing to show, the drawn size about the origin.
+ */
+export function framing(
+  regions: readonly { ci: number; ri: number; span: number; rows: number }[],
+  width: number,
+  height: number,
+  margin: number,
+): Camera {
+  if (regions.length === 0) return { x: width / 2, y: height / 2, k: 1 };
+  const c0 = Math.min(...regions.map((r) => r.ci));
+  const r0 = Math.min(...regions.map((r) => r.ri));
+  const c1 = Math.max(...regions.map((r) => r.ci + r.span));
+  const r1 = Math.max(...regions.map((r) => r.ri + r.rows));
+  const w = worldX(c1) - worldX(c0);
+  const h = worldX(r1) - worldX(r0);
+  const k = Math.min(1, (width - 2 * margin) / w, (height - 2 * margin) / h);
+  return { x: width / 2 - (worldX(c0) + w / 2) * k, y: height / 2 - (worldX(r0) + h / 2) * k, k };
+}

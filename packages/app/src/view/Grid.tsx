@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
-import { footprint } from "@lattice/model";
+import { bounds, footprint } from "@lattice/model";
 import { paint } from "../paint/paint.ts";
 import { onTheme } from "../paint/theme.ts";
-import { type Camera, CELL, cellAt, worldX } from "../scene/geometry.ts";
+import { type Camera, CELL, cellAt, framing, worldX } from "../scene/geometry.ts";
 import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
 import type { Selection } from "../session/session.ts";
@@ -42,6 +42,9 @@ const CROSS_HIT = 4;
 const HANDLE_HIT = 24;
 /** A press that travels further than this is a drag, never a click. */
 const CLICK = 3;
+
+/** Room home leaves around what it frames: clear of the toolbar and the key panel. */
+const HOME_MARGIN = 96;
 
 export function Grid({ onSettings }: { onSettings(): void }) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -418,11 +421,12 @@ export function Grid({ onSettings }: { onSettings(): void }) {
         onUndo={() => send({ type: "key", key: "Undo", down: true })}
         onRedo={() => send({ type: "key", key: "Redo", down: true })}
         onHome={() => {
-          // The middle of the grid, at the size it is drawn.
+          // Everything on the grid, whole, clear of the panels in the corners.
           const host = viewport.current;
           if (!host) return;
           const { grid } = useGrid.getState();
-          glide({ x: host.clientWidth / 2 - worldX(grid.columns.length) / 2, y: host.clientHeight / 2 - worldX(grid.rows.length) / 2, k: 1 });
+          const regions = [...grid.scopes.map((s) => bounds(grid, s)), ...grid.tiles.map((t) => footprint(grid, t))];
+          glide(framing(regions, host.clientWidth, host.clientHeight, HOME_MARGIN));
         }}
         onActualSize={() => {
           // Where the view is, at the size it is drawn: about the middle of the window.
