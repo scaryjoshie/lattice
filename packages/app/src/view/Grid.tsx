@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import { bounds, footprint } from "@lattice/model";
+import { bounds, footprint, indexOfTrack, scopeAt } from "@lattice/model";
 import { paint } from "../paint/paint.ts";
-import { onTheme } from "../paint/theme.ts";
+import { hue, onTheme } from "../paint/theme.ts";
 import { type Camera, CELL, cellAt, framing, worldX } from "../scene/geometry.ts";
 import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
@@ -408,6 +408,7 @@ export function Grid({ onSettings }: { onSettings(): void }) {
         <Opened
           name={openedTile.family === "text" ? undefined : openedTile.name}
           terminal={openedTile.family === "host" && openedTile.surface === "terminal" ? openedTile.id : undefined}
+          pulse={hue(scopeAt(grid, indexOfTrack(grid.columns, openedTile.columnId), indexOfTrack(grid.rows, openedTile.rowId))?.hue ?? null).edge}
           from={rects.from}
           to={rects.to}
           onLeave={() => send({ type: "leaving" })}

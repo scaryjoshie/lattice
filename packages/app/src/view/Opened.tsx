@@ -23,6 +23,7 @@ export function Opened({
   terminal,
   from,
   to,
+  pulse,
   onLeave,
   onClose,
 }: {
@@ -31,6 +32,8 @@ export function Opened({
   terminal?: string;
   from: Rect;
   to: Rect;
+  /** The tile's edge colour, which its outline is drawn in. */
+  pulse: string;
   /** Closing has begun: the panel is on its way back. */
   onLeave(): void;
   onClose(): void;
@@ -39,6 +42,8 @@ export function Opened({
   /** The opening has finished: the panel is still, and may be frosted. */
   const [settled, setSettled] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** The panel has shrunk back into its tile, whose outline then fades. */
+  const [absorbed, setAbsorbed] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
   // Where it starts: the tile's rectangle, as a transform of the full-size panel.
@@ -72,7 +77,13 @@ export function Opened({
     setLeaving(true);
     onLeave();
     el.style.transform = start;
-    el.addEventListener("transitionend", onClose, { once: true });
+    // The panel's own transform, not the fade inside it, which can end first.
+    const back = (e: TransitionEvent) => {
+      if (e.target !== el || e.propertyName !== "transform") return;
+      el.removeEventListener("transitionend", back);
+      setAbsorbed(true);
+    };
+    el.addEventListener("transitionend", back);
   };
 
   // Cmd is the application layer; every other key belongs to what is inside, and Escape
@@ -91,11 +102,22 @@ export function Opened({
   });
 
   return (
-    <div className="opened" onPointerDown={close}>
+    <div className="opened" data-absorbed={absorbed || undefined} onPointerDown={close}>
+      {/* The tile the panel came from, outlined in its edge colour and nothing else: behind
+          the panel while it is open, in front as it goes back, then fading once it is in. */}
+      <div
+        className="opened-ring"
+        data-phase={absorbed ? "gone" : leaving ? "closing" : arrived ? "open" : undefined}
+        style={{ left: from.x, top: from.y, width: from.w, height: from.h, color: pulse }}
+        onAnimationEnd={(e) => {
+          if (e.animationName === "ring-out") onClose();
+        }}
+      />
       <div
         ref={panel}
         className="opened-panel"
         data-settled={(settled && !leaving) || undefined}
+        data-leaving={leaving || undefined}
         style={{ left: to.x, top: to.y, width: to.w, height: to.h }}
         onPointerDown={(e) => e.stopPropagation()}
       >

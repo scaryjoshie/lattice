@@ -322,6 +322,78 @@ body {
   background: transparent !important;
 }
 
+/* Back in its tile, the backdrop no longer holds the pointer. */
+.opened[data-absorbed] {
+  pointer-events: none;
+}
+
+/* Going back, the panel fades into its tile as it shrinks, so it is gone as it arrives. */
+.opened-panel[data-leaving] {
+  opacity: 0;
+  transition:
+    transform var(--settle),
+    opacity 200ms ease 120ms;
+}
+
+/*
+ * The tile the panel came from, outlined in its edge colour, with nothing else changed.
+ * Behind the panel while it is open, so it shows through the frost; in front with a halo
+ * as the panel goes back into it; then outline and halo fade together. Every step is a
+ * fade, none a cut.
+ */
+.opened-ring {
+  position: absolute;
+  z-index: 0;
+  border: 2.5px solid currentColor;
+  opacity: 0;
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    opacity var(--settle),
+    box-shadow var(--settle);
+  pointer-events: none;
+}
+
+.opened-panel {
+  z-index: 1;
+}
+
+.opened-ring[data-phase="open"] {
+  opacity: 1;
+}
+
+.opened-ring[data-phase="closing"] {
+  z-index: 2;
+  opacity: 1;
+  box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
+  /* Brought in front, it starts from nothing rather than appearing at full strength. */
+  animation: ring-in var(--settle) both;
+}
+
+@keyframes ring-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.opened-ring[data-phase="gone"] {
+  z-index: 2;
+  opacity: 0;
+  animation: ring-out 300ms ease both;
+}
+
+/* An animation, not a transition: leaving the ring-in animation and starting a transition
+   in the same step skips the transition, and the ring cut out and never finished. */
+@keyframes ring-out {
+  from {
+    opacity: 1;
+    box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
+  }
+  to {
+    opacity: 0;
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
 .opened-body {
   height: 100%;
   opacity: 0;
