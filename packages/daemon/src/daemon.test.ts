@@ -145,8 +145,10 @@ describe("the daemon", () => {
     const host = grid.tiles.find((t: any) => t.family === "host").id;
     const text = grid.tiles.find((t: any) => t.family === "text").id;
     expect((await a.call("attach", { host: text, cols: 80, rows: 24 })).result.ok).toBe(false);
+    expect((await a.call("running")).result.terminals).toBe(0);
     const attached = await a.call("attach", { host, cols: 80, rows: 24 });
     expect(attached.result.ok).toBe(true);
+    expect((await a.call("running")).result.terminals).toBe(1);
     expect(typeof attached.result.screen).toBe("string");
     const heard = (c: typeof a) =>
       c.notes

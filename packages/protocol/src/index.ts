@@ -66,6 +66,8 @@ export interface Methods {
   input: { params: { host: string; data: string }; result: { ok: boolean } };
   resize: { params: { host: string; cols: number; rows: number }; result: { ok: boolean } };
   detach: { params: { host: string }; result: { ok: boolean } };
+  /** How many terminals are running: what quitting would stop, so the shell asks first. */
+  running: { params: Record<string, never>; result: { terminals: number } };
 }
 
 /** What the daemon says on its own, to every client. */

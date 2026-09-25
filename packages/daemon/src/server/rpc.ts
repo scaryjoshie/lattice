@@ -114,6 +114,8 @@ export class Rpc {
         mine?.delete(host);
         return { ok: true };
       }
+      case "running":
+        return { terminals: this.terminals.count() };
       default:
         throw new Error(`no such method: ${String((request as { method: unknown }).method)}`);
     }

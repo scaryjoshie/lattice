@@ -35,6 +35,11 @@ export class Terminals {
     return pty;
   }
 
+  /** How many are running now. */
+  count(): number {
+    return [...this.running.values()].filter((pty) => pty.running).length;
+  }
+
   get(host: string): Pty | undefined {
     return this.running.get(host);
   }
