@@ -156,8 +156,11 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
     const [ci, ri] = placed(tile);
     const edited = editing?.id === tile.id;
     // A run being typed reaches as far as its draft does, so its cells open up as the
-    // words do; anything else owns what it stores.
-    const extent: Region = { ...(edited && isRun(tile) ? extentFor(grid, tile, editing!.draft) : footprint(grid, tile)), ci, ri };
+    // words do; a tile being resized is drawn at the size the resize proposes, so cells
+    // being made are filled and cells going are empty; anything else owns what it stores.
+    const stored = edited && isRun(tile) ? extentFor(grid, tile, editing!.draft) : footprint(grid, tile);
+    const sized = proposed.get(tile.id);
+    const extent: Region = { ...stored, ci, ri, span: sized?.span ?? stored.span, rows: sized?.rows ?? stored.rows };
     if (edited && isRun(tile)) {
       const { line, column } = caretAt(tile.style, editing!.draft, extent.span, editing!.caret);
       caret = { ci, ri, style: tile.style, line, column, scroll: editing!.scroll, hue: hueAt(tile) };

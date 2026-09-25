@@ -215,7 +215,11 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     direction, so it cannot cycle, and it never fails.
 71. The cells being made are hatched in the hue; a shrink hatches the cells going. A
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
-    A corner hatches both bands through its corner block, growing or shrinking.
+    A corner hatches both bands through its corner block, growing or shrinking. A host
+    or a run being resized is drawn at the size proposed: cells being made are filled
+    under their hatching, cells going are empty under theirs, and its ring and lit lines
+    follow the new edges. **[proposed]** Shrinking also keeps the old line on the side
+    being dragged in, so where it was stays visible.
 72. A host or a run resizes by its edges through the same operation, and has no interior
     lines. Any rectangle, not only squares. Inward shrinks it, and a run's words reflow;
     outward grows it and pushes, and is refused if it would leave or enter a scope.
