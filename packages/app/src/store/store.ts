@@ -46,4 +46,4 @@ export const useGrid = create<Store>((set, get) => ({
 }));
 
 client.on("grid", ({ grid }) => useGrid.setState({ grid }));
-client.onState = (connected) => useGrid.setState({ connected });
+client.onState((connected) => useGrid.setState({ connected }));

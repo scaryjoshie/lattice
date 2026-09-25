@@ -6,6 +6,11 @@ import type { Message, Methods, Notifications, Response } from "@lattice/protoco
  * development, from the dev server, which reads the same file. The app never reads the
  * file itself. Reconnects with a short backoff, and says whether it is connected so the
  * app can refuse commands it cannot deliver.
+ *
+ * A listener that arrives late is told the state as it is: whether it is connected, and
+ * the last of each notification, the way the daemon greets a client that attaches. So a
+ * store made after the connection opened, as hot reload makes them, is not left
+ * believing it is offline with an empty grid.
  */
 type Listener<N extends keyof Notifications> = (params: Notifications[N]) => void;
 
@@ -28,10 +33,11 @@ export class Client {
   private socket: WebSocket | null = null;
   private waiting = new Map<number, { resolve(r: unknown): void; reject(e: Error): void }>();
   private listeners = new Map<keyof Notifications, Set<Listener<keyof Notifications>>>();
+  private last = new Map<keyof Notifications, unknown>();
+  private states = new Set<(connected: boolean) => void>();
   private n = 0;
   private stopped = false;
-  connected = false;
-  onState: (connected: boolean) => void = () => {};
+  private connected = false;
 
   start(): void {
     this.stopped = false;
@@ -47,7 +53,20 @@ export class Client {
     const set = this.listeners.get(method) ?? new Set();
     set.add(listen as Listener<keyof Notifications>);
     this.listeners.set(method, set);
+    if (this.last.has(method)) listen(this.last.get(method) as Notifications[N]);
     return () => set.delete(listen as Listener<keyof Notifications>);
+  }
+
+  /** Whether it is connected, now and on every change. */
+  onState(listen: (connected: boolean) => void): () => void {
+    this.states.add(listen);
+    listen(this.connected);
+    return () => this.states.delete(listen);
+  }
+
+  private setConnected(connected: boolean): void {
+    this.connected = connected;
+    for (const listen of this.states) listen(connected);
   }
 
   call<M extends keyof Methods>(method: M, params: Methods[M]["params"]): Promise<Methods[M]["result"]> {
@@ -70,10 +89,7 @@ export class Client {
     }
     const socket = new WebSocket(`ws://127.0.0.1:${where.port}/?token=${where.token}`);
     this.socket = socket;
-    socket.onopen = () => {
-      this.connected = true;
-      this.onState(true);
-    };
+    socket.onopen = () => this.setConnected(true);
     socket.onmessage = (e) => {
       const message = JSON.parse(String(e.data)) as Message;
       if ("id" in message) {
@@ -84,12 +100,14 @@ export class Client {
         if (reply.error) pending.reject(new Error(reply.error.message));
         else pending.resolve(reply.result);
       } else {
+        this.last.set(message.method, message.params);
         for (const listen of this.listeners.get(message.method) ?? []) listen(message.params as never);
       }
     };
     socket.onclose = () => {
-      this.connected = false;
-      this.onState(false);
+      // A socket replaced by a newer one says nothing about the connection.
+      if (this.socket !== socket) return;
+      this.setConnected(false);
       for (const pending of this.waiting.values()) pending.reject(new Error("disconnected"));
       this.waiting.clear();
       this.retry();
