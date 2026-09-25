@@ -144,6 +144,17 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   const snap = (n: number) => Math.round(n) + 0.5;
   const sx = (ci: number) => worldX(ci) * k + camera.x;
   const sy = (ri: number) => worldX(ri) * k + camera.y;
+  /**
+   * Fill cells `c0` to `c1` and `r0` to `r1`, the far ends exclusive, on whole pixels. The
+   * ruling is snapped to whole pixels, so a fill at the cells' fractional edges could run up
+   * to a pixel past its line and leave a sliver of itself beyond the line, against whatever
+   * is next door. Every fill of cells goes through here, so fills and lines meet exactly.
+   */
+  const fillCells = (c0: number, r0: number, c1: number, r1: number) => {
+    const x0 = Math.round(sx(c0));
+    const y0 = Math.round(sy(r0));
+    ctx.fillRect(x0, y0, Math.round(sx(c1)) - x0, Math.round(sy(r1)) - y0);
+  };
 
   /**
    * One way to draw a cell: its surface, and the occupant on it if there is one. Used for
@@ -203,10 +214,8 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   const paintSpot = (spot: Occupant) => {
     const x = sx(spot.ci);
     const y = sy(spot.ri);
-    const w = size * spot.span;
-    const h = size * spot.rows;
     ctx.fillStyle = hue(spot.hue).fill;
-    ctx.fillRect(x, y, w, h);
+    fillCells(spot.ci, spot.ri, spot.ci + spot.span, spot.ri + spot.rows);
     mark(ctx, spot, x, y, size);
   };
   /*
@@ -263,7 +272,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     }
     const cell = at(ci, ri);
     ctx.fillStyle = cell?.hue == null ? palette.page : hue(cell.hue).tint;
-    ctx.fillRect(sx(ci), sy(ri), size, size);
+    fillCells(ci, ri, ci + 1, ri + 1);
     const run = runAt.get(`${ci},${ri}`);
     if (run) drawRun(run, { ci, ri, span: 1, rows: 1 });
   };
@@ -272,12 +281,7 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
   for (const plate of plates) {
     if (plate.c1 < c0 || plate.c0 > c1 || plate.r1 < r0 || plate.r0 > r1) continue;
     ctx.fillStyle = hue(plate.hue).tint;
-    ctx.fillRect(
-      sx(plate.c0),
-      sy(plate.r0),
-      sx(plate.c1) + size - sx(plate.c0),
-      sy(plate.r1) + size - sy(plate.r0),
-    );
+    fillCells(plate.c0, plate.r0, plate.c1 + 1, plate.r1 + 1);
   }
 
   /*
