@@ -298,12 +298,24 @@ body {
 }
 
 /* Frosted once it has landed: blurring what is behind a panel while it scales was, measured,
-   the stutter in opening. It lands as the terminal inside fades up, so the two read as one
-   change. */
-.opened-panel[data-settled] {
+   the stutter in opening. The frost is a layer of its own at full strength whose opacity
+   fades in, so it settles rather than pops, and nothing but an opacity changes per frame.
+   It lands as the terminal inside fades up, so the two read as one change. */
+.opened-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  transition: opacity 180ms ease;
 }
+
+.opened-panel[data-settled]::before {
+  opacity: 1;
+}
+
 
 /* The grid rarely divides the room exactly; the remainder letterboxes evenly. */
 .term {
@@ -395,6 +407,7 @@ body {
 }
 
 .opened-body {
+  position: relative;
   height: 100%;
   opacity: 0;
   transition: opacity 160ms ease 180ms;
