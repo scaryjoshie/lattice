@@ -102,7 +102,10 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     shift-click extends instead (20).
 30. Shift-click on an occupant opens it (105). A run does not open.
 31. Right-click on an item opens the tile menu at the pointer, whichever of its cells was
-    hit. Right-click on an empty cell opens the add menu. The browser's own context menu
+    hit. Right-click on an empty cell opens the add menu. Inside a selected region that
+    is empty and in one scope or none, the add menu is for the region: a terminal, a
+    browser or an agent chosen there fills it. Text still starts at one cell, since its
+    words decide its size (81). The browser's own context menu
     never appears over the canvas. Only the primary button presses on the grid: a
     right-button press selects nothing and starts nothing.
 32. The tile menu offers rename and delete for an occupant, edit and delete for a run.

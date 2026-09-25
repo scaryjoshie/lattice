@@ -198,7 +198,7 @@ export function sceneOf(grid: Grid, facts: Facts, session: Session, view: View):
       ? null
       : (tiles.get(acted) ?? null)
     : overlay?.kind === "add"
-      ? { ci: overlay.ci, ri: overlay.ri, span: 1, rows: 1, hue: scopeAt(grid, overlay.ci, overlay.ri)?.hue ?? null }
+      ? { ci: overlay.ci, ri: overlay.ri, span: overlay.size?.span ?? 1, rows: overlay.size?.rows ?? 1, hue: scopeAt(grid, overlay.ci, overlay.ri)?.hue ?? null }
       : null;
   const corners = !carry && !stretch;
   const selectedScope = selection && "scope" in selection ? grid.scopes.find((s) => s.id === selection.scope) : undefined;

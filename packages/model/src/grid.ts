@@ -165,13 +165,14 @@ export function addTile(
   rowId: string,
   what: { family: "text"; style?: TextStyle } | { family: "host"; surface: string },
   id = nextId("t"),
+  size: { span: number; rows: number } = { span: 1, rows: 1 },
 ): Grid {
   // Only onto an empty cell: nothing's origin, and inside nothing's extent.
   if (holder(grid, indexOfTrack(grid.columns, columnId), indexOfTrack(grid.rows, rowId))) return grid;
   const tile: Tile =
     what.family === "text"
       ? { id, family: "text", columnId, rowId, style: what.style ?? "title", text: "", span: 1, rows: 1 }
-      : { id, family: "host", columnId, rowId, surface: what.surface, span: 1, rows: 1 };
+      : { id, family: "host", columnId, rowId, surface: what.surface, span: size.span, rows: size.rows };
   return { ...grid, tiles: [...grid.tiles, tile] };
 }
 

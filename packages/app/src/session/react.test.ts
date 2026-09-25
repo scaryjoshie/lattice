@@ -171,4 +171,20 @@ describe("overlays", () => {
     expect(react(g, open, { type: "key", key: "Undo", down: true })).toEqual([]);
     expect(react(g, initial, { type: "key", key: "Undo", down: true })).toEqual([{ kind: "undo" }]);
   });
+
+  test("right-clicking in a selected empty region adds at the region's size", () => {
+    const g = world();
+    const selected = reduce(initial, { kind: "select", selection: { region: { ci: 5, ri: 5, span: 3, rows: 2 } } });
+    const context = (ci: number, ri: number, from: Session) => drive(g, [{ type: "context", cell: [ci, ri], client: { x: 0, y: 0 } }], from).session;
+    const open = context(6, 6, selected);
+    expect(open.overlay).toMatchObject({ kind: "add", ci: 5, ri: 5, size: { span: 3, rows: 2 } });
+    const { commands } = drive(g, [{ type: "choose", choice: { family: "host", occupant: "claude" } }], open);
+    expect(commands[0]).toMatchObject({ kind: "place", ci: 5, ri: 5, size: { span: 3, rows: 2 } });
+    // Outside the selection, the cell clicked, as ever.
+    expect(context(10, 1, selected).overlay).toMatchObject({ kind: "add", ci: 10, ri: 1 });
+    expect((context(10, 1, selected).overlay as { size?: unknown }).size).toBeUndefined();
+    // A selected region with something in it: the cell, since nothing could fill it.
+    const taken = reduce(initial, { kind: "select", selection: { region: { ci: 7, ri: 3, span: 2, rows: 2 } } });
+    expect((context(7, 3, taken).overlay as { size?: unknown }).size).toBeUndefined();
+  });
 });

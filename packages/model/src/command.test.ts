@@ -86,6 +86,27 @@ describe("commands", () => {
     expect((apply(g, { kind: "setName", id: "a", name: "  " }).grid.tiles[0] as Host).name).toBeUndefined();
   });
 
+  test("a host placed at a size fills an empty region, in one scope or none", () => {
+    const g = world();
+    const host = { family: "host", surface: "terminal" } as const;
+    // Inside the scope (columns 2 to 4, rows 1 to 4), around the host at (3, 2): free.
+    const done = apply(g, { kind: "place", ci: 2, ri: 3, what: host, size: { span: 3, rows: 2 }, id: "big" });
+    expect(done.ok).toBe(true);
+    expect(at(done.grid, "big")).toEqual({ ci: 2, ri: 3, span: 3, rows: 2 });
+    // A cell of it taken: refused.
+    expect(propose(g, { kind: "place", ci: 2, ri: 2, what: host, size: { span: 2, rows: 1 } }).ok).toBe(false);
+    // Across the scope's edge: refused, as a move there would be.
+    expect(propose(g, { kind: "place", ci: 4, ri: 3, what: host, size: { span: 2, rows: 1 } }).ok).toBe(false);
+    // Out of every scope, past the tracks: fine, and the tracks are made.
+    expect(apply(g, { kind: "place", ci: 8, ri: 5, what: host, size: { span: 3, rows: 3 } }).ok).toBe(true);
+  });
+
+  test("a run is placed at one cell whatever size is asked: its words decide", () => {
+    const done = apply(world(), { kind: "place", ci: 5, ri: 0, what: { family: "text", style: "note" }, size: { span: 3, rows: 3 }, id: "n" });
+    expect(done.ok).toBe(true);
+    expect(at(done.grid, "n")).toEqual({ ci: 5, ri: 0, span: 1, rows: 1 });
+  });
+
   test("a tile's corner resizes both ways at once, neither axis undoing the other", () => {
     const done = apply(world(), { kind: "resize", owner: "a", col: { line: 4, n: 1 }, row: { line: 3, n: 1 } });
     expect(done.ok).toBe(true);

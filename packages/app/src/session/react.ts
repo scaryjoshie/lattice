@@ -1,7 +1,7 @@
 import { bounds, close, type Command, contains, footprint, type Grid, holder, nextId, propose, type Region, type TextStyle, wellFormed } from "@lattice/model";
-import { idleOf, OCCUPANTS, type OccupantId } from "../occupants/index.ts";
+import { DEFAULT_SURFACE, idleOf, OCCUPANTS, type OccupantId } from "../occupants/index.ts";
 import type { RuntimeCommand } from "../runtime/facts.ts";
-import type { Gesture, Selection, Session, SessionCommand } from "./session.ts";
+import type { Gesture, Overlay, Selection, Session, SessionCommand } from "./session.ts";
 import { sameTarget, type Target } from "./target.ts";
 
 /**
@@ -107,10 +107,7 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       const id = tileUnder(grid, input.cell);
       // The menu for what is there. On an empty cell that is the add menu, which is also
       // what shift-click offers: the act and the menu are the same thing for a place.
-      return [
-        point(null),
-        overlay(id ? { kind: "tile", at: input.client, id } : { kind: "add", at: input.client, ci: input.cell[0], ri: input.cell[1] }),
-      ];
+      return [point(null), overlay(id ? { kind: "tile", at: input.client, id } : adding(grid, session, input.cell, input.client))];
     }
     case "leave":
       return [point(null)];
@@ -131,7 +128,7 @@ export function react(grid: Grid, session: Session, input: Input): Effect[] {
       // A host is placed with the surface its occupant needs; the occupant is the
       // runtime's to start, unless it is what that surface shows anyway.
       const { surface } = OCCUPANTS[choice.occupant];
-      const place: Command = { kind: "place", ci, ri, what: { family: "host", surface }, id };
+      const place: Command = { kind: "place", ci, ri, what: { family: "host", surface }, id, size: session.overlay.size };
       const start: Effect[] = choice.occupant === idleOf(surface) ? [] : [{ kind: "start", host: id, occupant: choice.occupant }];
       return [overlay(null), place, ...start];
     }
@@ -276,7 +273,7 @@ function click(grid: Grid, session: Session, input: Extract<Input, { type: "rele
       if (!tile || tile.family === "text") return [];
       return [point(null), { kind: "open", opened: { id, leaving: false } }];
     }
-    return [point(null), overlay({ kind: "add", at: input.client, ci: cell[0], ri: cell[1] })];
+    return [point(null), overlay(adding(grid, session, cell, input.client))];
   }
   // Click selects, and clicking what is already selected clears it. A scope's corner
   // handle selects the scope; anywhere else inside it selects the cell.
@@ -295,4 +292,19 @@ function key(session: Session, input: Extract<Input, { type: "key" }>): Effect[]
   // Escape cancels the gesture in progress, else clears the selection.
   if (session.gesture) return [gesture(null)];
   return [select(null)];
+}
+
+/**
+ * The add menu for a cell. Inside a selected region, the region itself, when a host could
+ * be placed filling it, as the model judges a place: then what is chosen is made at the
+ * region's size. Otherwise the cell, as anywhere else.
+ */
+function adding(grid: Grid, session: Session, cell: readonly [number, number], at: { x: number; y: number }): Extract<Overlay, { kind: "add" }> {
+  const selection = session.selection;
+  if (selection && "region" in selection && contains(selection.region, cell[0], cell[1])) {
+    const { ci, ri, span, rows } = selection.region;
+    const size = { span, rows };
+    if (propose(grid, { kind: "place", ci, ri, what: { family: "host", surface: DEFAULT_SURFACE }, size }).ok) return { kind: "add", at, ci, ri, size };
+  }
+  return { kind: "add", at, ci: cell[0], ri: cell[1] };
 }

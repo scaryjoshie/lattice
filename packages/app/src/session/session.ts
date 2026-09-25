@@ -61,7 +61,8 @@ export type Gesture =
 
 /** One thing open over the grid at a time. Menus live in screen space, at the pointer. */
 export type Overlay =
-  | { kind: "add"; at: { x: number; y: number }; ci: number; ri: number }
+  /** The add menu, for a cell, or for a selected region when what is chosen will fill it. */
+  | { kind: "add"; at: { x: number; y: number }; ci: number; ri: number; size?: { span: number; rows: number } }
   | { kind: "tile"; at: { x: number; y: number }; id: string }
   /** A run being typed. The draft is here so the scene can lay the run out as it grows. */
   /** `scroll` is how far the input has scrolled its lines up, in cells, to keep the caret

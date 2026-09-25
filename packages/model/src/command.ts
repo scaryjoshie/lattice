@@ -10,10 +10,11 @@ import {
   proposeMove,
   proposeResize,
   removeTile,
+  scopeAt,
   type TextStyle,
 } from "./grid.ts";
 import { extentFor } from "./extent.ts";
-import type { Region } from "./region.ts";
+import { cells, type Region } from "./region.ts";
 
 /**
  * A command is a change to the document, as data: everything needed to judge it and
@@ -27,7 +28,7 @@ import type { Region } from "./region.ts";
 export type Command =
   | { kind: "move"; from: Region; to: Region }
   | { kind: "resize"; owner: string; col?: Edge; row?: Edge }
-  | { kind: "place"; ci: number; ri: number; what: Placing; id?: string }
+  | { kind: "place"; ci: number; ri: number; what: Placing; id?: string; size?: { span: number; rows: number } }
   | { kind: "remove"; id: string }
   | { kind: "setText"; id: string; text: string }
   | { kind: "setName"; id: string; name: string };
@@ -65,11 +66,21 @@ export function propose(grid: Grid, command: Command): Verdict {
     }
     case "resize":
       return corner(grid, command);
-    case "place":
-      // Onto an empty cell only, and never under an id already in use, since everything
-      // that finds a tile finds it by id. Past the tracks is free by definition; the
-      // tracks are made when it is applied.
-      return plain(!holder(grid, command.ci, command.ri) && !(command.id !== undefined && has(grid, command.id)));
+    case "place": {
+      // Onto empty cells only, and never under an id already in use, since everything that
+      // finds a tile finds it by id. A host may be placed at a size, over a region: every
+      // cell of it empty, and all of it in one scope or in none, as a move's destination
+      // must be. Past the tracks is free by definition; the tracks are made when it is
+      // applied. A run is placed at one cell, since its words decide its size.
+      const size = command.what.family === "host" ? (command.size ?? { span: 1, rows: 1 }) : { span: 1, rows: 1 };
+      if (size.span < 1 || size.rows < 1 || (command.id !== undefined && has(grid, command.id))) return plain(false);
+      const region = { ci: command.ci, ri: command.ri, ...size };
+      const home = scopeAt(grid, command.ci, command.ri)?.id ?? null;
+      for (const [ci, ri] of cells(region)) {
+        if (holder(grid, ci, ri) || (scopeAt(grid, ci, ri)?.id ?? null) !== home) return plain(false);
+      }
+      return plain(true);
+    }
     case "remove":
     case "setText":
     case "setName":
@@ -139,13 +150,14 @@ export function apply(grid: Grid, command: Command): Applied {
     case "resize":
       return { ok: true, ...applied(grid, propose(grid, command).moves) };
     case "place": {
-      const made = ensureTracks(grid, { ci: command.ci, ri: command.ri, span: 1, rows: 1 });
+      const size = command.what.family === "host" ? (command.size ?? { span: 1, rows: 1 }) : { span: 1, rows: 1 };
+      const made = ensureTracks(grid, { ci: command.ci, ri: command.ri, ...size });
       const column = made.grid.columns[command.ci + made.dc];
       const row = made.grid.rows[command.ri + made.dr];
       if (!column || !row) return same;
       // Named by the caller when what follows must refer to it, else here.
       const id = command.id ?? nextId("t");
-      return { ok: true, grid: addTile(made.grid, column.id, row.id, command.what, id), dc: made.dc, dr: made.dr, id };
+      return { ok: true, grid: addTile(made.grid, column.id, row.id, command.what, id, size), dc: made.dc, dr: made.dr, id };
     }
     case "remove":
       return { ok: true, grid: removeTile(grid, command.id), dc: 0, dr: 0 };
