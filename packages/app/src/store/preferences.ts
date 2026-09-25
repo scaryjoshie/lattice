@@ -8,6 +8,16 @@ import { PROVIDERS, type ProviderId } from "../providers/index.ts";
  */
 export type ThemeChoice = "system" | "light" | "dark";
 
+/** What the address bar searches with. */
+export const ENGINES = {
+  google: { search: "https://www.google.com/search?q=" },
+  duckduckgo: { search: "https://duckduckgo.com/?q=" },
+  bing: { search: "https://www.bing.com/search?q=" },
+  kagi: { search: "https://kagi.com/search?q=" },
+} as const;
+
+export type Engine = keyof typeof ENGINES;
+
 export interface Provider {
   readonly enabled: boolean;
   /** The command that starts it. Found on the path when there is one. */
@@ -18,6 +28,8 @@ export interface Preferences {
   readonly theme: ThemeChoice;
   /** The key panel, bottom left. */
   readonly keys: boolean;
+  /** The browsers' search engine: Google unless changed, as cmux has it. */
+  readonly search: Engine;
   readonly providers: Readonly<Record<ProviderId, Provider>>;
 }
 
@@ -32,7 +44,7 @@ const providers = Object.fromEntries(
 ) as Record<ProviderId, Provider>;
 
 export const usePreferences = create<Store>((set) => ({
-  preferences: { theme: "system", keys: true, providers },
+  preferences: { theme: "system", keys: true, search: "google", providers },
   prefer(patch) {
     set((s) => ({ preferences: { ...s.preferences, ...patch } }));
   },

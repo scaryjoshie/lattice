@@ -1,3 +1,4 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { dark, followSystem, light, setTheme } from "../paint/theme.ts";
 import { usePreferences } from "../store/preferences.ts";
@@ -8,6 +9,8 @@ export function App() {
   // The theme is a setting: the system's, or one chosen.
   const choice = usePreferences((s) => s.preferences.theme);
   useEffect(() => {
+    // The window's appearance too, which a browser's pages follow for light and dark.
+    if (isTauri()) void invoke("appearance", { theme: choice }).catch(() => {});
     if (choice === "system") return followSystem();
     setTheme(choice === "dark" ? dark : light);
   }, [choice]);

@@ -420,6 +420,7 @@ export function Grid({ onSettings }: { onSettings(): void }) {
         <Opened
           name={openedTile.family === "text" ? undefined : openedTile.name}
           terminal={openedTile.family === "host" && openedTile.surface === "terminal" ? openedTile.id : undefined}
+          browser={openedTile.family === "host" && openedTile.surface === "webview" ? openedTile.id : undefined}
           pulse={hue(scopeAt(grid, indexOfTrack(grid.columns, openedTile.columnId), indexOfTrack(grid.rows, openedTile.rowId))?.hue ?? null).edge}
           from={rects.from}
           to={rects.to}

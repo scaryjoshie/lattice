@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { PROVIDERS, type ProviderId } from "../providers/index.ts";
-import { type ThemeChoice, usePreferences } from "../store/preferences.ts";
+import { type Engine, ENGINES, type ThemeChoice, usePreferences } from "../store/preferences.ts";
 import { Mark } from "./Menu.tsx";
 
 /**
@@ -46,6 +46,9 @@ export function Settings({ open, onToggle, onClose }: { open: boolean; onToggle(
           </Row>
           <Row label="key panel">
             <Switch on={preferences.keys} onChange={(keys) => prefer({ keys })} />
+          </Row>
+          <Row label="search">
+            <Choice<Engine> value={preferences.search} options={Object.keys(ENGINES) as Engine[]} onChange={(search) => prefer({ search })} />
           </Row>
           {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => {
             const provider = preferences.providers[id];

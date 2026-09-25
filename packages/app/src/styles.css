@@ -406,6 +406,86 @@ body {
   }
 }
 
+/* A browser's page: a slim bar, and the area the shell's native webview covers. */
+.browser {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.browser-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.browser-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.browser-address {
+  flex: 1;
+  height: 30px;
+  margin-left: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: color-mix(in srgb, var(--page) 70%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.browser-address:focus {
+  border-color: var(--muted);
+}
+
+.browser-address[data-loading] {
+  color: var(--muted);
+}
+
+.browser-page {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.browser-none {
+  color: var(--muted);
+}
+
+/* No page yet: grey, with the browser's mark, large and quiet. */
+.browser-page[data-empty] {
+  background: color-mix(in srgb, var(--hover) 70%, transparent);
+}
+
+.browser-mark {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+.browser-mark svg {
+  width: 72px;
+  height: 72px;
+}
+
 .opened-body {
   position: relative;
   height: 100%;

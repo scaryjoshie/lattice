@@ -1,4 +1,7 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Browser } from "./Browser.tsx";
 import { Term } from "./Term.tsx";
 
 /**
@@ -21,6 +24,7 @@ export interface Rect {
 export function Opened({
   name,
   terminal,
+  browser,
   from,
   to,
   pulse,
@@ -30,6 +34,8 @@ export function Opened({
   name?: string;
   /** The host whose terminal this shows, when it is a terminal host. */
   terminal?: string;
+  /** The host whose page this shows, when it is a browser host. */
+  browser?: string;
   from: Rect;
   to: Rect;
   /** The tile's edge colour, which its outline is drawn in. */
@@ -101,6 +107,14 @@ export function Opened({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // In the shell, Cmd-Escape is also the menu's Close Panel, which reaches here even while a
+  // browser's native page has the keys.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const stop = listen("close-panel", () => close());
+    return () => void stop.then((unlisten) => unlisten());
+  });
+
   return (
     <div className="opened" data-overlay data-absorbed={absorbed || undefined} onPointerDown={close}>
       {/* The tile the panel came from, outlined in its edge colour and nothing else: behind
@@ -123,6 +137,7 @@ export function Opened({
       >
         <div className="opened-body" data-shown={(arrived && !leaving) || undefined}>
           {terminal && <Term host={terminal} width={to.w} height={to.h} />}
+          {browser && <Browser host={browser} shown={settled && !leaving} />}
         </div>
       </div>
     </div>
