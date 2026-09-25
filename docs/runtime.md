@@ -86,3 +86,14 @@ discovery machinery for foreign agents.
 14. Comms between Lattice agents can be an MCP tool the daemon exposes, as modelbus does.
     Whether Lattice depends on modelbus over its socket or absorbs the parts is open;
     absorbing is the current lean, for the reason in 13.
+
+## Later
+
+Joshua's ideas, recorded 24 September 2026 and explicitly out of scope for now.
+
+- **Things off the grid.** An agent connected to something that is not on the grid, such
+  as a web page or a service, shows it as a temporary panel floating above the grid, in a
+  panel at the left, and the link is drawn to it there.
+- **An agent over the others.** One agent that acts on the user's behalf above the rest,
+  running commands such as adding worktrees. Beyond scope.
+- **Starting agents from settings.** Not a thing settings does.

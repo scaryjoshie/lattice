@@ -72,10 +72,13 @@ lattice/
 ## Preferences
 
 9. A third persisted value beside the document and the session. Theme, the key panel,
-   the default location for new worktrees, provider configuration such as paths and flags.
+   provider configuration such as paths and flags.
 10. Owned by the daemon's store, changed by their own commands, not undoable, pushed to the
    client the way the grid is. Not in the session, because they outlive the window; not in
-   the document, because they are not about any project.
+   the document, because they are not about any project. Settings that are about a
+   project, such as where its new worktrees go, are that project's and live with it:
+   [settings.md](settings.md) has the rule, and corrects this item, which listed the
+   worktree location here.
 
 ## `~/.lattice`
 

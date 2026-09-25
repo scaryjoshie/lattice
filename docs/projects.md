@@ -53,9 +53,11 @@ worktree   identity: its entry under the repo's .git/worktrees. Becomes a scope 
 
 ## Open
 
-- **Placement.** A worktree that appears needs a position, and nothing on the grid moves
-  unless asked. At the edge with tracks made on demand, or in an unplaced list the user
-  drags from. Never auto-arranged.
+- **Adding.** Decided 24 September, from Joshua's notes: a worktree git reports is not put
+  on the grid by itself, since where it would go is not defined and the user may not want
+  it there. Detected worktrees are listed, and the user drags one onto the grid to add it.
+  The list is a sidebar, kept out of the way so the grid is not cluttered; its look is
+  open. The default location is only where a worktree created from Lattice goes.
 - **Disappearance.** A worktree removed outside Lattice has agents and text in its scope.
   Removed, or greyed and kept until the user acts. The same question as deleting an agent,
   and it wants one answer for both.
