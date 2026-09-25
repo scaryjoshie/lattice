@@ -3,6 +3,7 @@ import { CELL, visible, worldX } from "../scene/geometry.ts";
 import { MARK, MARK_UNITS, path } from "../scene/marks.ts";
 import { FONT, fontOf, nameFont } from "./measure.ts";
 import { hue, theme } from "./theme.ts";
+import { route } from "../scene/route.ts";
 import type { Occupant, Scene, TextRun } from "../scene/scene.ts";
 
 /**
@@ -388,7 +389,6 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
    * inside a focus — which is what keeps a canvas of relationships from becoming a web.
    */
   if (focus) {
-    const centre = (r: Region) => [sx(r.ci) + (size * r.span) / 2, sy(r.ri) + (size * r.rows) / 2] as const;
     ctx.fillStyle = palette.veil;
     ctx.fillRect(0, 0, width, height);
 
@@ -396,58 +396,47 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     repaint([...focus.partners, focus]);
 
     /*
-     * Lines run over the tiles rather than stopping at their edges, and end in a dot at
-     * each agent's centre. Two agents in neighbouring cells would otherwise have their
-     * connection entirely hidden underneath them.
-     *
-     * The route turns rather than cutting across: a diagonal ignores the grid it is drawn
-     * on, and on a ruled surface that reads as a mistake. One corner, rounded.
+     * A line leaves the focused agent from the centre of an edge and runs over the partner
+     * to its middle, with a dot at each end: two agents side by side would otherwise have
+     * their connection hidden between them. The route is a straight line or a Z
+     * (scene/route.ts): a diagonal ignores the grid it is drawn on, and on a ruled surface
+     * that reads as a mistake. Its corners are rounded.
      */
-    const [fx, fy] = centre(focus.anchor);
-    const halfW = (size * focus.anchor.span) / 2;
-    const halfH = (size * focus.anchor.rows) / 2;
-    /** Where a line to a partner leaves the focused agent: always the centre of an edge.
-     *  The top or bottom when the partner lies within its width, else the left or right. */
-    const vertical = (px: number) => Math.abs(px - fx) < halfW;
-    const leave = (px: number, py: number): readonly [number, number] =>
-      vertical(px) ? [fx, fy + Math.sign(py - fy) * halfH] : [fx + Math.sign(px - fx) * halfW, fy];
+    const paths = focus.partners.map((partner) => route(focus.anchor, partner).map((p) => [sx(p.c), sy(p.r)] as const));
     ctx.strokeStyle = h.edge;
     ctx.lineWidth = LINK_EDGE;
     ctx.lineCap = "round";
     ctx.setLineDash(LINK_DASH);
     ctx.lineDashOffset = -dash;
     ctx.beginPath();
-    for (const partner of focus.partners) {
-      const [px, py] = centre(partner);
-      // The focused agent is already ringed, so its line leaves from the edge rather than
-      // from under its own mark. Partners are only identified by what arrives at them.
-      const out = leave(px, py);
-      ctx.moveTo(out[0], out[1]);
-      // Straight out of the edge, then one rounded turn onto the partner's row or column.
-      const corner: readonly [number, number] = vertical(px) ? [out[0], py] : [px, out[1]];
-      const turn = Math.min(size * LINK_TURN, Math.abs(px - out[0]), Math.abs(py - out[1]));
-      if (turn > 0.5) ctx.arcTo(corner[0], corner[1], px, py, turn);
-      else ctx.lineTo(corner[0], corner[1]);
-      ctx.lineTo(px, py);
+    for (const path of paths) {
+      ctx.moveTo(path[0]![0], path[0]![1]);
+      for (let i = 1; i < path.length - 1; i++) {
+        const [px, py] = path[i - 1]!;
+        const [x, y] = path[i]!;
+        const [nx, ny] = path[i + 1]!;
+        // A corner no rounder than half the shorter segment beside it, so a short jog
+        // does not overshoot.
+        const turn = Math.min(size * LINK_TURN, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+        if (turn > 0.5) ctx.arcTo(x, y, nx, ny, turn);
+        else ctx.lineTo(x, y);
+      }
+      ctx.lineTo(path.at(-1)![0], path.at(-1)![1]);
     }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineCap = "butt";
 
+    // A dot at both ends, so a connection is marked on each agent. Two partners in the
+    // same direction share a departure point, which is correct: the dot says links leave
+    // this way, not how many.
     ctx.fillStyle = h.edge;
-    const stop = (x: number, y: number) => {
-      ctx.beginPath();
-      ctx.arc(x, y, LINK_DOT, 0, Math.PI * 2);
-      ctx.fill();
-    };
-    for (const partner of focus.partners) stop(...centre(partner));
-    // And where each line leaves the focused agent, so a connection is marked at both
-    // ends. Two partners in the same direction share a departure point, which is correct:
-    // the dot says links leave this way, not how many.
-    for (const partner of focus.partners) {
-      const [px, py] = centre(partner);
-      if (px === fx && py === fy) continue;
-      stop(...leave(px, py));
+    for (const path of paths) {
+      for (const [x, y] of [path[0]!, path.at(-1)!]) {
+        ctx.beginPath();
+        ctx.arc(x, y, LINK_DOT, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     ctx.lineWidth = FOCUS_EDGE;

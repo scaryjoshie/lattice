@@ -46,8 +46,10 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     plus.
 11. A hovered occupant additionally veils everything else back toward the page and draws
     crawling dashed lines to every occupant it is linked to, leaving from the centre of
-    an edge, top or bottom when the partner lies within its width and left or right
-    otherwise, turning once, and ending in a dot at each end. Every occupant does this, linked or not; the add menu
+    an edge and running over the partner to its middle, with a dot at each end, so two
+    neighbours' link is never hidden between them. It leaves and enters by the edges that
+    face each other on the axis where the two are further apart: a straight line when
+    those centres line up, else a Z turning halfway between, its corners rounded. Every occupant does this, linked or not; the add menu
     distinguishes agents from utilities and the canvas does not.
 12. Nothing inside the selection is hovered: no ring on a cell or an item, no veil, no
     links. The selection is already the thing pointed at, and a press there moves the
