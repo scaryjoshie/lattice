@@ -1,4 +1,4 @@
-import type { Command, Grid } from "@lattice/model";
+import type { Command, Grid, Scope, Tile } from "@lattice/model";
 
 /**
  * The wire between the app and the daemon: JSON-RPC 2.0, one message per line on the
@@ -34,12 +34,25 @@ export interface Facts {
   readonly hosting: Readonly<Record<string, string>>;
 }
 
+/**
+ * One step of the document's history, as a window lists it: the command, and what it was
+ * done to, as that was once done (placed, renamed, resized) or just before (removed). A
+ * move names what it carried when it carried one thing, and says how many things.
+ */
+export interface Step {
+  command: Command;
+  subject: Tile | Scope | null;
+  carried: number;
+}
+
 export interface Methods {
   hello: { params: Record<string, never>; result: { version: string; home: string } };
   /** A document command. `mark` is whatever the client wants back when it is undone. */
   run: { params: { command: Command; mark?: unknown }; result: { ok: boolean; dc: number; dr: number; id?: string } };
-  undo: { params: { mark?: unknown }; result: { ok: boolean; mark?: unknown } };
-  redo: { params: { mark?: unknown }; result: { ok: boolean; mark?: unknown } };
+  /** Back `steps` steps, one by default. The mark is the one the last of them was made
+   *  with, which is what the window restores. */
+  undo: { params: { mark?: unknown; steps?: number }; result: { ok: boolean; mark?: unknown } };
+  redo: { params: { mark?: unknown; steps?: number }; result: { ok: boolean; mark?: unknown } };
   /** The runtime's: start an occupant in a host, or stop it. Not undoable. */
   start: { params: { host: string; occupant: string }; result: { ok: boolean } };
   stop: { params: { host: string }; result: { ok: boolean } };
@@ -59,6 +72,9 @@ export interface Methods {
 export interface Notifications {
   grid: { grid: Grid; dc: number; dr: number };
   facts: { facts: Facts };
+  /** The history, after every change and on arrival: what undo would take back, oldest
+   *  first, and what redo would do again, next first. */
+  history: { past: Step[]; future: Step[] };
   /** What an attached terminal wrote, base64, since output is bytes and a chunk can end
    *  inside a character. Sent only to the windows attached to it. */
   output: { host: string; data: string };

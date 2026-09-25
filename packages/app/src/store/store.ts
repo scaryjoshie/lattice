@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { type Command, type Grid, propose, type Verdict } from "@lattice/model";
+import type { Step } from "@lattice/protocol";
 import { client } from "./client.ts";
 
 /**
@@ -12,10 +13,13 @@ import { client } from "./client.ts";
 interface Store {
   grid: Grid;
   connected: boolean;
+  /** What undo would take back, oldest first, and what redo would do again, next first. */
+  history: { past: readonly Step[]; future: readonly Step[] };
   propose(command: Command): Verdict;
   run(command: Command, mark?: unknown): Promise<{ ok: boolean; dc: number; dr: number; id?: string }>;
-  undo(mark?: unknown): Promise<{ ok: boolean; mark?: unknown }>;
-  redo(mark?: unknown): Promise<{ ok: boolean; mark?: unknown }>;
+  /** Back, or forward again, `steps` steps: one unless a history list asks for more. */
+  undo(mark?: unknown, steps?: number): Promise<{ ok: boolean; mark?: unknown }>;
+  redo(mark?: unknown, steps?: number): Promise<{ ok: boolean; mark?: unknown }>;
 }
 
 const empty: Grid = { columns: [], rows: [], tiles: [], scopes: [], links: [] };
@@ -24,6 +28,7 @@ const refused = { ok: false, dc: 0, dr: 0 };
 export const useGrid = create<Store>((set, get) => ({
   grid: empty,
   connected: false,
+  history: { past: [], future: [] },
   propose(command) {
     return propose(get().grid, command);
   },
@@ -35,15 +40,16 @@ export const useGrid = create<Store>((set, get) => ({
       return refused;
     }
   },
-  async undo(mark) {
+  async undo(mark, steps) {
     if (!get().connected) return { ok: false };
-    return client.call("undo", { mark }).catch(() => ({ ok: false }));
+    return client.call("undo", { mark, steps }).catch(() => ({ ok: false }));
   },
-  async redo(mark) {
+  async redo(mark, steps) {
     if (!get().connected) return { ok: false };
-    return client.call("redo", { mark }).catch(() => ({ ok: false }));
+    return client.call("redo", { mark, steps }).catch(() => ({ ok: false }));
   },
 }));
 
 client.on("grid", ({ grid }) => useGrid.setState({ grid }));
+client.on("history", (history) => useGrid.setState({ history }));
 client.onState((connected) => useGrid.setState({ connected }));

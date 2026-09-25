@@ -27,6 +27,7 @@ export class Rpc {
   ) {
     document.onChange((grid, dc, dr) => this.notify("grid", { grid, dc, dr }));
     agents.onChange((facts) => this.notify("facts", { facts }));
+    document.onHistory((history) => this.notify("history", history));
   }
 
   /** A client arrived: it gets the state as it is, then every change. */
@@ -35,6 +36,7 @@ export class Rpc {
     this.attached.set(client, new Map());
     client.send({ jsonrpc: "2.0", method: "grid", params: { grid: this.document.current(), dc: 0, dr: 0 } });
     client.send({ jsonrpc: "2.0", method: "facts", params: { facts: this.agents.current() } });
+    client.send({ jsonrpc: "2.0", method: "history", params: this.document.history() });
     return () => {
       for (const stop of this.attached.get(client)?.values() ?? []) stop();
       this.attached.delete(client);
@@ -60,10 +62,14 @@ export class Rpc {
         const { command, mark } = request.params as Methods["run"]["params"];
         return this.document.run(command, mark);
       }
-      case "undo":
-        return this.document.undo((request.params as Methods["undo"]["params"]).mark);
-      case "redo":
-        return this.document.redo((request.params as Methods["redo"]["params"]).mark);
+      case "undo": {
+        const { mark, steps } = request.params as Methods["undo"]["params"];
+        return this.document.undo(mark, steps);
+      }
+      case "redo": {
+        const { mark, steps } = request.params as Methods["redo"]["params"];
+        return this.document.redo(mark, steps);
+      }
       case "start": {
         const { host, occupant } = request.params as Methods["start"]["params"];
         this.agents.start(host, occupant);

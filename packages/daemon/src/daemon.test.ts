@@ -57,7 +57,7 @@ describe("the daemon", () => {
     const c = await connect();
     const hello = await c.call("hello");
     expect(hello.result.home).toBe(home);
-    expect(c.notes.map((m) => (m as { method: string }).method)).toEqual(["grid", "facts"]);
+    expect(c.notes.map((m) => (m as { method: string }).method)).toEqual(["grid", "facts", "history"]);
     const grid = (c.notes[0] as any).params.grid;
     expect(grid.tiles.length).toBe(14);
     c.end();
@@ -73,14 +73,15 @@ describe("the daemon", () => {
     const reply = await a.call("run", { command: { kind: "place", ci: 0, ri: 0, what: { family: "host", surface: "terminal" } }, mark: { tile: "x" } });
     seen.push(...a.notes.slice(before).map((m) => (m as { method: string }).method));
     expect(reply.result.ok).toBe(true);
-    expect(seen).toEqual(["grid"]);
-    expect((a.notes.at(-1) as any).params.grid.tiles.length).toBe(15);
+    expect(seen).toEqual(["grid", "history"]);
+    const grids = (c: typeof a) => c.notes.filter((m: any) => m.method === "grid");
+    expect((grids(a).at(-1) as any).params.grid.tiles.length).toBe(15);
     // The other client saw it too.
     await new Promise((r) => setTimeout(r, 20));
-    expect((b.notes.at(-1) as any).params.grid.tiles.length).toBe(15);
+    expect((grids(b).at(-1) as any).params.grid.tiles.length).toBe(15);
     const undone = await a.call("undo", { mark: { tile: "y" } });
     expect(undone.result).toEqual({ ok: true, mark: { tile: "x" } });
-    expect((a.notes.at(-1) as any).params.grid.tiles.length).toBe(14);
+    expect((grids(a).at(-1) as any).params.grid.tiles.length).toBe(14);
     const redone = await a.call("redo", { mark: null });
     expect(redone.result).toEqual({ ok: true, mark: { tile: "y" } });
     a.end();
@@ -98,6 +99,7 @@ describe("the daemon", () => {
     await c.call("hello");
     expect((c.notes[0] as any).params.grid.tiles.length).toBe(15);
     expect((await c.call("undo", {})).result.ok).toBe(false);
+    expect((c.notes.find((m: any) => m.method === "history") as any).params).toEqual({ past: [], future: [] });
     c.end();
   });
 
@@ -108,7 +110,7 @@ describe("the daemon", () => {
     const grid = (c.notes[0] as any).params.grid;
     const host = grid.tiles.find((t: any) => t.family === "host").id;
     await c.call("start", { host, occupant: "codex" });
-    const facts = (c.notes.at(-1) as any);
+    const facts = c.notes.filter((m: any) => m.method === "facts").at(-1) as any;
     expect(facts.method).toBe("facts");
     expect(facts.params.facts.hosting[host]).toBe("codex");
     c.end();
@@ -169,5 +171,62 @@ describe("the daemon", () => {
     a.end();
     b.end();
     process.env.SHELL = shell;
+  });
+
+  test("the history names each step and what it was done to, and undoes several at once", async () => {
+    daemon = start();
+    const c = await connect();
+    await c.call("hello");
+    const grid = (c.notes[0] as any).params.grid;
+    const title = grid.tiles.find((t: any) => t.family === "text");
+    const history = () => (c.notes.filter((m: any) => m.method === "history").at(-1) as any).params;
+    const placed = await c.call("run", { command: { kind: "place", ci: 0, ri: 0, what: { family: "host", surface: "terminal" } }, mark: "m1" });
+    await c.call("run", { command: { kind: "setText", id: title.id, text: "renamed" }, mark: "m2" });
+    await c.call("run", { command: { kind: "remove", id: placed.result.id }, mark: "m3" });
+    let h = history();
+    expect(h.past.map((s: any) => s.command.kind)).toEqual(["place", "setText", "remove"]);
+    expect(h.past[0].subject.id).toBe(placed.result.id);
+    expect(h.past[1].subject.text).toBe("renamed");
+    // What was removed is named as it was.
+    expect(h.past[2].subject.id).toBe(placed.result.id);
+    expect(h.future).toEqual([]);
+    // Two back at once: the window gets the mark of the older one, and the redo list
+    // keeps each step's own mark.
+    const back = await c.call("undo", { mark: "now", steps: 2 });
+    expect(back.result).toEqual({ ok: true, mark: "m2" });
+    h = history();
+    expect(h.past.map((s: any) => s.command.kind)).toEqual(["place"]);
+    expect(h.future.map((s: any) => s.command.kind)).toEqual(["setText", "remove"]);
+    // Redoing one gives back what one undo at a time would have: the mark the window held
+    // when that step was undone, which the first undo had just restored.
+    const forward = await c.call("redo", { mark: "later", steps: 1 });
+    expect(forward.result).toEqual({ ok: true, mark: "m3" });
+    expect(history().future.map((s: any) => s.command.kind)).toEqual(["remove"]);
+    // A new step clears what could be redone.
+    await c.call("run", { command: { kind: "setText", id: title.id, text: "again" } });
+    expect(history().future).toEqual([]);
+    c.end();
+  });
+
+  test("a move names what it carried when it was one thing, and counts it", async () => {
+    daemon = start();
+    const c = await connect();
+    await c.call("hello");
+    const grid = (c.notes[0] as any).params.grid;
+    const at = (t: any) => [grid.columns.findIndex((x: any) => x.id === t.columnId), grid.rows.findIndex((x: any) => x.id === t.rowId)];
+    const index = (tracks: any[], id: string) => tracks.findIndex((x: any) => x.id === id);
+    const inside = (t: any) => {
+      const [c, r] = at(t);
+      return grid.scopes.some((s: any) => c >= index(grid.columns, s.columnStart) && c <= index(grid.columns, s.columnEnd) && r >= index(grid.rows, s.rowStart) && r <= index(grid.rows, s.rowEnd));
+    };
+    // A terminal in no worktree, so the move carries exactly it.
+    const loose = grid.tiles.find((t: any) => t.family === "host" && !inside(t));
+    const [ci, ri] = at(loose);
+    const moved = await c.call("run", { command: { kind: "move", from: { ci, ri, span: 1, rows: 1 }, to: { ci: 0, ri: 10, span: 1, rows: 1 } } });
+    expect(moved.result.ok).toBe(true);
+    const step = (c.notes.filter((m: any) => m.method === "history").at(-1) as any).params.past.at(-1);
+    expect(step.carried).toBe(1);
+    expect(step.subject.id).toBe(loose.id);
+    c.end();
   });
 });

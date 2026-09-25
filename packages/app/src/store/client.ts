@@ -16,7 +16,7 @@ import type { Message, Methods, Notifications, Response } from "@lattice/protoco
 type Listener<N extends keyof Notifications> = (params: Notifications[N]) => void;
 
 /** Notifications that say what is, as opposed to what happened. */
-const STATE: ReadonlySet<keyof Notifications> = new Set(["grid", "facts"]);
+const STATE: ReadonlySet<keyof Notifications> = new Set(["grid", "facts", "history"]);
 
 declare global {
   interface Window {
