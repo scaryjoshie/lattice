@@ -170,10 +170,12 @@ body {
   background: var(--hover);
 }
 
-/* A name is typed where it will sit, centred in the one cell its tile owns. */
+/* A name is typed where it will sit, centred under the mark. Nothing on the canvas draws
+   a caret for a name, as it does for a run, so the field keeps its own. */
 .namer {
   text-align: center;
   padding: 0;
+  caret-color: var(--ink);
 }
 
 /*
