@@ -97,10 +97,13 @@ export interface Grid {
   readonly links: readonly Link[];
 }
 
-let counter = 0;
+/**
+ * A fresh id, unique across processes and sessions. The app names what it places and the
+ * daemon names what it makes, so a counter, which starts again in every process and on
+ * every reload, hands out the same id twice.
+ */
 export function nextId(prefix: string): string {
-  counter += 1;
-  return `${prefix}${counter}`;
+  return `${prefix}${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 }
 
 /* Queries ----------------------------------------------------------------- */

@@ -66,9 +66,10 @@ export function propose(grid: Grid, command: Command): Verdict {
     case "resize":
       return corner(grid, command);
     case "place":
-      // Onto an empty cell only. Past the tracks is free by definition; the tracks are
-      // made when it is applied.
-      return plain(!holder(grid, command.ci, command.ri));
+      // Onto an empty cell only, and never under an id already in use, since everything
+      // that finds a tile finds it by id. Past the tracks is free by definition; the
+      // tracks are made when it is applied.
+      return plain(!holder(grid, command.ci, command.ri) && !(command.id !== undefined && has(grid, command.id)));
     case "remove":
     case "setText":
     case "setName":

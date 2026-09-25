@@ -68,6 +68,8 @@ describe("commands", () => {
     const withRun: Grid = { ...g, tiles: [...g.tiles, { id: "r", family: "text", style: "title", text: "research", columnId: "x5", rowId: "y5", span: 3, rows: 1 }] };
     expect(propose(withRun, { kind: "place", ci: 7, ri: 5, what: { family: "host", surface: "terminal" } }).ok).toBe(false);
     expect(propose(withRun, { kind: "place", ci: 8, ri: 5, what: { family: "host", surface: "terminal" } }).ok).toBe(true);
+    // An id already in use is refused wherever it is placed: tiles are found by id.
+    expect(propose(g, { kind: "place", ci: 8, ri: 5, what: { family: "host", surface: "terminal" }, id: "a" }).ok).toBe(false);
     const done = apply(g, { kind: "place", ci: -2, ri: 0, what: { family: "host", surface: "terminal" } });
     expect(done.ok).toBe(true);
     expect(done.dc).toBe(2);
