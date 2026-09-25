@@ -1,5 +1,6 @@
-//! Browsers: one native webview per browser tile, a child of the window, which the app
-//! places over its opened panel's page area. WebKit, as cmux's browser is. Being native it
+//! Browsers: one native webview per page, a child of the window, which the app places over
+//! its opened panel's page area. A page is a tab: the app names each one, and a browser
+//! tile holds as many as it has tabs, one of them shown. WebKit, as cmux's browser is. Being native it
 //! cannot scale with the panel or be frosted, so the app shows it once the panel has landed
 //! and hides it before the panel goes back. Its address, title and loading are told to the
 //! app as they change. The commands are async: adding a child webview waits on the main
@@ -32,11 +33,11 @@ fn user_agent() -> &'static str {
   })
 }
 
-/// What the app is told about a browser's page: where it is, what it is called, whether
-/// it is still loading. Fields not known by the event that sent it are absent.
+/// What the app is told about a page: where it is, what it is called, whether it is still
+/// loading. Fields not known by the event that sent it are absent.
 #[derive(Clone, Serialize)]
 struct Page {
-  host: String,
+  page: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,26 +74,33 @@ fn page_origin(app: &AppHandle, seen: f64) -> (f64, f64) {
   rx.recv_timeout(std::time::Duration::from_millis(500)).unwrap_or((0.0, 0.0))
 }
 
-fn label(host: &str) -> String {
-  format!("browser-{host}")
+/// A page asked for a new window: the app opens a tab beside it.
+#[derive(Clone, Serialize)]
+struct Opening {
+  from: String,
+  url: String,
 }
 
-fn find(app: &AppHandle, host: &str) -> Option<Webview> {
-  app.get_webview(&label(host))
+fn label(page: &str) -> String {
+  format!("browser-{page}")
+}
+
+fn find(app: &AppHandle, page: &str) -> Option<Webview> {
+  app.get_webview(&label(page))
 }
 
 fn tell(app: &AppHandle, page: Page) {
   let _ = app.emit_to("main", "browser", page);
 }
 
-/// Show a tile's browser over the given rectangle, in the window's logical pixels, making
-/// it at `url` the first time.
+/// Show a page over the given rectangle, in the window's logical pixels, making it at `url`
+/// the first time.
 #[tauri::command]
-pub async fn browser_show(app: AppHandle, host: String, url: String, x: f64, y: f64, width: f64, height: f64, seen: f64) -> Result<(), String> {
+pub async fn browser_show(app: AppHandle, page: String, url: String, x: f64, y: f64, width: f64, height: f64, seen: f64) -> Result<(), String> {
   let (left, top) = page_origin(&app, seen);
   let at = LogicalPosition::new(x + left, y + top);
   let size = LogicalSize::new(width, height);
-  if let Some(view) = find(&app, &host) {
+  if let Some(view) = find(&app, &page) {
     view.set_position(at).map_err(|e| e.to_string())?;
     view.set_size(size).map_err(|e| e.to_string())?;
     view.show().map_err(|e| e.to_string())?;
@@ -101,25 +109,23 @@ pub async fn browser_show(app: AppHandle, host: String, url: String, x: f64, y: 
   }
   let window = app.get_window("main").ok_or("no window")?;
   let start: Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
-  let (loads, titles, opens) = ((app.clone(), host.clone()), (app.clone(), host.clone()), (app.clone(), host.clone()));
-  let builder = WebviewBuilder::new(label(&host), WebviewUrl::External(start))
+  let (loads, titles, opens) = ((app.clone(), page.clone()), (app.clone(), page.clone()), (app.clone(), page.clone()));
+  let builder = WebviewBuilder::new(label(&page), WebviewUrl::External(start))
     .user_agent(user_agent())
     .on_page_load(move |_, payload| {
       tell(&loads.0, Page {
-        host: loads.1.clone(),
+        page: loads.1.clone(),
         url: Some(payload.url().to_string()),
         title: None,
         loading: Some(matches!(payload.event(), PageLoadEvent::Started)),
       });
     })
     .on_document_title_changed(move |_, title| {
-      tell(&titles.0, Page { host: titles.1.clone(), url: None, title: Some(title), loading: None });
+      tell(&titles.0, Page { page: titles.1.clone(), url: None, title: Some(title), loading: None });
     })
-    // A link that asks for a new window opens here, until there are tabs to open it in.
+    // A link that asks for a new window becomes a new tab: the app is asked to open one.
     .on_new_window(move |url, _| {
-      if let Some(view) = find(&opens.0, &opens.1) {
-        let _ = view.navigate(url);
-      }
+      let _ = opens.0.emit_to("main", "browser-tab", Opening { from: opens.1.clone(), url: url.to_string() });
       NewWindowResponse::Deny
     });
   let view = window.add_child(builder, at, size).map_err(|e| e.to_string())?;
@@ -128,23 +134,23 @@ pub async fn browser_show(app: AppHandle, host: String, url: String, x: f64, y: 
 }
 
 #[tauri::command]
-pub async fn browser_hide(app: AppHandle, host: String) -> Result<(), String> {
-  if let Some(view) = find(&app, &host) {
+pub async fn browser_hide(app: AppHandle, page: String) -> Result<(), String> {
+  if let Some(view) = find(&app, &page) {
     view.hide().map_err(|e| e.to_string())?;
   }
   Ok(())
 }
 
 #[tauri::command]
-pub async fn browser_go(app: AppHandle, host: String, url: String) -> Result<(), String> {
+pub async fn browser_go(app: AppHandle, page: String, url: String) -> Result<(), String> {
   let to: Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
-  find(&app, &host).ok_or("no browser")?.navigate(to).map_err(|e| e.to_string())
+  find(&app, &page).ok_or("no browser")?.navigate(to).map_err(|e| e.to_string())
 }
 
 /// Back, forward or reload, as the page's own history does them.
 #[tauri::command]
-pub async fn browser_step(app: AppHandle, host: String, step: String) -> Result<(), String> {
-  let view = find(&app, &host).ok_or("no browser")?;
+pub async fn browser_step(app: AppHandle, page: String, step: String) -> Result<(), String> {
+  let view = find(&app, &page).ok_or("no browser")?;
   match step.as_str() {
     "back" => view.eval("history.back()"),
     "forward" => view.eval("history.forward()"),
@@ -154,10 +160,10 @@ pub async fn browser_step(app: AppHandle, host: String, step: String) -> Result<
   .map_err(|e| e.to_string())
 }
 
-/// The tile is gone: so is its browser.
+/// The tab is closed, or its tile is gone: so is its page.
 #[tauri::command]
-pub async fn browser_close(app: AppHandle, host: String) -> Result<(), String> {
-  if let Some(view) = find(&app, &host) {
+pub async fn browser_close(app: AppHandle, page: String) -> Result<(), String> {
+  if let Some(view) = find(&app, &page) {
     view.close().map_err(|e| e.to_string())?;
   }
   Ok(())

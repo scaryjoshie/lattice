@@ -115,11 +115,18 @@ fn wait_for_session() -> Option<String> {
   None
 }
 
+/// Close the window, as its close button does: through the same ask while terminals run.
+#[tauri::command]
+async fn close_window(app: AppHandle) -> Result<(), String> {
+  app.get_window("main").ok_or("no window")?.close().map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
+      close_window,
       browsers::browser_show,
       browsers::browser_hide,
       browsers::browser_go,
@@ -136,6 +143,15 @@ pub fn run() {
       // whichever view has focus, and the app is told.
       if event.id() == "close-panel" {
         let _ = app.emit_to("main", "close-panel", ());
+      }
+      // A new tab in the open browser, for the same reason: the page has the keys.
+      if event.id() == "new-tab" {
+        let _ = app.emit_to("main", "new-tab", ());
+      }
+      // Cmd-W closes the tab when a browser is open and the window otherwise, which only
+      // the app knows, so it is asked; it closes the window by `close_window`.
+      if event.id() == "close" {
+        let _ = app.emit_to("main", "close", ());
       }
     })
     .on_window_event(|window, event| {
@@ -164,11 +180,30 @@ pub fn run() {
         }
         first.append(&MenuItem::with_id(app, "quit", "Quit Lattice", true, Some("CmdOrCtrl+Q"))?)?;
       }
-      if let Some(window) = menu.items()?.into_iter().find_map(|item| match item {
-        MenuItemKind::Submenu(sub) if sub.text().ok().as_deref() == Some("Window") => Some(sub),
-        _ => None,
-      }) {
+      let submenu = |name: &str| {
+        menu.items().ok()?.into_iter().find_map(|item| match item {
+          MenuItemKind::Submenu(sub) if sub.text().ok().as_deref() == Some(name) => Some(sub),
+          _ => None,
+        })
+      };
+      if let Some(window) = submenu("Window") {
         window.append(&MenuItem::with_id(app, "close-panel", "Close Panel", true, Some("CmdOrCtrl+Escape"))?)?;
+      }
+      // The default Close Window items both hold Cmd-W: they go, for one Close that asks.
+      for item in menu.items()? {
+        if let MenuItemKind::Submenu(sub) = item {
+          for inner in sub.items()? {
+            if let MenuItemKind::Predefined(p) = &inner {
+              if p.text().ok().as_deref() == Some("Close Window") {
+                sub.remove(p)?;
+              }
+            }
+          }
+        }
+      }
+      if let Some(file) = submenu("File") {
+        file.prepend(&MenuItem::with_id(app, "close", "Close", true, Some("CmdOrCtrl+W"))?)?;
+        file.prepend(&MenuItem::with_id(app, "new-tab", "New Tab", true, Some("CmdOrCtrl+T"))?)?;
       }
       app.set_menu(menu)?;
       // The webview learns where the daemon is before its first script runs; with no

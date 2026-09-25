@@ -1,32 +1,43 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { browsers, useBrowsers } from "../store/browsers.ts";
 import { OCCUPANTS } from "../occupants/index.ts";
+import { browsers, type Tab, useBrowsers } from "../store/browsers.ts";
 import { Mark } from "./Menu.tsx";
 
 /**
- * A browser tile's page, in its opened panel: a bar with back, forward, reload and the
- * address, and below it the area the shell's native webview is placed over. Native, the
- * page cannot scale or be frosted, so it is shown once the panel has landed and hidden the
- * moment the panel starts back; while it is up it follows the window's size. Before its
- * first address there is no page: the bar is empty and has the keys, and the area is grey
- * with the browser's mark. Outside the shell there are no browsers, and the area says so.
+ * A browser tile's tabs, in its opened panel: a row of tabs with a new-tab button, a bar
+ * with back, forward, reload and the current tab's address, and below them the area the
+ * shell's native page is placed over. Each tab is its own page; the current one is shown
+ * and the rest hidden, so each keeps its place. Native, a page cannot scale or be frosted,
+ * so it is shown once the panel has landed and hidden the moment the panel starts back;
+ * while it is up it follows the window's size. A tab not yet sent anywhere has no page:
+ * the bar is empty and has the keys, and the area is grey with the browser's mark. Outside
+ * the shell there are no browsers, and the area says so.
  */
 export function Browser({ host, shown }: { host: string; shown: boolean }) {
   const available = useBrowsers((s) => s.available);
-  const page = useBrowsers((s) => s.pages[host]);
+  const tabs = useBrowsers((s) => s.browsers[host]);
   const area = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<string | null>(null);
   const bar = useRef<HTMLInputElement>(null);
-  const started = page !== undefined;
+  const [draft, setDraft] = useState<string | null>(null);
 
-  // A browser with nothing in it is waiting to be told where to go.
+  useEffect(() => browsers.ensure(host), [host]);
+  const current = tabs?.tabs.find((t) => t.id === tabs.current);
+  const started = Boolean(current?.url);
+
+  // A tab with nothing in it is waiting to be told where to go.
   useEffect(() => {
-    if (shown && !started) bar.current?.focus();
-  }, [shown, started]);
+    setDraft(null);
+    if (shown && current && !started) bar.current?.focus();
+  }, [shown, current?.id, started]);
 
+  // The current tab's page, over the area, while the panel is still; hidden when the panel
+  // goes, or when another tab becomes current.
   useEffect(() => {
     const el = area.current;
-    if (!el || !shown || !started) return;
+    const tab = current?.id;
+    if (!el || !shown || !tab || !started) return;
     const place = () => {
       const r = el.getBoundingClientRect();
       browsers.show(host, { x: r.left, y: r.top, width: r.width, height: r.height });
@@ -35,13 +46,29 @@ export function Browser({ host, shown }: { host: string; shown: boolean }) {
     window.addEventListener("resize", place);
     return () => {
       window.removeEventListener("resize", place);
-      browsers.hide(host);
+      browsers.hide(host, tab);
     };
-  }, [host, shown, started]);
+  }, [host, shown, current?.id, started]);
 
-  const address = draft ?? page?.url ?? "";
+  // The menu's New Tab, which reaches here even while a page has the keys.
+  useEffect(() => {
+    if (!isTauri() || !shown) return;
+    const stop = listen("new-tab", () => browsers.open(host));
+    return () => void stop.then((unlisten) => unlisten());
+  }, [host, shown]);
+
+  const address = draft ?? current?.url ?? "";
   return (
     <div className="browser">
+      <div className="browser-tabs">
+        {tabs?.tabs.map((tab) => (
+          <TabButton key={tab.id} tab={tab} current={tab.id === tabs.current} onSelect={() => browsers.select(host, tab.id)} onClose={() => browsers.close(host, tab.id)} />
+        ))}
+        <Glyph label="new tab" onClick={() => browsers.open(host)}>
+          <path d="M5 12h14" />
+          <path d="M12 5v14" />
+        </Glyph>
+      </div>
       <div className="browser-bar">
         <Glyph label="back" onClick={() => browsers.step(host, "back")}>
           <path d="m15 18-6-6 6-6" />
@@ -58,7 +85,7 @@ export function Browser({ host, shown }: { host: string; shown: boolean }) {
           className="browser-address"
           spellCheck={false}
           value={address}
-          data-loading={page?.loading || undefined}
+          data-loading={current?.loading || undefined}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => setDraft(null)}
@@ -81,6 +108,30 @@ export function Browser({ host, shown }: { host: string; shown: boolean }) {
     </div>
   );
 }
+
+/** A tab: its page's title, or where it is, or "new tab"; a close on hover. */
+function TabButton({ tab, current, onSelect, onClose }: { tab: Tab; current: boolean; onSelect(): void; onClose(): void }) {
+  const name = tab.title || (tab.url ? hostOf(tab.url) : "new tab");
+  return (
+    <span className="browser-tab" data-current={current || undefined} onPointerDown={onSelect} title={tab.title || tab.url}>
+      <span className="browser-tab-name">{name}</span>
+      <button type="button" className="browser-tab-close" aria-label="close tab" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
+};
 
 /** A bar button: one of Lucide's glyphs (ISC), in the toolbar's stroke. */
 function Glyph({ label, onClick, children }: { label: string; onClick(): void; children: ReactNode }) {

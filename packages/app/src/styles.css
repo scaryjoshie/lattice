@@ -406,11 +406,75 @@ body {
   }
 }
 
-/* A browser's page: a slim bar, and the area the shell's native webview covers. */
+/* A browser: its tabs, a slim bar, and the area the shell's native webview covers. */
 .browser {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100%;
+}
+
+.browser-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px 0;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  flex: 0 1 220px;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: default;
+}
+
+.browser-tab:hover {
+  background: color-mix(in srgb, var(--hover) 50%, transparent);
+}
+
+.browser-tab[data-current] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.browser-tab-name {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.browser-tab-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.browser-tab:hover .browser-tab-close,
+.browser-tab[data-current] .browser-tab-close {
+  opacity: 1;
+}
+
+.browser-tab-close:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 
 .browser-bar {
