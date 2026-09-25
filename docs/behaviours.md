@@ -45,8 +45,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 10. A hovered item draws a ring around the whole of it, whichever cell was touched, and no
     plus.
 11. A hovered occupant additionally veils everything else back toward the page and draws
-    crawling dashed lines to every occupant it is linked to, leaving from its edge and
-    ending in a dot at each end. Every occupant does this, linked or not; the add menu
+    crawling dashed lines to every occupant it is linked to, leaving from the centre of
+    an edge, top or bottom when the partner lies within its width and left or right
+    otherwise, turning once, and ending in a dot at each end. Every occupant does this, linked or not; the add menu
     distinguishes agents from utilities and the canvas does not.
 12. Nothing inside the selection is hovered: no ring on a cell or an item, no veil, no
     links. The selection is already the thing pointed at, and a press there moves the
@@ -215,14 +216,15 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 71. The cells being made are hatched in the hue; a shrink hatches the cells going. A
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
 72. A host or a run resizes by its edges through the same operation, and has no interior
-    lines. Any rectangle, not only squares. A host's mark sits in its middle and its
-    interior is unruled, as a run's is. A host is outlined faintly on the gridlines
-    around it, in its scope's edge hue at about a third of the strength, so neighbours read
-    as two things. An edge two hosts share is one segment and is drawn once, so every
-    outline is one gridline thick. Always weaker than a hover or selection ring. Inward shrinks it, and a run's words reflow; outward grows it and pushes, and is refused if the run would leave or
-    enter a scope. Inside a scope it pushes its neighbours there one by one, as an edge
-    dragged inward does (68), and is refused when the run or anything it pushes would
-    have to leave the scope. The size the drag leaves is the run's size.
+    lines. Any rectangle, not only squares. Inward shrinks it, and a run's words reflow;
+    outward grows it and pushes, and is refused if it would leave or enter a scope.
+    Inside a scope it pushes its neighbours there one by one, as an edge dragged inward
+    does (68), and is refused when it or anything it pushes would have to leave the
+    scope. The size the drag leaves is its size. A host's mark sits in its middle and its
+    interior is unruled, as a run's is. A host is outlined faintly on the gridlines around
+    it, in its scope's edge hue at about a third of the strength, so neighbours read as
+    two things. An edge two hosts share is one segment and is drawn once, so every outline
+    is one gridline thick. Always weaker than a hover or selection ring.
 73. Escape during a resize cancels it.
 
 ## Text

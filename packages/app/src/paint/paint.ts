@@ -406,15 +406,11 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
     const [fx, fy] = centre(focus.anchor);
     const halfW = (size * focus.anchor.span) / 2;
     const halfH = (size * focus.anchor.rows) / 2;
-    /** Where a line to a partner leaves the focused agent's edge: straight out of the side
-     *  facing the partner when the partner lies within its width or height, else from the
-     *  middle of the side it turns toward. */
+    /** Where a line to a partner leaves the focused agent: always the centre of an edge.
+     *  The top or bottom when the partner lies within its width, else the left or right. */
+    const vertical = (px: number) => Math.abs(px - fx) < halfW;
     const leave = (px: number, py: number): readonly [number, number] =>
-      Math.abs(px - fx) < halfW
-        ? [px, fy + Math.sign(py - fy) * halfH]
-        : Math.abs(py - fy) < halfH
-          ? [fx + Math.sign(px - fx) * halfW, py]
-          : [fx + Math.sign(px - fx) * halfW, fy];
+      vertical(px) ? [fx, fy + Math.sign(py - fy) * halfH] : [fx + Math.sign(px - fx) * halfW, fy];
     ctx.strokeStyle = h.edge;
     ctx.lineWidth = LINK_EDGE;
     ctx.lineCap = "round";
@@ -427,9 +423,11 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       // from under its own mark. Partners are only identified by what arrives at them.
       const out = leave(px, py);
       ctx.moveTo(out[0], out[1]);
+      // Straight out of the edge, then one rounded turn onto the partner's row or column.
+      const corner: readonly [number, number] = vertical(px) ? [out[0], py] : [px, out[1]];
       const turn = Math.min(size * LINK_TURN, Math.abs(px - out[0]), Math.abs(py - out[1]));
-      if (turn > 0.5) ctx.arcTo(px, out[1], px, py, turn);
-      else ctx.lineTo(px, out[1]);
+      if (turn > 0.5) ctx.arcTo(corner[0], corner[1], px, py, turn);
+      else ctx.lineTo(corner[0], corner[1]);
       ctx.lineTo(px, py);
     }
     ctx.stroke();
