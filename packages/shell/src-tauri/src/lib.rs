@@ -1,21 +1,81 @@
 //! The shell: a window around the app, and the daemon under it. Nothing else. It starts
 //! the daemon, waits for the daemon to say where it is, hands that to the webview as it
-//! opens, and stops the daemon when the app quits. What the app is, is in ../../app; what
-//! it talks to, in ../../daemon.
+//! opens, asks before quitting while terminals are running, holds the browsers' native
+//! webviews (browsers.rs), and stops the daemon when the app quits. What the app is, is in ../../app; what it talks to, in ../../daemon.
+
+mod browsers;
 
 use std::{
   fs,
+  io::{BufRead, BufReader, Write},
+  os::unix::net::UnixStream,
   path::PathBuf,
   process::{Child, Command, Stdio},
-  sync::Mutex,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+  },
   thread,
   time::Duration,
 };
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+  menu::{Menu, MenuItem, MenuItemKind},
+  AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 /// The running daemon, so it can be stopped on exit.
 struct Daemon(Mutex<Option<Child>>);
+
+/// Set once leaving has been confirmed, so the quit it starts is not asked about again.
+struct Leaving(AtomicBool);
+
+/// How many terminals the daemon is running: what quitting would stop. Asked over its
+/// socket, one JSON-RPC line each way, past the notifications it greets a client with. No
+/// answer counts as none, so a daemon that is gone never holds the app open.
+fn running_terminals() -> usize {
+  let ask = || -> Option<usize> {
+    let mut socket = UnixStream::connect(home().join("daemon.sock")).ok()?;
+    socket.set_read_timeout(Some(Duration::from_secs(1))).ok()?;
+    socket.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"running\",\"params\":{}}\n").ok()?;
+    for line in BufReader::new(socket).lines() {
+      let message: serde_json::Value = serde_json::from_str(&line.ok()?).ok()?;
+      if message.get("id").and_then(|id| id.as_i64()) == Some(1) {
+        return message["result"]["terminals"].as_u64().map(|n| n as usize);
+      }
+    }
+    None
+  };
+  ask().unwrap_or(0)
+}
+
+/// Quit, or close the last window, which is the same thing here. With terminals running it
+/// asks first, as Terminal does (runtime.md 2), since quitting stops them; with none it
+/// just goes. Returns whether the caller may go ahead now.
+fn leave(app: &AppHandle) -> bool {
+  if app.state::<Leaving>().0.load(Ordering::SeqCst) {
+    return true;
+  }
+  let n = running_terminals();
+  if n == 0 {
+    return true;
+  }
+  let handle = app.clone();
+  app
+    .dialog()
+    .message(if n == 1 { "1 terminal is running.".to_string() } else { format!("{n} terminals are running.") })
+    .title("Quit Lattice?")
+    .kind(MessageDialogKind::Warning)
+    .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
+    .show(move |quit| {
+      if quit {
+        handle.state::<Leaving>().0.store(true, Ordering::SeqCst);
+        handle.exit(0);
+      }
+    });
+  false
+}
 
 /// Where the daemon keeps its state. The daemon owns this decision; the shell only needs
 /// the session file, and reads it from the same place under the same override.
@@ -58,6 +118,33 @@ fn wait_for_session() -> Option<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .invoke_handler(tauri::generate_handler![
+      browsers::browser_show,
+      browsers::browser_hide,
+      browsers::browser_go,
+      browsers::browser_step,
+      browsers::browser_close,
+      browsers::appearance,
+    ])
+    .on_menu_event(|app, event| {
+      if event.id() == "quit" && leave(app) {
+        app.exit(0);
+      }
+      // Closing an opened panel is the app's, but a browser's native page takes the keys
+      // while it has focus, so Cmd-Escape is a menu item, which macOS routes to the menu
+      // whichever view has focus, and the app is told.
+      if event.id() == "close-panel" {
+        let _ = app.emit_to("main", "close-panel", ());
+      }
+    })
+    .on_window_event(|window, event| {
+      if let WindowEvent::CloseRequested { api, .. } = event {
+        if !leave(window.app_handle()) {
+          api.prevent_close();
+        }
+      }
+    })
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
@@ -66,6 +153,24 @@ pub fn run() {
       let _ = fs::remove_file(home().join("session.json"));
       let child = start_daemon()?;
       app.manage(Daemon(Mutex::new(Some(child))));
+      app.manage(Leaving(AtomicBool::new(false)));
+      // The default menu, with its Quit replaced by one that asks first. The system's own
+      // quit cannot be held, so Cmd-Q has to be ours.
+      let menu = Menu::default(app.handle())?;
+      if let Some(MenuItemKind::Submenu(first)) = menu.items()?.into_iter().next() {
+        let count = first.items()?.len();
+        if count > 0 {
+          first.remove_at(count - 1)?;
+        }
+        first.append(&MenuItem::with_id(app, "quit", "Quit Lattice", true, Some("CmdOrCtrl+Q"))?)?;
+      }
+      if let Some(window) = menu.items()?.into_iter().find_map(|item| match item {
+        MenuItemKind::Submenu(sub) if sub.text().ok().as_deref() == Some("Window") => Some(sub),
+        _ => None,
+      }) {
+        window.append(&MenuItem::with_id(app, "close-panel", "Close Panel", true, Some("CmdOrCtrl+Escape"))?)?;
+      }
+      app.set_menu(menu)?;
       // The webview learns where the daemon is before its first script runs; with no
       // daemon it learns nothing and the app says so.
       let session = wait_for_session().unwrap_or_else(|| "null".to_string());
