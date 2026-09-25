@@ -340,13 +340,17 @@ describe("proposeResize", () => {
     expect(proposeResize(g1, "run", "col", 3, 1).ok).toBe(false);
   });
 
-  test("a loose run pushes a scope out of its way; a run inside a scope may not leave it", () => {
+  test("a loose run pushes a scope out of its way; a run at its scope's edge grows the scope", () => {
     const loose = grid([t("run", 0, 2, 2, 1)], [s("auth", 2, 1, 3, 4)]);
     const v = proposeResize(loose, "run", "col", 2, 1);
     expect(v.ok).toBe(true);
     expect(scope(applied(loose, v.moves).grid, "auth")).toEqual(region(3, 1, 3, 4));
     const inside = grid([t("run", 3, 2, 2, 1)], [s("auth", 2, 1, 3, 4)]);
-    expect(proposeResize(inside, "run", "col", 5, 1).ok).toBe(false);
+    const out = proposeResize(inside, "run", "col", 5, 1);
+    expect(out.ok).toBe(true);
+    const grown = applied(inside, out.moves).grid;
+    expect(scope(grown, "auth")).toEqual(region(2, 1, 4, 4));
+    expect(at(grown, "run")).toEqual(region(3, 2, 3, 1));
   });
 
   test("a run inside a scope pushes its neighbours there, and never over them", () => {
@@ -357,8 +361,40 @@ describe("proposeResize", () => {
     noOverlap(after);
     expect(at(after, "a")).toEqual(region(3, 4));
     scopesKeepTheirTiles(g1, after);
-    // One more row would push the host out of the scope's bottom edge.
-    expect(proposeResize(g1, "run", "row", 2, 3).ok).toBe(false);
+    // One more row would push the host past the scope's bottom edge: the scope grows by
+    // that row instead, and the host stays in it.
+    const further = proposeResize(g1, "run", "row", 2, 3);
+    expect(further.ok).toBe(true);
+    const deeper = applied(g1, further.moves).grid;
+    expect(scope(deeper, "auth")).toEqual(region(2, 1, 3, 5));
+    expect(at(deeper, "a")).toEqual(region(3, 5));
+    noOverlap(deeper);
+    scopesKeepTheirTiles(g1, deeper);
+  });
+
+  test("a tile grown past the first track grows its scope there, and the indices follow", () => {
+    // A scope in the first column, a host at its left edge, dragged one further left.
+    const g1 = grid([t("a", 0, 2)], [s("auth", 0, 1, 3, 3)]);
+    const left = proposeResize(g1, "a", "col", 0, -1);
+    expect(left.ok).toBe(true);
+    const done = applied(g1, left.moves);
+    // One track made at the front, so every index moved by one.
+    expect(done.dc).toBe(1);
+    expect(scope(done.grid, "auth")).toEqual(region(0, 1, 4, 3));
+    expect(at(done.grid, "a")).toEqual(region(0, 2, 2, 1));
+    noOverlap(done.grid);
+  });
+
+  test("a scope grown by a tile pushes the world beyond it, as its own edge does", () => {
+    // A host at the scope's right edge, and a loose host just past it.
+    const g1 = grid([t("a", 4, 2), t("b", 5, 2)], [s("auth", 2, 1, 3, 4)]);
+    const wide = proposeResize(g1, "a", "col", 5, 2);
+    expect(wide.ok).toBe(true);
+    const g2 = applied(g1, wide.moves).grid;
+    expect(scope(g2, "auth")).toEqual(region(2, 1, 5, 4));
+    expect(at(g2, "a")).toEqual(region(4, 2, 3, 1));
+    expect(at(g2, "b")).toEqual(region(7, 2));
+    noOverlap(g2);
   });
 
   test("a host resizes by its edges like a run, and moves whole at its size", () => {

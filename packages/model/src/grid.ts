@@ -488,20 +488,36 @@ function resizeTile(grid: Grid, tile: Tile, axis: Axis, line: number, n: number)
   const grown: Move = { id: tile.id, ci: after.ci, ri: after.ri, span: after.span, rows: after.rows };
   const sign = n > 0 ? 1 : -1;
   // In a scope, the tile pushes its neighbours there, each alone, the way an edge dragged
-  // inward pushes a scope's contents; refused when the tile or anything it pushes would
-  // have to leave the scope.
+  // inward pushes a scope's contents. When the tile or anything it pushes would pass the
+  // scope's edge, the scope grows at that edge by exactly as much first, by its own edge
+  // resize, which pushes the world beyond it; the tile is then resized within it. Nothing
+  // leaves its scope, and nothing is refused for want of room inside one.
   const home = scopeAt(grid, b.ci, b.ri);
   if (home) {
     const s = bounds(grid, home);
     const inside = grid.tiles.filter((t) => covers(s, footprint(grid, t)));
     const pushed = push({ ...grid, tiles: inside, scopes: [] }, b, after, axis, sign, new Set([tile.id]));
-    const fits =
-      covers(s, after) &&
-      pushed.every((m) => {
-        const t = inside.find((x) => x.id === m.id);
-        return t !== undefined && covers(s, { ...footprint(grid, t), ci: m.ci, ri: m.ri });
-      });
-    return fits ? { ok: true, after, band, moves: [grown, ...pushed] } : { ...refuse, band };
+    const landed = [
+      after,
+      ...pushed.map((m) => ({ ...footprint(grid, inside.find((x) => x.id === m.id) as Tile), ci: m.ci, ri: m.ri })),
+    ];
+    const edge = sign > 0 ? s[P] + s[S] : s[P];
+    const over = sign > 0 ? Math.max(...landed.map((r) => r[P] + r[S])) - edge : edge - Math.min(...landed.map((r) => r[P]));
+    if (over <= 0) return { ok: true, after, band, moves: [grown, ...pushed] };
+    const grow = proposeResize(grid, home.id, axis, edge, sign * over);
+    if (!grow.ok) return { ...refuse, band };
+    const mid = applied(grid, grow.moves);
+    const shifted = mid.grid.tiles.find((t) => t.id === tile.id);
+    const within = shifted && resizeTile(mid.grid, shifted, axis, line + (axis === "col" ? mid.dc : mid.dr), n);
+    if (!within?.ok) return { ...refuse, band };
+    // Back in this grid's indices: the scope's growth may have prepended tracks.
+    const back = <R extends { ci: number; ri: number }>(r: R): R => ({ ...r, ci: r.ci - mid.dc, ri: r.ri - mid.dr });
+    return {
+      ok: true,
+      after: back(within.after),
+      band: within.band ? back(within.band) : band,
+      moves: [...grow.moves, ...within.moves.map(back)],
+    };
   }
   // Out of every scope, a scope is pushed whole like any unit, and the tile stays out of
   // every scope once everything has been pushed.

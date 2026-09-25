@@ -228,8 +228,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     lines. Any rectangle, not only squares. Inward shrinks it, and a run's words reflow;
     outward grows it and pushes, and is refused if it would leave or enter a scope.
     Inside a scope it pushes its neighbours there one by one, as an edge dragged inward
-    does (68), and is refused when it or anything it pushes would have to leave the
-    scope. The size the drag leaves is its size. A host's mark sits in its middle and its
+    does (68); when it or anything it pushes would pass the scope's edge, the scope grows
+    at that edge by exactly that much, pushing the world beyond it as its own edge does
+    (67, 70), so nothing leaves its scope and nothing is refused for want of room. The size the drag leaves is its size. A host's mark sits in its middle and its
     interior is unruled, as a run's is. A host is outlined faintly on the gridlines around
     it, in its scope's edge hue at about a third of the strength, so neighbours read as
     two things. An edge two hosts share is one segment and is drawn once, so every outline
