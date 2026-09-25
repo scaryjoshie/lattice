@@ -63,3 +63,15 @@ worktree   identity: its entry under the repo's .git/worktrees. Becomes a scope 
   and it wants one answer for both.
 - The scope for a first version is repo-based: one repo, its worktrees imported. A project
   as a set of repos changes nothing underneath.
+
+## Later: the welcome window
+
+Joshua's idea, 24 September 2026. Not built.
+
+- At launch, before any project is open, a small window of its own, as Xcode's welcome
+  window is: open a recent project, open a folder, or make a new project. The project
+  picker lives here rather than on the grid.
+- Its loading animation is a cellular automaton: cells on a small grid live and die by
+  their rules and settle into the product's name. It is the grid itself, briefly alive,
+  so the first thing seen is the thing the app is made of. Existing effects of this kind
+  are worth looking at before building one.
