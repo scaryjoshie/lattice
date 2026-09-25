@@ -9,15 +9,17 @@
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.3.0",
+    "@lattice/model": "workspace:*",
+    "@lattice/protocol": "workspace:*",
+    "d3-interpolate": "^3.0.1",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "zustand": "^5.0.15",
-    "@lattice/model": "workspace:*",
-    "@lattice/protocol": "workspace:*"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/d3-interpolate": "^3.0.4",
     "@types/d3-selection": "^3.0.12",
     "@types/d3-zoom": "^3.0.8",
     "@types/react": "^19.3.0",
