@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { bounds, footprint, indexOfTrack, scopeAt } from "@lattice/model";
 import { paint } from "../paint/paint.ts";
 import { hue, onTheme } from "../paint/theme.ts";
 import { type Camera, CELL, cellAt, framing, worldX } from "../scene/geometry.ts";
 import { animating, modeOf, type Scene, sceneOf } from "../scene/scene.ts";
+import { viewOf } from "../scene/steps.ts";
 import { type Effect, type Input, react } from "../session/react.ts";
 import type { Selection } from "../session/session.ts";
 import type { Target } from "../session/target.ts";
@@ -64,6 +65,13 @@ export function Grid({ onSettings }: { onSettings(): void }) {
   const grid = useGrid((s) => s.grid);
   const connected = useGrid((s) => s.connected);
   const showKeys = usePreferences((s) => s.preferences.keys);
+  // The history as rows: what undo would take back, newest first, and what redo would do.
+  const history = useGrid((s) => s.history);
+  const facts = useRuntime((s) => s.facts);
+  const steps = useMemo(
+    () => ({ undo: [...history.past].reverse().map((s) => viewOf(s, facts)), redo: history.future.map((s) => viewOf(s, facts)) }),
+    [history, facts],
+  );
   const overlay = useSession((s) => s.session.overlay);
   const opened = useSession((s) => s.session.opened);
   const mode = useSession((s) => modeOf(grid, s.session));
@@ -261,7 +269,7 @@ export function Grid({ onSettings }: { onSettings(): void }) {
           // Each history entry carries the selection it was made with, as a mark the
           // document store never reads. Undo restores it along with the grid.
           const selection = useSession.getState().session.selection;
-          const back = await useGrid.getState()[effect.kind](selection);
+          const back = await useGrid.getState()[effect.kind](selection, effect.steps);
           if (back.ok) useSession.getState().apply({ kind: "select", selection: (back.mark as Selection | null | undefined) ?? null });
           break;
         }
@@ -340,7 +348,11 @@ export function Grid({ onSettings }: { onSettings(): void }) {
 
   const onMove = (event: React.PointerEvent) => {
     pointer.current = { x: event.clientX, y: event.clientY };
-    if (claimed(event.target)) return;
+    if (claimed(event.target)) {
+      // Not the grid's: it points at nothing, rather than at the last cell it saw.
+      if (useSession.getState().session.pointing) send({ type: "leave" });
+      return;
+    }
     const at = place(event);
     if (at) send({ type: "move", target: at.target, cell: at.cell, world: at.world });
   };
@@ -419,8 +431,9 @@ export function Grid({ onSettings }: { onSettings(): void }) {
       <Toolbar
         zoom={zoom}
         hidden={opened !== null && !opened.leaving}
-        onUndo={() => send({ type: "key", key: "Undo", down: true })}
-        onRedo={() => send({ type: "key", key: "Redo", down: true })}
+        history={steps}
+        onUndo={(n) => void dispatch([{ kind: "undo", steps: n }])}
+        onRedo={(n) => void dispatch([{ kind: "redo", steps: n }])}
         onHome={() => {
           // Everything on the grid, whole, clear of the panels in the corners.
           const host = viewport.current;

@@ -54,6 +54,7 @@ export function Editor({
   return (
     <textarea
       className="editor"
+      data-overlay
       autoFocus
       spellCheck={false}
       value={draft}

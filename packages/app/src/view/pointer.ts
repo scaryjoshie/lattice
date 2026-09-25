@@ -1,15 +1,14 @@
 /**
  * Who owns the pointer.
  *
- * Anything that takes over the pointer while it is open says so here, once. A gesture that
- * begins inside one of these belongs to it, and neither the camera nor the grid sees it —
- * which is what stops dragging inside a text field from panning the world, and stops
- * clicking into a text field from being read as a click on the cell behind it.
+ * The grid owns every input that lands on the grid. Anything drawn over it that takes the
+ * pointer, a menu, the editor, the opened panel, the toolbar, says so on its own element
+ * with `data-overlay`, and an input that lands inside one is that surface's alone: neither
+ * the camera nor the grid sees it. This is the one answer every handler asks, so a new
+ * surface is covered by marking itself, not by being added to a list somewhere else.
  *
- * This was previously three separate answers: the menu stopped propagation itself, the
- * camera tested a selector of its own, and the grid's handlers tested nothing at all.
+ * And when the grid does not own the pointer, it points at nothing: moving onto a surface
+ * clears the grid's hover rather than leaving the last cell lit beneath it.
  */
-export const OVERLAY = ".editor, .namer, .menu, .opened, .toolbar";
-
 export const claimed = (target: EventTarget | null): boolean =>
-  Boolean((target as Element | null)?.closest?.(OVERLAY));
+  Boolean((target as Element | null)?.closest?.("[data-overlay]"));

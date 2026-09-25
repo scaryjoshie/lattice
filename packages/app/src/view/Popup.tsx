@@ -59,6 +59,7 @@ export function Popup({
   return (
     <div
       className="menu"
+      data-overlay
       style={{ left: x, top: y }}
       onContextMenu={(e) => e.preventDefault()}
     >

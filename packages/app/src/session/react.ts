@@ -40,7 +40,8 @@ export type Input =
   | { type: "leaving" }
   | { type: "closed" };
 
-export type Effect = Command | SessionCommand | RuntimeCommand | { kind: "undo" } | { kind: "redo" };
+/** Undo and redo go one step unless a history list asks for more. */
+export type Effect = Command | SessionCommand | RuntimeCommand | { kind: "undo"; steps?: number } | { kind: "redo"; steps?: number };
 
 /** What the add menu offers: text in a style, or an occupant, which brings its own surface. */
 export type Choice = { family: "text"; style: TextStyle } | { family: "host"; occupant: OccupantId };

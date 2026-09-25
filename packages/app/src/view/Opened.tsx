@@ -102,7 +102,7 @@ export function Opened({
   });
 
   return (
-    <div className="opened" data-absorbed={absorbed || undefined} onPointerDown={close}>
+    <div className="opened" data-overlay data-absorbed={absorbed || undefined} onPointerDown={close}>
       {/* The tile the panel came from, outlined in its edge colour and nothing else: behind
           the panel while it is open, in front as it goes back, then fading once it is in. */}
       <div

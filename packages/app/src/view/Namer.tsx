@@ -24,6 +24,7 @@ export function Namer({ id, onDone }: { id: string; onDone(): void }) {
   return (
     <input
       className="editor namer"
+      data-overlay
       autoFocus
       spellCheck={false}
       value={draft}

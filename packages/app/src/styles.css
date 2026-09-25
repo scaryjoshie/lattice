@@ -447,6 +447,130 @@ body {
   pointer-events: none;
 }
 
+/* Undo or redo, and its list, which hangs directly below the pill, as wide as it, in its own
+   surface. It is in the page, not the toolbar, so its blur sees the grid as the pill's does. */
+.stepping {
+  display: grid;
+}
+
+/* The button whose list is open stays lit, so it is plain which list it is. */
+.stepping[data-open] .toolbar-button {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.history {
+  position: fixed;
+  z-index: 11;
+  display: grid;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  font-size: 12px;
+  animation: history-in var(--settle) both;
+}
+
+/* The gap between the button and the list still holds the pointer, so crossing it does
+   not close the list. */
+.history::before {
+  content: "";
+  position: absolute;
+  inset: -9px 0 auto;
+  height: 9px;
+}
+
+@keyframes history-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--settle-by)));
+  }
+}
+
+/* Every step, scrolled within about twelve rows; a "+N" at the bottom says how many are out
+   of sight below, and resting on it scrolls down. */
+.history-rows {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.history-rows::-webkit-scrollbar {
+  display: none;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The row a click would go to, and, fainter, the rows it would take on the way. */
+.history-row[data-hot] {
+  background: var(--hover);
+}
+
+.history-row[data-taken] {
+  background: color-mix(in srgb, var(--hover) 40%, transparent);
+}
+
+.history-act {
+  flex: none;
+  color: var(--muted);
+}
+
+.history-label {
+  flex: 1;
+}
+
+/* The button's own arrow, on every row a click would take. */
+.history-go {
+  flex: none;
+  margin-left: 12px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.history-row[data-hot] .history-go,
+.history-row[data-taken] .history-go {
+  opacity: 1;
+}
+
+.history-none,
+.history-more {
+  padding: 5px 8px;
+  color: var(--muted);
+}
+
+.history-more {
+  padding-top: 3px;
+  font-size: 11px;
+  text-align: center;
+  cursor: default;
+}
+
+.history-more {
+  min-height: 21px;
+}
+
+.history-more:hover {
+  color: var(--ink);
+}
+
 .toolbar-button {
   display: grid;
   place-items: center;
