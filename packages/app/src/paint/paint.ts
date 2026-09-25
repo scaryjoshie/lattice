@@ -650,6 +650,30 @@ export function paint(ctx: CanvasRenderingContext2D, scene: Scene, dash = 0): vo
       ctx.stroke();
       ctx.restore();
     }
+    // Shrinking, the old edge stays drawn on each side being dragged in, where it was, as
+    // the ring drew it: the cells going are then read against where they came from. A
+    // band the proposal grows into is inside it and has no old edge.
+    if (growing.ok) {
+      const inset = FOCUS_EDGE / 2;
+      ctx.lineWidth = FOCUS_EDGE;
+      ctx.strokeStyle = colour;
+      ctx.beginPath();
+      const edge = (xa: number, ya: number, xb: number, yb: number) => {
+        ctx.moveTo(xa, ya);
+        ctx.lineTo(xb, yb);
+      };
+      for (const b of growing.bands) {
+        const x0 = sx(b.ci) + inset;
+        const x1 = sx(b.ci + b.span) - inset;
+        const y0 = sy(b.ri) + inset;
+        const y1 = sy(b.ri + b.rows) - inset;
+        if (b.ci >= growing.ci + growing.span) edge(x1, y0, x1, y1);
+        else if (b.ci + b.span <= growing.ci) edge(x0, y0, x0, y1);
+        else if (b.ri >= growing.ri + growing.rows) edge(x0, y1, x1, y1);
+        else if (b.ri + b.rows <= growing.ri) edge(x0, y0, x1, y0);
+      }
+      ctx.stroke();
+    }
     if (!growing.ok) ring(growing, palette.warn, false, false);
   }
 
