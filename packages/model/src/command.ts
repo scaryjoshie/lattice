@@ -96,12 +96,27 @@ function corner(grid: Grid, { owner, col, row }: Extract<Command, { kind: "resiz
     : null;
   const ok = (c?.ok ?? true) && (r?.ok ?? true);
   const after = r?.after ?? c?.after ?? null;
-  // A column band spans the rows the owner will have, so a corner's new cells are all
-  // shown, including the block where the two bands meet.
+  // Each band spans the owner as it is and as it will be on the other axis, so the block
+  // where the two bands meet is shown whichever way a corner goes: made when it grows,
+  // going when it shrinks.
   const bands: Region[] = [];
-  if (c?.band && after) bands.push({ ...c.band, ri: after.ri, rows: after.rows });
-  if (r?.band) bands.push(r.band);
+  if (c?.band && after) {
+    const rows = r ? hull(r.after, r.band) : after;
+    bands.push({ ...c.band, ri: rows.ri, rows: rows.rows });
+  }
+  if (r?.band) {
+    const cols = c ? hull(c.after, c.band) : r.band;
+    bands.push({ ...r.band, ci: cols.ci, span: cols.span });
+  }
   return { ok, moves: ok ? [...(c?.moves ?? []), ...(r?.moves ?? [])] : [], swaps: false, after, bands };
+}
+
+/** The smallest region holding both. */
+function hull(a: Region, b: Region | null): Region {
+  if (!b) return a;
+  const ci = Math.min(a.ci, b.ci);
+  const ri = Math.min(a.ri, b.ri);
+  return { ci, ri, span: Math.max(a.ci + a.span, b.ci + b.span) - ci, rows: Math.max(a.ri + a.rows, b.ri + b.rows) - ri };
 }
 
 export interface Applied {

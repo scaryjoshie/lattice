@@ -89,4 +89,16 @@ describe("commands", () => {
     expect(done.ok).toBe(true);
     expect(at(done.grid, "a")).toEqual({ ci: 3, ri: 2, span: 2, rows: 2 });
   });
+
+  test("a corner's bands meet in its corner block, growing or shrinking", () => {
+    const g = world();
+    const corner = { ci: 4, ri: 3, span: 1, rows: 1 };
+    const has = (bands: readonly Region[]) => bands.filter((b) => b.ci <= corner.ci && corner.ci < b.ci + b.span && b.ri <= corner.ri && corner.ri < b.ri + b.rows).length;
+    const grow = propose(g, { kind: "resize", owner: "a", col: { line: 4, n: 1 }, row: { line: 3, n: 1 } });
+    expect(has(grow.bands)).toBe(2);
+    const big = apply(g, { kind: "resize", owner: "a", col: { line: 4, n: 1 }, row: { line: 3, n: 1 } }).grid;
+    const shrink = propose(big, { kind: "resize", owner: "a", col: { line: 5, n: -1 }, row: { line: 4, n: -1 } });
+    expect(shrink.ok).toBe(true);
+    expect(has(shrink.bands)).toBe(2);
+  });
 });
