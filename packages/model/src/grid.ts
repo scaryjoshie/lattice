@@ -489,15 +489,30 @@ function resizeRun(grid: Grid, tile: Run, axis: Axis, line: number, n: number): 
   }
   const after: Region = { ...b, [P]: line === start ? start - k : start, [S]: b[S] + k };
   const band: Region = { ...b, [P]: line === start ? start - k : end, [S]: k };
-  const moves: Move[] = [
-    { id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] },
-    ...push(grid, b, after, axis, n > 0 ? 1 : -1, new Set([tile.id])),
-  ];
-  // Text stays in its scope, or out of every scope, once everything has been pushed.
+  const grown: Move = { id: tile.id, ci: after.ci, ri: after.ri, [S]: after[S] };
+  const sign = n > 0 ? 1 : -1;
+  // In a scope, the run pushes its neighbours there, each alone, the way an edge dragged
+  // inward pushes a scope's contents; refused when the run or anything it pushes would
+  // have to leave the scope.
+  const home = scopeAt(grid, b.ci, b.ri);
+  if (home) {
+    const s = bounds(grid, home);
+    const inside = grid.tiles.filter((t) => covers(s, footprint(grid, t)));
+    const pushed = push({ ...grid, tiles: inside, scopes: [] }, b, after, axis, sign, new Set([tile.id]));
+    const fits =
+      covers(s, after) &&
+      pushed.every((m) => {
+        const t = inside.find((x) => x.id === m.id);
+        return t !== undefined && covers(s, { ...footprint(grid, t), ci: m.ci, ri: m.ri });
+      });
+    return fits ? { ok: true, after, band, moves: [grown, ...pushed] } : { ...refuse, band };
+  }
+  // Out of every scope, a scope is pushed whole like any unit, and the run stays out of
+  // every scope once everything has been pushed.
+  const moves: Move[] = [grown, ...push(grid, b, after, axis, sign, new Set([tile.id]))];
   const world = applied(grid, moves);
-  const home = scopeAt(grid, b.ci, b.ri)?.id ?? null;
   for (const [ci, ri] of cells(after)) {
-    if ((scopeAt(world.grid, ci + world.dc, ri + world.dr)?.id ?? null) !== home) return { ...refuse, band };
+    if (scopeAt(world.grid, ci + world.dc, ri + world.dr)) return { ...refuse, band };
   }
   return { ok: true, after, band, moves };
 }

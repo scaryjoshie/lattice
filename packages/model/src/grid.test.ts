@@ -349,6 +349,18 @@ describe("proposeResize", () => {
     expect(proposeResize(inside, "run", "col", 5, 1).ok).toBe(false);
   });
 
+  test("a run inside a scope pushes its neighbours there, and never over them", () => {
+    const g1 = grid([t("run", 2, 1, 2, 1), t("a", 3, 2)], [s("auth", 2, 1, 3, 4)]);
+    const down = proposeResize(g1, "run", "row", 2, 2);
+    expect(down.ok).toBe(true);
+    const after = applied(g1, down.moves).grid;
+    noOverlap(after);
+    expect(at(after, "a")).toEqual(region(3, 4));
+    scopesKeepTheirTiles(g1, after);
+    // One more row would push the host out of the scope's bottom edge.
+    expect(proposeResize(g1, "run", "row", 2, 3).ok).toBe(false);
+  });
+
   test("a corner is two resizes, the second on the grid the first leaves", () => {
     const g0 = seed().grid;
     const auth = g0.scopes[0]!;

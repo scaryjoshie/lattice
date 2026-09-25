@@ -215,7 +215,9 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
     refusal hatches in red and rings the thing in red. A legal resize gets no second ring.
 72. A run resizes by its edges through the same operation. Inward shrinks it and the
     words reflow; outward grows it and pushes, and is refused if the run would leave or
-    enter a scope. The size the drag leaves is the run's size.
+    enter a scope. Inside a scope it pushes its neighbours there one by one, as an edge
+    dragged inward does (68), and is refused when the run or anything it pushes would
+    have to leave the scope. The size the drag leaves is the run's size.
 73. Escape during a resize cancels it.
 
 ## Text
