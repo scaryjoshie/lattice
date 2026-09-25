@@ -46,11 +46,15 @@ requests, client → daemon
   prefer   { patch }                         → { preferences }
   addRepo  { path }                          → { repo }             later: git
   start    { host, occupant } / stop { host } → { ok }               later: agents
+  attach   { host, cols, rows }              → { ok, screen }        a terminal, at a window's grid
+  input    { host, data } / resize { host, cols, rows } / detach { host } → { ok }
 
 notifications, daemon → every client
   grid         { grid, dc, dr }              after any change
   facts        { facts }
   preferences  { preferences }
+  output       { host, data }                base64, only to the windows attached
+  exited       { host, code }                only to the windows attached
 ```
 
 5. `propose` never crosses the wire. The model is pure and shared, so the app judges a
@@ -154,4 +158,7 @@ Each step leaves the app working and the harness green.
    its place when there is a build to ship.
 5. Preferences: theme first, since it exists, then the default worktree location.
 6. Projects: add a repo, read its worktrees, place them as scopes. The seed goes.
-7. Terminals.
+7. Terminals. Begun: a terminal host runs the login shell in the daemon, started on the
+   first attach and stopped when the host leaves the grid, mirrored by a headless xterm so
+   an attach is handed the screen as it is at the window's grid (experiment 2's `pty.ts`).
+   Next, xterm in the opened panel; then agents started in their hosts' terminals.

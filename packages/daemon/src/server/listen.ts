@@ -20,19 +20,20 @@ export function listen(rpc: Rpc, paths: { socket: string; session: string }): { 
     // Nothing to remove.
   }
 
-  const socket = Bun.listen<{ buffer: string; detach: () => void }>({
+  const socket = Bun.listen<{ buffer: string; client: Client; detach: () => void }>({
     unix: paths.socket,
     socket: {
       open(s) {
         const client: Client = { send: (m) => s.write(frame(m)) };
-        s.data = { buffer: "", detach: rpc.attach(client) };
+        s.data = { buffer: "", client, detach: rpc.attach(client) };
       },
       data(s, chunk) {
         const { messages, rest } = unframe(s.data.buffer + chunk.toString());
         s.data.buffer = rest;
         for (const m of messages) {
-          const reply = rpc.handle(m);
-          if (reply) s.write(frame(reply));
+          void rpc.handle(m, s.data.client).then((reply) => {
+            if (reply) s.write(frame(reply));
+          });
         }
       },
       close(s) {
@@ -43,22 +44,26 @@ export function listen(rpc: Rpc, paths: { socket: string; session: string }): { 
   chmodSync(paths.socket, 0o600);
 
   const token = crypto.randomUUID();
-  const ws = Bun.serve<{ detach: () => void }>({
+  const ws = Bun.serve<{ client: Client | null; detach: () => void }>({
     hostname: "127.0.0.1",
     port: 0,
     fetch(request, server) {
       const url = new URL(request.url);
       if (url.pathname !== "/" || url.searchParams.get("token") !== token) return new Response("no", { status: 403 });
-      return server.upgrade(request, { data: { detach: () => {} } }) ? undefined : new Response("no", { status: 400 });
+      return server.upgrade(request, { data: { client: null, detach: () => {} } }) ? undefined : new Response("no", { status: 400 });
     },
     websocket: {
       open(s) {
         const client: Client = { send: (m) => s.send(JSON.stringify(m)) };
+        s.data.client = client;
         s.data.detach = rpc.attach(client);
       },
       message(s, raw) {
-        const reply = rpc.handle(JSON.parse(raw.toString()));
-        if (reply) s.send(JSON.stringify(reply));
+        const client = s.data.client;
+        if (!client) return;
+        void rpc.handle(JSON.parse(raw.toString()), client).then((reply) => {
+          if (reply) s.send(JSON.stringify(reply));
+        });
       },
       close(s) {
         s.data.detach();

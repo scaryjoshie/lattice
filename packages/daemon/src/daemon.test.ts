@@ -130,4 +130,44 @@ describe("the daemon", () => {
     });
     expect(first.method).toBe("grid");
   });
+
+  test("a terminal host runs a shell: attach, type, see it, and only attached windows hear", async () => {
+    // A plain shell, so the test does not depend on anyone's login profile.
+    const shell = process.env.SHELL;
+    process.env.SHELL = "/bin/sh";
+    daemon = start();
+    const a = await connect();
+    const b = await connect();
+    await a.call("hello");
+    const grid = (a.notes[0] as any).params.grid;
+    const host = grid.tiles.find((t: any) => t.family === "host").id;
+    const text = grid.tiles.find((t: any) => t.family === "text").id;
+    expect((await a.call("attach", { host: text, cols: 80, rows: 24 })).result.ok).toBe(false);
+    const attached = await a.call("attach", { host, cols: 80, rows: 24 });
+    expect(attached.result.ok).toBe(true);
+    expect(typeof attached.result.screen).toBe("string");
+    const heard = (c: typeof a) =>
+      c.notes
+        .filter((m: any) => m.method === "output" && m.params.host === host)
+        .map((m: any) => Buffer.from(m.params.data, "base64").toString())
+        .join("");
+    await a.call("input", { host, data: "echo lattice-$((20+22))\r" });
+    const until = async (ok: () => boolean) => {
+      for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 30));
+    };
+    await until(() => heard(a).includes("lattice-42"));
+    expect(heard(a)).toContain("lattice-42");
+    expect(heard(b)).toBe("");
+    // Exiting the shell is heard, and the next attach starts a fresh one.
+    await a.call("input", { host, data: "exit\r" });
+    await until(() => a.notes.some((m: any) => m.method === "exited" && m.params.host === host));
+    expect(a.notes.some((m: any) => m.method === "exited" && m.params.host === host)).toBe(true);
+    expect((await a.call("attach", { host, cols: 80, rows: 24 })).result.ok).toBe(true);
+    // Removing the host stops its terminal: input then reaches nothing.
+    await a.call("run", { command: { kind: "remove", id: host } });
+    expect((await a.call("input", { host, data: "echo gone\r" })).result.ok).toBe(false);
+    a.end();
+    b.end();
+    process.env.SHELL = shell;
+  });
 });

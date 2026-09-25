@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@lattice/model": "workspace:*",
-    "@lattice/protocol": "workspace:*"
+    "@lattice/protocol": "workspace:*",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {
     "bun-types": "^1.4.2",

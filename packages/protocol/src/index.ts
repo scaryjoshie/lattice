@@ -43,12 +43,27 @@ export interface Methods {
   /** The runtime's: start an occupant in a host, or stop it. Not undoable. */
   start: { params: { host: string; occupant: string }; result: { ok: boolean } };
   stop: { params: { host: string }; result: { ok: boolean } };
+  /**
+   * A terminal host's terminal, at a window's grid: started if it is not running, resized
+   * to the grid, and handed back as the screen it shows now. From then until detach this
+   * window is sent its output. Not undoable, like every runtime request.
+   */
+  attach: { params: { host: string; cols: number; rows: number }; result: { ok: boolean; screen?: string } };
+  /** Keystrokes and pastes, as the terminal emulator produced them. */
+  input: { params: { host: string; data: string }; result: { ok: boolean } };
+  resize: { params: { host: string; cols: number; rows: number }; result: { ok: boolean } };
+  detach: { params: { host: string }; result: { ok: boolean } };
 }
 
 /** What the daemon says on its own, to every client. */
 export interface Notifications {
   grid: { grid: Grid; dc: number; dr: number };
   facts: { facts: Facts };
+  /** What an attached terminal wrote, base64, since output is bytes and a chunk can end
+   *  inside a character. Sent only to the windows attached to it. */
+  output: { host: string; data: string };
+  /** An attached terminal's process ended. */
+  exited: { host: string; code: number | null };
 }
 
 export const isRequest = (m: Message): m is Request => "id" in m && "method" in m;

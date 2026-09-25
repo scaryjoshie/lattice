@@ -5,11 +5,12 @@ import { Document, upgrade } from "./document/document.ts";
 import { seed } from "./document/seed.ts";
 import { listen } from "./server/listen.ts";
 import { Rpc } from "./server/rpc.ts";
+import { Terminals } from "./terminals/terminals.ts";
 
 /**
  * The daemon. A child of the app: started when the app starts, stopped when it quits. It
- * owns the document and its history, and what is hosted where; terminals and the agent
- * service come next. Everything that would still be true with no window open.
+ * owns the document and its history, what is hosted where, and the terminals; the agent
+ * service comes next. Everything that would still be true with no window open.
  */
 export function start(): { close(): void; session: { port: number; token: string } } {
   const p = ensureHome();
@@ -21,12 +22,16 @@ export function start(): { close(): void; session: { port: number; token: string
   if (fresh) store.saveDocument(fresh.grid);
   // Facts are not persisted: what runs is observed, and nothing runs across a restart yet.
   const agents = new Agents(store, fresh?.facts ?? { hosting: {} });
-  const rpc = new Rpc(document, agents, p.root);
+  const terminals = new Terminals();
+  // A host that leaves the grid takes its terminal with it.
+  document.onChange((grid) => terminals.keep(new Set(grid.tiles.map((t) => t.id))));
+  const rpc = new Rpc(document, agents, terminals, p.root);
   const doors = listen(rpc, { socket: p.socket, session: p.session });
   return {
     session: doors.session,
     close() {
       doors.close();
+      void terminals.close();
       store.close();
     },
   };
