@@ -187,17 +187,17 @@ body {
 }
 
 /*
- * What the keys do right now. Screen space, bottom left, and it never takes the pointer:
- * it describes the interface rather than being part of it.
+ * What the keys do right now. Screen space, bottom left. A click folds it into a round
+ * "i" and a click on that opens it again: its frame settles between its size and a circle,
+ * smoothly and without overshoot, while the keys fade out first on the way in and last on
+ * the way out. Its size is measured from its keys, so a change of keys resizes it too.
  */
 .keys {
   position: fixed;
   left: 16px;
   bottom: 16px;
   z-index: 10;
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
   /* Translucent over the grid, blurred so the ruling behind reads as depth, not noise. */
@@ -205,14 +205,66 @@ body {
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
-  pointer-events: none;
   user-select: none;
+  cursor: pointer;
   color: var(--muted);
   font-size: 12px;
   letter-spacing: 0.02em;
   transition:
     opacity var(--settle),
-    transform var(--settle);
+    transform var(--settle),
+    width var(--settle),
+    height var(--settle),
+    border-radius var(--settle);
+}
+
+.keys[data-collapsed] {
+  border-radius: 17px;
+}
+
+/* The keys, at their own size, anchored where the panel is, so a shrinking frame clips
+   them rather than making them reflow. */
+.keys-inner {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  width: max-content;
+  padding: 12px 14px;
+  transition: opacity 160ms ease 180ms;
+}
+
+.keys[data-collapsed] .keys-inner {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+
+/* The "i" sits at the middle of the frame and travels with it, so the frame never closes
+   over it on the way to a circle. */
+.keys-info {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  pointer-events: none;
+}
+
+.keys[data-collapsed] .keys-info {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 180ms ease 160ms,
+    transform var(--settle) 120ms;
+}
+
+.keys[data-collapsed]:hover .keys-info {
+  color: var(--ink);
 }
 
 /* While a tile is open the keys belong to it; the panel settles out of the way and comes
@@ -368,6 +420,7 @@ body {
 .opened-panel {
   z-index: 1;
 }
+
 
 .opened-ring[data-phase="open"] {
   opacity: 1;

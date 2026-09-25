@@ -428,7 +428,13 @@ export function Grid({ onSettings }: { onSettings(): void }) {
           onClose={() => send({ type: "closed" })}
         />
       )}
-      <Keys mode={mode} hidden={!showKeys || (opened !== null && !opened.leaving)} offline={!connected} />
+      <Keys
+        mode={mode}
+        hidden={opened !== null && !opened.leaving}
+        offline={!connected}
+        collapsed={!showKeys}
+        onToggle={() => usePreferences.getState().prefer({ keys: !showKeys })}
+      />
       <Toolbar
         zoom={zoom}
         hidden={opened !== null && !opened.leaving}
