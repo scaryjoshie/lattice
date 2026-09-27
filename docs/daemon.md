@@ -36,7 +36,8 @@ looking. The test is unchanged: would this still be true with no window open.
 ## Protocol
 
 `packages/protocol`, shared, the method names and their parameter and result types, and
-nothing else.
+the settings' definitions (`preferences.ts`): each setting's default and which stored
+values it takes, since both processes read a preference the same way. Nothing else.
 
 ```
 requests, client → daemon

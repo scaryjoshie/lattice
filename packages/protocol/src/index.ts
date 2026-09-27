@@ -1,9 +1,13 @@
 import type { Command, Grid, Scope, Tile } from "@lattice/model";
+import type { Patch, Preferences } from "./preferences.ts";
+
+export * from "./preferences.ts";
 
 /**
  * The wire between the app and the daemon: JSON-RPC 2.0, one message per line on the
  * socket and one per frame on the WebSocket. This package is the method names and the
- * types of their parameters and results, and the two helpers that frame a message.
+ * types of their parameters and results, and the two helpers that frame a message; and
+ * the settings' definitions, since both ends read a preference the same way.
  * Nothing else: no transport, no state.
  */
 
@@ -66,6 +70,8 @@ export interface Methods {
   input: { params: { host: string; data: string }; result: { ok: boolean } };
   resize: { params: { host: string; cols: number; rows: number }; result: { ok: boolean } };
   detach: { params: { host: string }; result: { ok: boolean } };
+  /** Change the app's settings. Not undoable; the answer is all of them, as they now are. */
+  prefer: { params: { patch: Patch }; result: { preferences: Preferences } };
   /** How many terminals are running: what quitting would stop, so the shell asks first. */
   running: { params: Record<string, never>; result: { terminals: number } };
 }
@@ -77,6 +83,8 @@ export interface Notifications {
   /** The history, after every change and on arrival: what undo would take back, oldest
    *  first, and what redo would do again, next first. */
   history: { past: Step[]; future: Step[] };
+  /** The app's settings, on arrival and after every change, from a window or the file. */
+  preferences: { preferences: Preferences };
   /** What an attached terminal wrote, base64, since output is bytes and a chunk can end
    *  inside a character. Sent only to the windows attached to it. */
   output: { host: string; data: string };
