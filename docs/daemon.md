@@ -101,7 +101,15 @@ packages/daemon/src/
 10. `events` is normalised and append-only: sequence, time, kind, payload. Every command
    run and every fact observed. The audit trail, and the way undo is rebuilt across a
    restart if that is ever wanted.
-11. `preferences` is one JSON row. `repos` and `projects` are normalised, since they are
+11. The preferences are not in the database but in `~/.lattice/preferences.json`, which
+    holds only what differs from the defaults, as VS Code's settings.json does, so it is
+    short, readable and edited by hand. *Replaces one JSON row in SQLite, 26 September.*
+    The defaults and which values each setting takes are defined once, in
+    `protocol/src/preferences.ts`; a value in the file that a setting cannot take is
+    ignored and its default used, and a file that is not JSON is the defaults, so no edit
+    stops the daemon. `core/preferences.ts` writes it through a temporary file and a
+    rename, owner-only, and watches it, so a hand edit reaches every window as a
+    `preferences` notification. `repos` and `projects` are normalised, since they are
     listed and joined.
 12. `bun:sqlite`, WAL, foreign keys, a migrations folder run at open. The store module is
     the only code that speaks SQL, as in modelbus.
@@ -157,7 +165,10 @@ Each step leaves the app working and the harness green.
    webview as `window.__lattice` before the first script runs, and stops it on exit. In
    development the child is Bun running the daemon's source; the sidecar binary takes
    its place when there is a build to ship.
-5. Preferences: theme first, since it exists, then the default worktree location.
+5. Done for the app's settings: the file, `prefer`, and the panel as a client of both. A
+   project's settings, the default worktree location first, wait for projects: a second
+   table of definitions beside the app's, stored with the project, and `prefer` naming
+   the project it patches.
 6. Projects: add a repo, read its worktrees, place them as scopes. The seed goes.
 7. Terminals. Begun: a terminal host runs the login shell in the daemon, started on the
    first attach and stopped when the host leaves the grid, mirrored by a headless xterm so

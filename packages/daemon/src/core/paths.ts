@@ -18,6 +18,7 @@ export const paths = () => {
     socket: join(root, "daemon.sock"),
     log: join(root, "daemon.log"),
     session: join(root, "session.json"),
+    preferences: join(root, "preferences.json"),
     secrets: join(root, "secrets"),
   };
 };

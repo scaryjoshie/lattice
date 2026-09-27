@@ -1,5 +1,6 @@
 import { Agents } from "./agents/agents.ts";
 import { ensureHome } from "./core/paths.ts";
+import { Preferences } from "./core/preferences.ts";
 import { Store } from "./core/store.ts";
 import { Document, upgrade } from "./document/document.ts";
 import { seed } from "./document/seed.ts";
@@ -9,8 +10,9 @@ import { Terminals } from "./terminals/terminals.ts";
 
 /**
  * The daemon. A child of the app: started when the app starts, stopped when it quits. It
- * owns the document and its history, what is hosted where, and the terminals; the agent
- * service comes next. Everything that would still be true with no window open.
+ * owns the document and its history, what is hosted where, the terminals and the
+ * preferences; the agent service comes next. Everything that would still be true with no
+ * window open.
  */
 export function start(): { close(): void; session: { port: number; token: string } } {
   const p = ensureHome();
@@ -25,13 +27,15 @@ export function start(): { close(): void; session: { port: number; token: string
   const terminals = new Terminals();
   // A host that leaves the grid takes its terminal with it.
   document.onChange((grid) => terminals.keep(new Set(grid.tiles.map((t) => t.id))));
-  const rpc = new Rpc(document, agents, terminals, p.root);
+  const preferences = new Preferences(p.preferences);
+  const rpc = new Rpc(document, agents, terminals, preferences, p.root);
   const doors = listen(rpc, { socket: p.socket, session: p.session });
   return {
     session: doors.session,
     close() {
       doors.close();
       void terminals.close();
+      preferences.close();
       store.close();
     },
   };

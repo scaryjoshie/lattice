@@ -73,7 +73,8 @@ lattice/
 
 9. A third persisted value beside the document and the session. Theme, the key panel,
    provider configuration such as paths and flags.
-10. Owned by the daemon's store, changed by their own commands, not undoable, pushed to the
+10. Owned by the daemon, kept in `~/.lattice/preferences.json` beside the store (see
+   [daemon.md](daemon.md) 11), changed by their own request, not undoable, pushed to the
    client the way the grid is. Not in the session, because they outlive the window; not in
    the document, because they are not about any project. Settings that are about a
    project, such as where its new worktrees go, are that project's and live with it:
@@ -84,10 +85,11 @@ lattice/
 
 ```
 ~/.lattice/
-  lattice.db      the store: grid, terminals, agents, projects, preferences, events
-  daemon.sock     the socket
+  lattice.db        the store: grid, terminals, agents, projects, events
+  preferences.json  the app's settings that differ from the defaults; edited by hand too
+  daemon.sock       the socket
   daemon.log
-  secrets/        one owner-only file per provider, replaced through a temporary file and rename
+  secrets/          one owner-only file per provider, replaced through a temporary file and rename
 ```
 
 11. The directory and every file in it are owner-only. That protects against other users

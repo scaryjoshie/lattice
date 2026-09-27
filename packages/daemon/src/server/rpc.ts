@@ -1,6 +1,7 @@
 import { isRequest, type Message, type Methods, type Notification, type Notifications, type Request, type Response } from "@lattice/protocol";
 import { isRun } from "@lattice/model";
 import type { Agents } from "../agents/agents.ts";
+import type { Preferences } from "../core/preferences.ts";
 import type { Document } from "../document/document.ts";
 import type { Terminals } from "../terminals/terminals.ts";
 
@@ -23,11 +24,13 @@ export class Rpc {
     private readonly document: Document,
     private readonly agents: Agents,
     private readonly terminals: Terminals,
+    private readonly preferences: Preferences,
     private readonly home: string,
   ) {
     document.onChange((grid, dc, dr) => this.notify("grid", { grid, dc, dr }));
     agents.onChange((facts) => this.notify("facts", { facts }));
     document.onHistory((history) => this.notify("history", history));
+    preferences.onChange((preferences) => this.notify("preferences", { preferences }));
   }
 
   /** A client arrived: it gets the state as it is, then every change. */
@@ -37,6 +40,7 @@ export class Rpc {
     client.send({ jsonrpc: "2.0", method: "grid", params: { grid: this.document.current(), dc: 0, dr: 0 } });
     client.send({ jsonrpc: "2.0", method: "facts", params: { facts: this.agents.current() } });
     client.send({ jsonrpc: "2.0", method: "history", params: this.document.history() });
+    client.send({ jsonrpc: "2.0", method: "preferences", params: { preferences: this.preferences.current() } });
     return () => {
       for (const stop of this.attached.get(client)?.values() ?? []) stop();
       this.attached.delete(client);
@@ -114,6 +118,8 @@ export class Rpc {
         mine?.delete(host);
         return { ok: true };
       }
+      case "prefer":
+        return { preferences: this.preferences.prefer((request.params as Methods["prefer"]["params"]).patch) };
       case "running":
         return { terminals: this.terminals.count() };
       default:

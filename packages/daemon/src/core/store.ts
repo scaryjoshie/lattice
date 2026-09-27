@@ -11,6 +11,8 @@ const MIGRATIONS: readonly string[] = [
   `create table if not exists document (id integer primary key check (id = 1), json text not null, saved_at integer not null);
    create table if not exists events (seq integer primary key autoincrement, at integer not null, kind text not null, payload text not null);
    create table if not exists preferences (id integer primary key check (id = 1), json text not null);`,
+  // The preferences are a file of their own, preferences.json, so they can be edited by hand.
+  `drop table if exists preferences;`,
 ];
 
 export class Store {

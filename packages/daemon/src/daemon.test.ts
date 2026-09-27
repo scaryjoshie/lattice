@@ -57,7 +57,7 @@ describe("the daemon", () => {
     const c = await connect();
     const hello = await c.call("hello");
     expect(hello.result.home).toBe(home);
-    expect(c.notes.map((m) => (m as { method: string }).method)).toEqual(["grid", "facts", "history"]);
+    expect(c.notes.map((m) => (m as { method: string }).method)).toEqual(["grid", "facts", "history", "preferences"]);
     const grid = (c.notes[0] as any).params.grid;
     expect(grid.tiles.length).toBe(14);
     c.end();
@@ -114,6 +114,21 @@ describe("the daemon", () => {
     expect(facts.method).toBe("facts");
     expect(facts.params.facts.hosting[host]).toBe("codex");
     c.end();
+  });
+
+  test("a preference is written to the file and every client hears it before the reply", async () => {
+    daemon = start();
+    const a = await connect();
+    const b = await connect();
+    await a.call("hello");
+    const reply = await a.call("prefer", { patch: { theme: "dark" } });
+    expect(reply.result.preferences.theme).toBe("dark");
+    expect((a.notes.filter((m: any) => m.method === "preferences").at(-1) as any).params.preferences.theme).toBe("dark");
+    await new Promise((r) => setTimeout(r, 20));
+    expect((b.notes.filter((m: any) => m.method === "preferences").at(-1) as any).params.preferences.theme).toBe("dark");
+    expect(JSON.parse(await Bun.file(paths().preferences).text())).toEqual({ theme: "dark" });
+    a.end();
+    b.end();
   });
 
   test("the WebSocket door needs the token", async () => {
