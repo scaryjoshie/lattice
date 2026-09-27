@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { PROVIDERS, type ProviderId } from "../providers/index.ts";
-import { type Engine, ENGINES, type ThemeChoice, usePreferences } from "../store/preferences.ts";
+import { type Engine, ENGINES, providerOf, type Theme, usePreferences } from "../store/preferences.ts";
 import { Mark } from "./Menu.tsx";
 
 /**
@@ -13,7 +13,6 @@ import { Mark } from "./Menu.tsx";
 export function Settings({ open, onToggle, onClose }: { open: boolean; onToggle(): void; onClose(): void }) {
   const preferences = usePreferences((s) => s.preferences);
   const prefer = usePreferences((s) => s.prefer);
-  const preferProvider = usePreferences((s) => s.preferProvider);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -30,6 +29,9 @@ export function Settings({ open, onToggle, onClose }: { open: boolean; onToggle(
         e.preventDefault();
         onClose();
       }
+      // A field commits on Enter, by losing focus as it does on a click elsewhere. Here,
+      // since the field's own key handler is never reached past this one.
+      if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.target.blur();
     };
     // Capture, so this runs before the grid's own listener on the window.
     window.addEventListener("keydown", onKey, true);
@@ -42,16 +44,16 @@ export function Settings({ open, onToggle, onClose }: { open: boolean; onToggle(
         <section className="settings-section">
           <h2 className="settings-heading">app</h2>
           <Row label="theme">
-            <Choice<ThemeChoice> value={preferences.theme} options={["system", "light", "dark"]} onChange={(theme) => prefer({ theme })} />
+            <Choice<Theme> value={preferences.theme} options={["system", "light", "dark"]} onChange={(theme) => void prefer({ theme })} />
           </Row>
           <Row label="key panel">
-            <Switch on={preferences.keys} onChange={(keys) => prefer({ keys })} />
+            <Switch on={preferences.keys} onChange={(keys) => void prefer({ keys })} />
           </Row>
           <Row label="search">
-            <Choice<Engine> value={preferences.search} options={Object.keys(ENGINES) as Engine[]} onChange={(search) => prefer({ search })} />
+            <Choice<Engine> value={preferences.search} options={Object.keys(ENGINES) as Engine[]} onChange={(search) => void prefer({ search })} />
           </Row>
           {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => {
-            const provider = preferences.providers[id];
+            const provider = providerOf(preferences, id);
             return (
               <Row
                 key={id}
@@ -62,14 +64,12 @@ export function Settings({ open, onToggle, onClose }: { open: boolean; onToggle(
                   </span>
                 }
               >
-                <input
-                  className="settings-field"
-                  spellCheck={false}
+                <Field
                   value={provider.command}
                   disabled={!provider.enabled}
-                  onChange={(e) => preferProvider(id, { command: e.target.value })}
+                  onCommit={async (command) => providerOf(await prefer({ providers: { [id]: { command } } }), id).command}
                 />
-                <Switch on={provider.enabled} onChange={(enabled) => preferProvider(id, { enabled })} />
+                <Switch on={provider.enabled} onChange={(enabled) => void prefer({ providers: { [id]: { enabled } } })} />
               </Row>
             );
           })}
@@ -91,6 +91,29 @@ function Row({ label, children }: { label: React.ReactNode; children: React.Reac
       <span className="settings-label">{label}</span>
       <span className="settings-value">{children}</span>
     </div>
+  );
+}
+
+/**
+ * Text the daemon holds, typed into a draft of its own and sent on Enter or when the field
+ * is left. Sending every keystroke and showing the echo would drop what was typed while a
+ * reply was on its way. Once sent, it shows what the daemon kept, which is the default
+ * when the draft was one the setting does not take, such as nothing.
+ */
+function Field({ value, disabled, onCommit }: { value: string; disabled: boolean; onCommit(draft: string): Promise<string> }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      className="settings-field"
+      spellCheck={false}
+      value={draft}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) void onCommit(draft).then(setDraft);
+      }}
+    />
   );
 }
 

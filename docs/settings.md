@@ -1,7 +1,8 @@
 # Settings
 
 What can be set, where each setting lives, and how the panel looks. Decided 24 September
-2026 from Joshua's notes. Nothing here is built.
+2026 from Joshua's notes. The panel and the app's settings are built; a project's wait for
+projects.
 
 ## Two scopes, and nothing between them
 
@@ -26,27 +27,41 @@ What can be set, where each setting lives, and how the panel looks. Decided 24 S
 | The key panel, shown or hidden | App | Same |
 | Default location for new worktrees | Project | A path beside that project's repos |
 | Each provider: enabled, the command to run | App | Which programs are on this machine |
+| The browsers' search engine | App | About no project |
 
 5. A provider's command is found on the path (`which claude`, `which codex`) and can be
    set by hand when it is somewhere else.
 6. Lattice runs the providers' own programs and holds no API keys, as
    [organization.md](organization.md) 15 says. Nothing in settings asks for a key.
 
+## Where they are kept
+
+7. The daemon owns them. The app's are in `~/.lattice/preferences.json`, which holds only
+   what differs from the defaults, as VS Code's settings.json does, so it can be read and
+   edited by hand; an edit reaches every window. A value in it that its setting does not
+   take is ignored and the default used.
+8. Every setting is defined once, in `packages/protocol/src/preferences.ts`: its default
+   and which values it takes. Adding one is an entry in that table and its control in the
+   panel; nothing in the daemon or the store changes. A provider with no entry is enabled
+   and started by its own name, so the daemon need not know which providers exist.
+9. A project's settings, when projects exist, are a second table beside the app's, made of
+   the same kinds and stored with the project; `prefer` names the project it changes.
+
 ## The panel
 
-7. A modal, opened from a control at the top right of the window and by Cmd-comma.
-   Closed by Escape or a click outside, as the open panel is.
-8. The same look as the key panel and the menu: semi-transparent, minimal, labels and
-   values only. No descriptions under settings, per the rule on UI text.
-9. Two sections, App and the current project, so where a setting lives is visible in where
-   it is shown.
+10. A modal, opened from a control at the top right of the window and by Cmd-comma.
+    Closed by Escape or a click outside, as the open panel is.
+11. The same look as the key panel and the menu: semi-transparent, minimal, labels and
+    values only. No descriptions under settings, per the rule on UI text.
+12. Two sections, App and the current project, so where a setting lives is visible in where
+    it is shown.
 
 ## Order
 
-10. The panel is built first, against a mock of the settings, so its look can be settled
-    while nothing else depends on it. The mock is the data the panel reads, not a second
-    panel: when the daemon owns settings, the panel's source changes and the panel does
-    not. Project settings wait for projects to exist.
+13. Done. The panel was built first, against a mock, so its look could be settled while
+    nothing else depended on it; the daemon now owns the app's settings and the panel is
+    unchanged but for the command field, which keeps a draft and sends it on Enter or when
+    it is left. Project settings wait for projects to exist.
 
 ## Open
 
