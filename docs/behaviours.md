@@ -151,8 +151,11 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 ## Moving
 
 45. A plain drag from inside the selection moves the selection. A plain drag anywhere
-    else, item or not, pans, so there is always somewhere to pan from. The camera yields
-    the press inside the selection and no other.
+    else, item or not, pans, so there is always somewhere to pan from. A scope's handle is
+    the exception: a drag from it carries the scope, selected or not, by its corner, which
+    goes to the gridline crossing nearest the pointer as a held line goes to the nearest
+    line (67), and leaves the selection as it was, since dragging is not selecting. The
+    camera yields those two presses and no other.
 46. A move exchanges the selection's region with the region it would occupy, of the same
     size, carrying everything inside: items, and whole scopes with their contents.
 47. It is legal when both regions are well-formed (5). The destination is judged with the
@@ -194,8 +197,8 @@ about it. Where a behaviour is a consequence of a rule already stated, it says w
 62. A scope has a name in the model. The runs inside it are text, not its name.
 63. A scope's handle is a square straddling its top-left corner point, shown while the
     pointer is inside the scope or on the handle, and gone while the scope is selected.
-    Pointing at the handle rings the whole scope, shows its name above the corner, and
-    points at no cell.
+    Pointing at the handle rings the whole scope, shows its name above the corner, points
+    at no cell, and shows a grab hand, since a drag from it carries the scope (45).
 64. A scope moves as part of a selection that contains it whole (46), bounds and contents
     together. Two same-sized scopes may swap.
 

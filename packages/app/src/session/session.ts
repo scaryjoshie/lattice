@@ -35,7 +35,16 @@ export type Gesture =
       /** The one tile being carried, if it is one tile: its links stay lit as it goes. */
       id: string | null;
       from: Region;
-      /** Where inside the region it was picked up, as an offset from the corner. */
+      /**
+       * What was taken hold of. The selection, grabbed in one of its cells: it moves by the
+       * cell under the pointer, and the selection follows it. Or a scope by its handle,
+       * which sits on the corner point: the corner goes to the gridline crossing nearest
+       * the pointer, as a held line goes to the nearest line, and the selection is left as
+       * it was, since dragging is not selecting.
+       */
+      by: "selection" | "handle";
+      /** Where inside the region it was picked up, as an offset from the corner. By the
+       *  handle, nothing: it is held at the corner. */
       grab: readonly [number, number];
       command: Extract<Command, { kind: "move" }> | null;
       verdict: Verdict | null;

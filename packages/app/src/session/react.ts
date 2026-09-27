@@ -171,6 +171,12 @@ function press(grid: Grid, session: Session, input: Extract<Input, { type: "pres
       gesture({ kind: "stretch", owner, c, r, wx: c === null ? 0 : c, wy: r === null ? 0 : r, command: null, verdict: null, at: { c, r } }),
     ];
   }
+  if (target.kind === "handle" && !input.shift) {
+    // A scope is held by its handle, selected or not, and a drag carries it without
+    // selecting it: dragging is not selecting. A click there still selects, on release.
+    const scope = grid.scopes.find((s) => s.id === target.scope);
+    if (scope) return [gesture({ kind: "carry", id: null, from: bounds(grid, scope), by: "handle", grab: [0, 0], command: null, verdict: null })];
+  }
   const selected = regionOf(grid, session.selection);
   const inside = selected !== null && contains(selected, cell[0], cell[1]);
   const bad = invalid(grid, session.selection);
@@ -188,7 +194,7 @@ function press(grid: Grid, session: Session, input: Extract<Input, { type: "pres
   // tile or not, so there is always somewhere to pan from.
   if (!inside || !selected) return [];
   const id = session.selection && "tile" in session.selection ? session.selection.tile : null;
-  return [gesture({ kind: "carry", id, from: selected, grab: [cell[0] - selected.ci, cell[1] - selected.ri], command: null, verdict: null })];
+  return [gesture({ kind: "carry", id, from: selected, by: "selection", grab: [cell[0] - selected.ci, cell[1] - selected.ri], command: null, verdict: null })];
 }
 
 function move(grid: Grid, session: Session, input: Extract<Input, { type: "move" }>): Effect[] {
@@ -210,7 +216,10 @@ function move(grid: Grid, session: Session, input: Extract<Input, { type: "move"
     return [point(null), gesture({ ...g, region: close(grid, reach(g.anchor, input.cell)) })];
   }
   if (g?.kind === "carry") {
-    const to: Region = { ...g.from, ci: input.cell[0] - g.grab[0], ri: input.cell[1] - g.grab[1] };
+    const to: Region =
+      g.by === "handle"
+        ? { ...g.from, ci: Math.round(input.world.x), ri: Math.round(input.world.y) }
+        : { ...g.from, ci: input.cell[0] - g.grab[0], ri: input.cell[1] - g.grab[1] };
     // From the model, never from the scene: the scene is built from this answer.
     const command: Extract<Command, { kind: "move" }> = { kind: "move", from: g.from, to };
     return [point(null), gesture({ ...g, command, verdict: propose(grid, command) })];
@@ -241,7 +250,7 @@ function release(grid: Grid, session: Session, input: Extract<Input, { type: "re
     // Told before the move runs: the region is in this grid's indices, and if the move
     // prepends tracks the session's indices are shifted along with everything else.
     const follow: Effect[] =
-      g.id === null && !(session.selection && "scope" in session.selection)
+      g.by === "selection" && g.id === null && !(session.selection && "scope" in session.selection)
         ? [select(selectionOf(grid, g.command.to))]
         : [];
     return [...done, ...follow, g.command];

@@ -91,6 +91,25 @@ describe("gestures", () => {
     expect(commands).toEqual([{ kind: "move", from: { ci: 3, ri: 2, span: 1, rows: 1 }, to: { ci: 4, ri: 3, span: 1, rows: 1 } }]);
   });
 
+  test("a scope's handle carries the scope by its corner, and dragging it selects nothing", () => {
+    const g = world();
+    const on = { kind: "handle", scope: "auth" } as const;
+    const at = (x: number, y: number): Input => ({ type: "move", target: cell(Math.floor(x), Math.floor(y)), cell: [Math.floor(x), Math.floor(y)], world: { x, y } });
+    const from = { ci: 2, ri: 1, span: 3, rows: 4 };
+    // Pressed on the corner point, (2, 1). A nudge up and left is not yet half a cell: the
+    // corner stays at its crossing, though the pointer is in another cell.
+    const nudged = drive(g, [{ type: "press", target: on, cell: [1, 0], shift: false, button: 0 }, at(1.9, 0.9)]);
+    expect(nudged.session.gesture?.kind === "carry" && nudged.session.gesture.command?.to).toEqual(from);
+    // Past half a cell, the corner goes to the nearest crossing.
+    const { session, commands } = drive(g, [
+      { type: "press", target: on, cell: [1, 0], shift: false, button: 0 },
+      at(2.4, 4.6),
+      release(2, 4, true),
+    ]);
+    expect(session.selection).toBeNull();
+    expect(commands).toEqual([{ kind: "move", from, to: { ...from, ri: 5 } }]);
+  });
+
   test("a press outside the selection is the camera's: no gesture", () => {
     const g = world();
     expect(drive(g, [...click(3, 2), press(8, 4)]).session.gesture).toBeNull();

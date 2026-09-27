@@ -341,7 +341,7 @@ function cursorOf(
     }
     return l.c !== null ? "col-resize" : "row-resize";
   }
-  if (within && !session.overlay) return session.shift ? "default" : "grab";
+  if ((within || session.pointing?.kind === "handle") && !session.overlay) return session.shift ? "default" : "grab";
   return "default";
 }
 
