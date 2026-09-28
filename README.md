@@ -4,6 +4,14 @@ A visual operating environment for parallel software work by humans and agents: 
 worktrees give isolation, agents give disposable compute, and a spatial grid is the
 interface. Called Pane until 24 September 2026.
 
+![The welcome window](docs/images/welcome.png)
+
+![The grid: an agent's links, the add menu, a swap, a worktree grown by its edge](docs/images/grid.png)
+
+A worktree is a tinted region of cells and an agent is a tile in it. Hovering an agent
+lights what it is linked to; shift-click on an empty cell adds a terminal, a browser or an
+agent; a move exchanges one region for another; dragging a worktree's edge makes room.
+
 ```
 packages/model    the document as a value, shared by app and daemon
 packages/app      the grid: session, scene, paint, view. Runs in a browser or the shell
