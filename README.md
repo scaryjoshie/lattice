@@ -12,6 +12,12 @@ A worktree is a tinted region of cells and an agent is a tile in it. Hovering an
 lights what it is linked to; shift-click on an empty cell adds a terminal, a browser or an
 agent; a move exchanges one region for another; dragging a worktree's edge makes room.
 
+Shift-click on a tile opens it to fill the window: a terminal, or a browser with tabs.
+
+![A terminal tile, opened](docs/images/terminal.png)
+
+![A browser tile, opened](docs/images/browser.png)
+
 ```
 packages/model    the document as a value, shared by app and daemon
 packages/app      the grid: session, scene, paint, view. Runs in a browser or the shell
